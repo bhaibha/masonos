@@ -1,0 +1,24 @@
+# Normalise line endings so the repo stays LF regardless of who commits from
+# where. Without this, Windows checkouts produce the "LF will be replaced by
+# CRLF" warnings on every add, and a Linux CI runner later sees the whole tree
+# as modified.
+* text=auto eol=lf
+
+# Shell scripts and CI YAML must be LF — CRLF breaks them on Linux runners.
+*.sh    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sql   text eol=lf
+
+# Cloudflare Pages config files are read line-by-line at the edge.
+_headers    text eol=lf
+_redirects  text eol=lf
+
+# Binary — never touch these.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.woff  binary
+*.woff2 binary
+*.pdf   binary
+*.ico   binary

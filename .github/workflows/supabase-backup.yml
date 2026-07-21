@@ -1,0 +1,69 @@
+name: Weekly Supabase backup
+
+# Weekly logical backup of the whole database as a gzipped pg_dump, kept as a
+# workflow artifact.
+#
+# Artifact rather than a committed backups/ folder on purpose: a dump contains
+# every expense, vendor and phone number in the system, and anything committed
+# to git is permanent and readable by everyone with repo access. Artifacts
+# expire and sit behind the same auth without ending up in clone history.
+on:
+  schedule:
+    # Sundays 02:00 UTC = 07:30 IST Sunday.
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # pg_dump must match the server's major version or it refuses to run.
+    # Supabase is on PostgreSQL 17 — bump this tag if you upgrade the project.
+    container:
+      image: postgres:17-alpine
+
+    steps:
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is missing"
+            exit 1
+          fi
+
+          stamp=$(date -u +%Y-%m-%d)
+          out="masonos-${stamp}.sql.gz"
+
+          # --no-owner / --no-privileges keep the dump restorable into a fresh
+          # project where the role names differ.
+          pg_dump "${DATABASE_URL}" \
+            --no-owner \
+            --no-privileges \
+            --schema=public \
+            --schema=storage \
+            --format=plain \
+            | gzip -9 > "${out}"
+
+          ls -lh "${out}"
+          echo "DUMP_FILE=${out}" >> "$GITHUB_ENV"
+
+          # A dump that's suspiciously small usually means the connection
+          # succeeded but returned almost nothing — fail loudly rather than
+          # storing a useless artifact.
+          size=$(stat -c%s "${out}")
+          if [ "${size}" -lt 2048 ]; then
+            echo "::error::Dump is only ${size} bytes — treating as a failure"
+            exit 1
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: masonos-db-backup
+          path: ${{ env.DUMP_FILE }}
+          retention-days: 90
+          if-no-files-found: error

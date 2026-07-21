@@ -1,0 +1,46 @@
+name: Supabase keep-alive
+
+# Supabase free-tier projects pause after 7 days with no activity. A pause
+# means the app is down until someone restores it from the dashboard, so this
+# pokes the REST API once a day.
+on:
+  schedule:
+    # 06:30 IST = 01:00 UTC. Cron on GitHub is UTC and best-effort — a late run
+    # is fine, the window is 7 days.
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping PostgREST
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_ANON_KEY secret is missing"
+            exit 1
+          fi
+
+          # expense_categories is a tiny seeded table. RLS still applies — the
+          # anon role gets an empty array, which is fine: the point is that the
+          # database was queried, not what came back.
+          code=$(curl -sS -o /tmp/body.json -w '%{http_code}' \
+            "${SUPABASE_URL}/rest/v1/expense_categories?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}")
+
+          echo "HTTP ${code}"
+          head -c 200 /tmp/body.json || true
+          echo
+
+          # 2xx means the project is awake. Anything else is worth a red run.
+          if [ "${code}" -lt 200 ] || [ "${code}" -ge 300 ]; then
+            echo "::error::Keep-alive ping failed with HTTP ${code}"
+            exit 1
+          fi

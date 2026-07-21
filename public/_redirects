@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA fallback.
+# Without this, refreshing /project/<id> or /money/budget returns a 404 —
+# those routes only exist inside React Router, not as files.
+/*    /index.html   200
