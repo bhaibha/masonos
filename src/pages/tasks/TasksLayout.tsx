@@ -25,6 +25,8 @@ export default function TasksLayout() {
     { to: '/tasks', label: 'Tasks', end: true },
     { to: '/tasks/new', label: 'Add task' },
     { to: '/tasks/log', label: 'Site log' },
+    { to: '/tasks/safety', label: 'Safety' },
+    { to: '/tasks/incidents', label: 'Incidents' },
   ]
 
   return (

@@ -11,6 +11,22 @@
 - [x] Project Detail drill-down navigation
 
 ## GROUP A
+- [x] **A2 Safety (Module 04)** — **migration 011 written, NOT yet applied** (append is in
+      `APPLY_pending.sql`). Tables: `safety_checklists` (one per project per day),
+      `safety_checklist_items`, `incidents`. RLS mirrors tasks (members read; founder/pm/supervisor
+      write; accounts read-only; incident close by founder/pm or raiser). Audit triggers on the two
+      header tables. `fn_safety_summary(project)` returns days-since-incident, open count, and this
+      week's checklist days — dates in Asia/Kolkata, security_invoker so RLS applies.
+      - **Daily checklist** (`src/pages/tasks/SafetyChecklist.tsx`) under the Tasks tab — reuses the
+        header date picker (checklist is per-day). 6 standard items, Pass/Fail/NA big buttons, remark +
+        optional photo each. Upsert on (project_id, check_date) then items on (checklist_id, item_key).
+      - **Incidents** (`src/pages/tasks/Incidents.tsx`) — list newest-first + inline raise form
+        (type, datetime, description, people, immediate action, multiple photos), open/close toggle.
+      - **Safety card on Project Detail** — days incident-free, checklist-this-week %, open count.
+      - Photos reuse the `site-photos` bucket, so migration 006's storage policies already cover them.
+      - Design system throughout: toasts on every save/close, ListSkeleton, EmptyState, staggered reveal.
+      - **Note:** the Tasks header date picker also shows on the Incidents sub-route, where it's inert
+        (incidents carry their own datetime). Acceptable; flag if it reads oddly.
 - [x] **A1 Vendor Management** — upgraded to the full design system. `Vendors.tsx`
       now has search (name/category/phone/GSTIN), a brass primary "Add vendor",
       sonner toasts on every add/edit/deactivate/restore (no more inline

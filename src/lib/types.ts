@@ -267,6 +267,95 @@ export interface NewDocument {
   is_confidential: boolean
 }
 
+// ---------- Safety ----------
+
+/** Same write set as tasks — founder/pm/supervisor. accounts is read-only. */
+export function canManageSafety(role: UserRole | null): boolean {
+  return canWriteTasks(role)
+}
+
+export type SafetyResult = 'pass' | 'fail' | 'na'
+
+export const SAFETY_RESULTS: { value: SafetyResult; label: string }[] = [
+  { value: 'pass', label: 'Pass' },
+  { value: 'fail', label: 'Fail' },
+  { value: 'na', label: 'N/A' },
+]
+
+/** The standard daily checks. item_key is what's stored; label is display. */
+export const SAFETY_ITEMS: { key: string; label: string; hint: string }[] = [
+  { key: 'ppe', label: 'PPE compliance', hint: 'Helmets, boots, harnesses, gloves' },
+  { key: 'scaffolding', label: 'Scaffolding', hint: 'Erection, ties, boards, tags' },
+  { key: 'edge_protection', label: 'Edge protection', hint: 'Guardrails, barricades, openings covered' },
+  { key: 'electrical', label: 'Electrical', hint: 'Cables, ELCB, temporary boards' },
+  { key: 'housekeeping', label: 'Housekeeping', hint: 'Access routes, debris, storage' },
+  { key: 'excavation', label: 'Excavation', hint: 'Shoring, barricading, spoil distance' },
+]
+
+export interface ChecklistItemState {
+  result: SafetyResult
+  remark: string
+  photo_path: string | null
+}
+
+export interface SafetyChecklistMeta {
+  id: string
+  check_date: string
+  created_by: string
+  updated_at: string
+}
+
+export type IncidentType =
+  | 'near_miss'
+  | 'first_aid'
+  | 'injury'
+  | 'property_damage'
+
+export const INCIDENT_TYPES: { value: IncidentType; label: string }[] = [
+  { value: 'near_miss', label: 'Near miss' },
+  { value: 'first_aid', label: 'First aid' },
+  { value: 'injury', label: 'Injury' },
+  { value: 'property_damage', label: 'Property damage' },
+]
+
+export const INCIDENT_TYPE_LABEL = Object.fromEntries(
+  INCIDENT_TYPES.map((t) => [t.value, t.label]),
+) as Record<IncidentType, string>
+
+export type IncidentStatus = 'open' | 'closed'
+
+export interface IncidentRow {
+  id: string
+  project_id: string
+  occurred_at: string
+  incident_type: IncidentType
+  description: string
+  people_involved: string | null
+  immediate_action: string | null
+  photos: string[]
+  status: IncidentStatus
+  created_by: string
+}
+
+export interface NewIncident {
+  project_id: string
+  occurred_at: string
+  incident_type: IncidentType
+  description: string
+  people_involved: string
+  immediate_action: string
+  photos: string[]
+}
+
+/** Return shape of fn_safety_summary. */
+export interface SafetySummary {
+  last_incident_at: string | null
+  days_since_incident: number | null
+  open_incidents: number
+  week_checklist_days: number
+  week_days_elapsed: number
+}
+
 // ---------- Materials ----------
 
 /** mat_write in 003_materials_docs.sql — the material master is founder/pm. */

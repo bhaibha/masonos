@@ -4,6 +4,7 @@ import {
   FileText,
   Package,
   Receipt,
+  ShieldCheck,
   Wallet,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -18,6 +19,7 @@ import {
   fetchProjectSummary,
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
+import { fetchSafetySummary } from '@/lib/queries/safety'
 import {
   fetchProject,
   fetchProjectCommercials,
@@ -34,6 +36,7 @@ import {
   PROJECT_STATUS_LABEL,
   type ProjectSpend,
   type ProjectSummary,
+  type SafetySummary,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -50,6 +53,7 @@ export default function ProjectDetail() {
   const [commercials, setCommercials] = useState<ProjectCommercials | null>(null)
   const [spend, setSpend] = useState<ProjectSpend | null>(null)
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
+  const [safety, setSafety] = useState<SafetySummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
 
   // Scope every tab to this project the moment the screen opens.
@@ -92,6 +96,12 @@ export default function ProjectDetail() {
     fetchProjectSummary(id)
       .then((s) => {
         if (!cancelled) setSummary(s)
+      })
+      .catch(() => {})
+
+    fetchSafetySummary(id)
+      .then((s) => {
+        if (!cancelled) setSafety(s)
       })
       .catch(() => {})
 
@@ -162,10 +172,12 @@ export default function ProjectDetail() {
           </RevealItem>
         )}
 
-        <RevealItem
-          className={cn('h-full', !canLogMaterials(role) && 'sm:col-span-1')}
-        >
+        <RevealItem className="h-full">
           <DocsCard summary={summary} onOpen={() => navigate('/docs')} />
+        </RevealItem>
+
+        <RevealItem className="h-full">
+          <SafetyCard safety={safety} onOpen={() => navigate('/tasks/safety')} />
         </RevealItem>
 
         <RevealItem className="h-full sm:col-span-2">
@@ -501,6 +513,60 @@ function MaterialsCard({
           value={String(summary.low_stock_count)}
           tone={summary.low_stock_count > 0 ? 'danger' : undefined}
         />
+      )}
+    </SectionCard>
+  )
+}
+
+function SafetyCard({
+  safety,
+  onOpen,
+}: {
+  safety: SafetySummary | null
+  onOpen: () => void
+}) {
+  const pct =
+    safety && safety.week_days_elapsed > 0
+      ? Math.round((safety.week_checklist_days / safety.week_days_elapsed) * 100)
+      : null
+
+  return (
+    <SectionCard
+      icon={ShieldCheck}
+      title="Safety"
+      action="Open checklist"
+      onAction={onOpen}
+    >
+      {safety === null ? (
+        <Skeleton className="h-8 w-40" />
+      ) : (
+        <div className="flex gap-8">
+          <Stat
+            label="Days incident-free"
+            value={
+              safety.days_since_incident === null
+                ? '—'
+                : String(safety.days_since_incident)
+            }
+            tone={
+              safety.days_since_incident !== null &&
+              safety.days_since_incident === 0
+                ? 'danger'
+                : undefined
+            }
+          />
+          <Stat
+            label="Checklist this week"
+            value={pct === null ? '—' : `${pct}%`}
+          />
+          {safety.open_incidents > 0 && (
+            <Stat
+              label="Open"
+              value={String(safety.open_incidents)}
+              tone="warning"
+            />
+          )}
+        </div>
       )}
     </SectionCard>
   )

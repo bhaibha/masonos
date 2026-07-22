@@ -23,6 +23,8 @@ import IssueForm from '@/pages/materials/IssueForm'
 import MaterialMaster from '@/pages/materials/MaterialMaster'
 import MaterialsLayout from '@/pages/materials/MaterialsLayout'
 import StockRegister from '@/pages/materials/StockRegister'
+import Incidents from '@/pages/tasks/Incidents'
+import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import SiteLog from '@/pages/tasks/SiteLog'
 import TaskForm from '@/pages/tasks/TaskForm'
 import TaskList from '@/pages/tasks/TaskList'
@@ -50,6 +52,8 @@ export default function App() {
               <Route index element={<TaskList />} />
               <Route path="new" element={<TaskForm />} />
               <Route path="log" element={<SiteLog />} />
+              <Route path="safety" element={<SafetyChecklist />} />
+              <Route path="incidents" element={<Incidents />} />
             </Route>
 
             {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

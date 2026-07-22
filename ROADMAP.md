@@ -34,7 +34,10 @@ Order within group:
 - [x] A1. M08 Vendor Management screen — list + search, add/edit/deactivate, inline "add new vendor"
        on the expense form. Full design system (brass primary, toasts, ListSkeleton, EmptyState,
        staggered reveal).
-- [ ] A2. M04 Safety (daily safety checklist per site + incident/near-miss report with photos)
+- [x] A2. M04 Safety — daily checklist per site (PPE/scaffolding/edge/electrical/housekeeping/excavation,
+       Pass/Fail/NA + remark + photo, one per site per day), incident & near-miss reports (type, people,
+       action, photos, open/close), safety summary on Project Detail (days incident-free, checklist %).
+       Migration 011 (tables + RLS + audit + fn_safety_summary). Full design system.
 - [ ] A3. M22 Procurement: PR → PO → GRN → 3-way match (PR raise → PO approve → GRN on delivery → match qty/rate)
 - [ ] A4. M15 Invoice Generator (client-side PDF: progress bill, management-fee invoice, vendor payment voucher)
 - [ ] A5. M26 Variation Orders (VO register: raise, cost impact, status, links to project; PM raises, founder approves)
