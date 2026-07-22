@@ -79,20 +79,27 @@ create index if not exists documents_file_path_idx
 
 drop policy if exists storage_rw on storage.objects;
 
+-- Each policy is dropped before it's created so this migration re-runs cleanly.
+-- `create policy` has no OR REPLACE / IF NOT EXISTS, so a second run without
+-- these drops fails with "policy already exists".
+
 -- READ ------------------------------------------------------
 
+drop policy if exists receipts_read on storage.objects;
 create policy receipts_read on storage.objects for select to authenticated
 using (
   bucket_id = 'receipts'
   and public.is_member(public.fn_storage_project(name))
 );
 
+drop policy if exists site_photos_read on storage.objects;
 create policy site_photos_read on storage.objects for select to authenticated
 using (
   bucket_id = 'site-photos'
   and public.is_member(public.fn_storage_project(name))
 );
 
+drop policy if exists documents_read on storage.objects;
 create policy documents_read on storage.objects for select to authenticated
 using (
   bucket_id = 'documents'
@@ -107,18 +114,21 @@ using (
 -- Supervisors upload challan and site photos; they never upload to the vault
 -- (mirrors docs_write on public.documents).
 
+drop policy if exists receipts_insert on storage.objects;
 create policy receipts_insert on storage.objects for insert to authenticated
 with check (
   bucket_id = 'receipts'
   and public.is_member(public.fn_storage_project(name))
 );
 
+drop policy if exists site_photos_insert on storage.objects;
 create policy site_photos_insert on storage.objects for insert to authenticated
 with check (
   bucket_id = 'site-photos'
   and public.is_member(public.fn_storage_project(name))
 );
 
+drop policy if exists documents_insert on storage.objects;
 create policy documents_insert on storage.objects for insert to authenticated
 with check (
   bucket_id = 'documents'
@@ -130,6 +140,7 @@ with check (
 -- Founder, or whoever uploaded it. No UPDATE policy: objects are immutable
 -- once written (uploads always use a fresh uuid, upsert:false).
 
+drop policy if exists storage_delete on storage.objects;
 create policy storage_delete on storage.objects for delete to authenticated
 using (
   bucket_id in ('receipts', 'site-photos', 'documents')
