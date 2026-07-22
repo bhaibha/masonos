@@ -2,6 +2,7 @@ import { PackageSearch } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { FieldRow, Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ import {
   fetchPoLines,
   fetchPurchaseOrders,
 } from '@/lib/queries/procurement'
+import { fetchVendors } from '@/lib/queries/vendors'
 import {
   canApprovePO,
   canRaisePR,
@@ -20,6 +22,7 @@ import {
   type PoLine,
   type PoStatus,
   type PurchaseOrder,
+  type Vendor,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -170,7 +173,12 @@ function OrderCard({
           {lines === null ? (
             <p className="text-sm text-muted-foreground">Loading lines…</p>
           ) : canApprove ? (
-            <ApproveForm poId={po.id} lines={lines} onDone={onChanged} />
+            <ApproveForm
+              poId={po.id}
+              initialVendorId={po.vendor_id}
+              lines={lines}
+              onDone={onChanged}
+            />
           ) : (
             <ul className="space-y-2">
               {lines.map((l) => (
@@ -196,19 +204,31 @@ function OrderCard({
 
 function ApproveForm({
   poId,
+  initialVendorId,
   lines,
   onDone,
 }: {
   poId: string
+  initialVendorId: string | null
   lines: PoLine[]
   onDone: () => Promise<void>
 }) {
+  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [vendorId, setVendorId] = useState(initialVendorId ?? '')
   const [rates, setRates] = useState<Record<string, string>>(() =>
     Object.fromEntries(lines.map((l) => [l.id, l.rate?.toString() ?? ''])),
   )
   const [busy, setBusy] = useState(false)
 
+  useEffect(() => {
+    fetchVendors().then(setVendors).catch(() => setVendors([]))
+  }, [])
+
   async function approve() {
+    if (!vendorId) {
+      toast.error('Choose the vendor this order goes to')
+      return
+    }
     const parsed: { lineId: string; rate: number }[] = []
     for (const l of lines) {
       const v = Number(rates[l.id])
@@ -221,7 +241,7 @@ function ApproveForm({
 
     setBusy(true)
     try {
-      await approvePurchaseOrder(poId, parsed)
+      await approvePurchaseOrder(poId, vendorId, parsed)
       toast.success('Purchase order approved')
       await onDone()
     } catch (err) {
@@ -235,8 +255,25 @@ function ApproveForm({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Set the agreed rate per unit to approve this into a purchase order.
+        Assign the vendor and set the agreed rate per unit to approve this into
+        a purchase order.
       </p>
+
+      <FieldRow label="Vendor" htmlFor={`appr_vendor_${poId}`}>
+        <Select
+          id={`appr_vendor_${poId}`}
+          value={vendorId}
+          onChange={(e) => setVendorId(e.target.value)}
+        >
+          <option value="">Select a vendor…</option>
+          {vendors.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </Select>
+      </FieldRow>
+
       {lines.map((l) => (
         <div key={l.id} className="flex items-center gap-3">
           <div className="min-w-0 flex-1">

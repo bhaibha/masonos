@@ -49,20 +49,31 @@ export async function fetchPurchaseOrders(
 
   if (pos.length === 0) return pos
 
-  // Line counts (and values, if permitted) from v_po_totals.
   const ids = pos.map((p) => p.id)
+
+  // Counts are visible to everyone (v_po_totals reads only granted columns).
   const { data: totals } = await supabase
     .from('v_po_totals')
-    .select('po_id, line_count, ordered_value')
+    .select('po_id, line_count')
     .in('po_id', ids)
 
-  const byId = new Map(
-    (totals ?? []).map((t) => [t.po_id as string, t as Record<string, unknown>]),
+  const countById = new Map(
+    (totals ?? []).map((t) => [t.po_id as string, Number(t.line_count)]),
   )
-  for (const p of pos) {
-    const t = byId.get(p.id)
-    p.line_count = t ? Number(t.line_count) : 0
-    p.ordered_value = withValues && t ? Number(t.ordered_value) : null
+  for (const p of pos) p.line_count = countById.get(p.id) ?? 0
+
+  // Ordered value comes from the role-gated v_po_value (migration 013) — only
+  // for money-roles. Supervisors keep ordered_value null.
+  if (withValues) {
+    const { data: values } = await supabase
+      .from('v_po_value')
+      .select('po_id, ordered_value')
+      .in('po_id', ids)
+
+    const valueById = new Map(
+      (values ?? []).map((v) => [v.po_id as string, Number(v.ordered_value)]),
+    )
+    for (const p of pos) p.ordered_value = valueById.get(p.id) ?? null
   }
 
   return pos
@@ -141,12 +152,14 @@ export async function createPurchaseOrder(
 }
 
 /**
- * Approve a request into a PO: set each line's rate, then flip status.
- * Rates are money — written straight to po_lines (the browser never computes
- * line_total, which is a generated column).
+ * Approve a request into a PO: assign the vendor, set each line's rate, then
+ * flip status. Vendor and rates are decided together here because a
+ * supervisor-raised request carries neither (they can't see vendors or rates).
+ * line_total is a generated column — the browser never computes it.
  */
 export async function approvePurchaseOrder(
   poId: string,
+  vendorId: string,
   rates: { lineId: string; rate: number }[],
 ): Promise<void> {
   for (const r of rates) {
@@ -160,6 +173,7 @@ export async function approvePurchaseOrder(
   const { error } = await supabase
     .from('purchase_orders')
     .update({
+      vendor_id: vendorId,
       status: 'approved',
       approved_by: (await supabase.auth.getUser()).data.user?.id ?? null,
       approved_at: new Date().toISOString(),

@@ -34,6 +34,12 @@
         (supervisors: /materials/orders) and the Money tab (money-roles: /money/orders) — the same
         `Orders` screen adapts by role, since supervisors have no Money tab and accounts no
         Materials tab.
+      - **Migration 013 (fix):** 012 left `v_po_totals` and `v_po_match` as security_invoker reading
+        the revoked `line_total`/`rate`, so the PO value never showed (all users share the
+        `authenticated` role). Split: `v_po_totals` = counts only (security_invoker); `v_po_value` =
+        ordered value, owner-run + gated to founder/pm/accounts; `v_po_match` rebuilt owner-run +
+        gated. Query reads counts from the first, value from the second only for money-roles.
+        Also added vendor selection to the approve step (a supervisor-raised request has no vendor).
       - **NEXT (Part 2):** GRN-receipt screen and the 3-way-match / invoice screen with
         `fn_post_invoice`. No further migration needed — the schema is complete.
 - [x] **A2 Safety (Module 04)** — **migration 011 written, NOT yet applied** (append is in
