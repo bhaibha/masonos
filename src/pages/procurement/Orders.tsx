@@ -65,23 +65,41 @@ async function archivePoDocument(poId: string): Promise<void> {
     fetchProject(po.project_id),
   ])
 
-  const file = generatePoFile({
+  const pdfOpts = {
     po,
     lines,
     vendor,
     projectName: project?.name ?? '',
     siteAddress: project?.site_address ?? null,
     gstPct: COMPANY.defaultGstPct,
-  })
+  }
+  const vsuffix = vendor?.name ? ` · ${vendor.name}` : ''
 
-  const { path, fileType } = await uploadDocument(po.project_id, file)
+  // Two copies filed to the Purchase Orders folder:
+  //  1. Full priced PO — confidential (has rates), for founder/pm/accounts.
+  //  2. Delivery copy — no rates, NOT confidential, so the supervisor can open
+  //     it and chase the vendor for delivery.
+  const fullFile = generatePoFile(pdfOpts, 'full')
+  const fullUp = await uploadDocument(po.project_id, fullFile)
   await createDocument({
     project_id: po.project_id,
     folder: 'purchase_orders',
-    title: `${po.po_number}${vendor?.name ? ` · ${vendor.name}` : ''}`,
-    file_path: path,
-    file_type: fileType,
+    title: `${po.po_number}${vsuffix}`,
+    file_path: fullUp.path,
+    file_type: fullUp.fileType,
     is_confidential: true,
+    po_id: po.id,
+  })
+
+  const delFile = generatePoFile(pdfOpts, 'delivery')
+  const delUp = await uploadDocument(po.project_id, delFile)
+  await createDocument({
+    project_id: po.project_id,
+    folder: 'purchase_orders',
+    title: `${po.po_number} · Delivery copy${vsuffix}`,
+    file_path: delUp.path,
+    file_type: delUp.fileType,
+    is_confidential: false,
     po_id: po.id,
   })
 }

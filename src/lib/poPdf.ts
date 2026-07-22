@@ -38,9 +38,17 @@ export interface PoPdfOpts {
   gstPct: number
 }
 
+/**
+ * 'full'     — priced PO with rates, amounts and totals (confidential).
+ * 'delivery' — rate-free copy for site follow-up: materials + quantities only,
+ *              no rates/amounts/totals. Safe for supervisors to see.
+ */
+export type PoPdfVariant = 'full' | 'delivery'
+
 /** Draws the PO and returns the jsPDF instance (not saved). */
-function buildPoDoc(opts: PoPdfOpts): jsPDF {
+function buildPoDoc(opts: PoPdfOpts, variant: PoPdfVariant = 'full'): jsPDF {
   const { po, lines, vendor, projectName, siteAddress, gstPct } = opts
+  const priced = variant === 'full'
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -79,11 +87,16 @@ function buildPoDoc(opts: PoPdfOpts): jsPDF {
   doc.setTextColor(...ink)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(15)
-  doc.text('PURCHASE ORDER', M, y)
+  doc.text(priced ? 'PURCHASE ORDER' : 'DELIVERY ORDER', M, y)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.text(po.po_number, W - M, y, { align: 'right' })
   y += 16
+  if (!priced) {
+    doc.setFontSize(8)
+    doc.setTextColor(...muted)
+    doc.text('For delivery follow-up · pricing on the office copy', M, y)
+  }
   doc.setFontSize(9)
   doc.setTextColor(...muted)
   doc.text(`Date: ${fmtDate(po.created_at)}`, W - M, y, { align: 'right' })
@@ -125,7 +138,10 @@ function buildPoDoc(opts: PoPdfOpts): jsPDF {
   y = Math.max(vy, dy) + 12
 
   // ---- Line table ----
-  const cols = { idx: M, name: M + 26, qty: W - M - 210, rate: W - M - 120, amt: W - M }
+  // Delivery copy: quantity is the last (right-aligned) column, no rate/amount.
+  const cols = priced
+    ? { idx: M, name: M + 26, qty: W - M - 210, rate: W - M - 120, amt: W - M }
+    : { idx: M, name: M + 26, qty: W - M, rate: 0, amt: 0 }
   doc.setFillColor(242, 238, 232)
   doc.rect(M, y - 11, W - 2 * M, 20, 'F')
   doc.setTextColor(...muted)
@@ -133,8 +149,10 @@ function buildPoDoc(opts: PoPdfOpts): jsPDF {
   doc.text('#', cols.idx, y + 2)
   doc.text('MATERIAL', cols.name, y + 2)
   doc.text('QTY', cols.qty, y + 2, { align: 'right' })
-  doc.text('RATE', cols.rate, y + 2, { align: 'right' })
-  doc.text('AMOUNT', cols.amt, y + 2, { align: 'right' })
+  if (priced) {
+    doc.text('RATE', cols.rate, y + 2, { align: 'right' })
+    doc.text('AMOUNT', cols.amt, y + 2, { align: 'right' })
+  }
   y += 22
 
   doc.setTextColor(...ink)
@@ -150,32 +168,36 @@ function buildPoDoc(opts: PoPdfOpts): jsPDF {
     )
     doc.text(name[0] as string, cols.name, y)
     doc.text(`${l.qty_ordered} ${l.material_unit ?? ''}`.trim(), cols.qty, y, { align: 'right' })
-    doc.text(l.rate !== null ? inr.format(l.rate) : '—', cols.rate, y, { align: 'right' })
-    doc.text(inr.format(amt), cols.amt, y, { align: 'right' })
+    if (priced) {
+      doc.text(l.rate !== null ? inr.format(l.rate) : '—', cols.rate, y, { align: 'right' })
+      doc.text(inr.format(amt), cols.amt, y, { align: 'right' })
+    }
     y += 17
     doc.setDrawColor(237, 233, 227)
     doc.setLineWidth(0.5)
     doc.line(M, y - 6, W - M, y - 6)
   })
 
-  // ---- Totals ----
-  y += 8
-  const gstAmt = Math.round(subtotal * gstPct) / 100
-  const grand = subtotal + gstAmt
-  const labelX = W - M - 130
-  const totals: [string, string, boolean][] = [
-    ['Subtotal', rupee(subtotal), false],
-    [`GST (${gstPct}%)`, rupee(gstAmt), false],
-    ['Total', rupee(grand), true],
-  ]
-  for (const [label, val, bold] of totals) {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setTextColor(...(bold ? ink : muted))
-    doc.setFontSize(bold ? 11 : 9.5)
-    doc.text(label, labelX, y, { align: 'right' })
-    doc.setTextColor(...ink)
-    doc.text(val, cols.amt, y, { align: 'right' })
-    y += bold ? 20 : 16
+  // ---- Totals (priced copy only) ----
+  if (priced) {
+    y += 8
+    const gstAmt = Math.round(subtotal * gstPct) / 100
+    const grand = subtotal + gstAmt
+    const labelX = W - M - 130
+    const totals: [string, string, boolean][] = [
+      ['Subtotal', rupee(subtotal), false],
+      [`GST (${gstPct}%)`, rupee(gstAmt), false],
+      ['Total', rupee(grand), true],
+    ]
+    for (const [label, val, bold] of totals) {
+      doc.setFont('helvetica', bold ? 'bold' : 'normal')
+      doc.setTextColor(...(bold ? ink : muted))
+      doc.setFontSize(bold ? 11 : 9.5)
+      doc.text(label, labelX, y, { align: 'right' })
+      doc.setTextColor(...ink)
+      doc.text(val, cols.amt, y, { align: 'right' })
+      y += bold ? 20 : 16
+    }
   }
 
   // ---- Notes + signatory ----
@@ -212,9 +234,13 @@ export function generatePoPdf(opts: PoPdfOpts): void {
 }
 
 /** Returns the PO PDF as a File, for archiving to the Document Vault. */
-export function generatePoFile(opts: PoPdfOpts): File {
-  const blob = buildPoDoc(opts).output('blob')
-  return new File([blob], `${opts.po.po_number}.pdf`, {
+export function generatePoFile(
+  opts: PoPdfOpts,
+  variant: PoPdfVariant = 'full',
+): File {
+  const blob = buildPoDoc(opts, variant).output('blob')
+  const suffix = variant === 'delivery' ? '-delivery' : ''
+  return new File([blob], `${opts.po.po_number}${suffix}.pdf`, {
     type: 'application/pdf',
   })
 }
