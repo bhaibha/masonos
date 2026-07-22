@@ -12,11 +12,12 @@ dist
 dist-ssr
 *.local
 
-# Belt and braces for credentials. `*.local` alone misses `.env.local.txt`,
-# which is what Notepad produces when you "Save as" without changing the type.
-.env
-.env.*
-!.env.local.example
+# Local-only secret files stay out of git. `.env` itself IS committed on
+# purpose — it holds only the public anon key + URL, which ship in the bundle
+# anyway. `.env.local` (and the Notepad-produced `.env.local.txt`) must not be.
+.env.local
+.env.local.*
+.env.*.local
 
 # Editor directories and files
 .vscode/*
