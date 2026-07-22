@@ -29,14 +29,17 @@ function fmtDate(iso: string | null): string {
  * Uses jsPDF's built-in Helvetica and hand-drawn rules — no autotable/font
  * dependencies. Colours match the app: charcoal ink, brass accent.
  */
-export function generatePoPdf(opts: {
+export interface PoPdfOpts {
   po: PurchaseOrder
   lines: PoLine[]
   vendor: Vendor | null
   projectName: string
   siteAddress: string | null
   gstPct: number
-}): void {
+}
+
+/** Draws the PO and returns the jsPDF instance (not saved). */
+function buildPoDoc(opts: PoPdfOpts): jsPDF {
   const { po, lines, vendor, projectName, siteAddress, gstPct } = opts
 
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
@@ -200,5 +203,18 @@ export function generatePoPdf(opts: {
   doc.text(`For ${COMPANY.name}`, W - M, sy + 14, { align: 'right' })
   doc.text('Authorised signatory', W - M, sy + 28, { align: 'right' })
 
-  doc.save(`${po.po_number}.pdf`)
+  return doc
+}
+
+/** Triggers a browser download of the PO PDF. */
+export function generatePoPdf(opts: PoPdfOpts): void {
+  buildPoDoc(opts).save(`${opts.po.po_number}.pdf`)
+}
+
+/** Returns the PO PDF as a File, for archiving to the Document Vault. */
+export function generatePoFile(opts: PoPdfOpts): File {
+  const blob = buildPoDoc(opts).output('blob')
+  return new File([blob], `${opts.po.po_number}.pdf`, {
+    type: 'application/pdf',
+  })
 }

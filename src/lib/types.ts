@@ -209,6 +209,7 @@ export type DocFolder =
   | 'drawings'
   | 'permits'
   | 'invoices'
+  | 'purchase_orders'
   | 'qc_certificates'
   | 'photos'
   | 'other'
@@ -218,6 +219,7 @@ export const DOC_FOLDERS: { value: DocFolder; label: string }[] = [
   { value: 'drawings', label: 'Drawings' },
   { value: 'permits', label: 'Permits' },
   { value: 'invoices', label: 'Invoices' },
+  { value: 'purchase_orders', label: 'Purchase Orders' },
   { value: 'qc_certificates', label: 'QC Certificates' },
   { value: 'photos', label: 'Photos' },
   { value: 'other', label: 'Other' },
@@ -256,6 +258,9 @@ export interface DocumentRow {
   uploaded_by: string
   uploaded_by_name: string | null
   created_at: string
+  po_id: string | null
+  /** live PO status, resolved for documents in the Purchase Orders folder */
+  po_status: PoStatus | null
 }
 
 export interface NewDocument {
@@ -265,6 +270,7 @@ export interface NewDocument {
   file_path: string
   file_type: string | null
   is_confidential: boolean
+  po_id?: string | null
 }
 
 // ---------- Procurement ----------

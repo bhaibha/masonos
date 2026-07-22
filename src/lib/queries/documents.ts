@@ -1,8 +1,13 @@
 import { supabase } from '@/lib/supabase'
-import type { DocFolder, DocumentRow, NewDocument } from '@/lib/types'
+import type {
+  DocFolder,
+  DocumentRow,
+  NewDocument,
+  PoStatus,
+} from '@/lib/types'
 
 const COLUMNS =
-  'id, project_id, folder, title, file_path, file_type, is_confidential, uploaded_by, created_at, profiles(full_name)'
+  'id, project_id, folder, title, file_path, file_type, is_confidential, uploaded_by, created_at, po_id, profiles(full_name)'
 
 type Joined = { profiles: { full_name: string } | { full_name: string }[] | null }
 
@@ -21,7 +26,28 @@ function mapRow(r: unknown): DocumentRow {
     uploaded_by_name:
       (Array.isArray(p) ? p[0]?.full_name : p?.full_name) ?? null,
     created_at: row.created_at,
+    po_id: (row.po_id as string | null) ?? null,
+    po_status: null,
   }
+}
+
+/** Fills in po_status for any rows linked to a PO (Purchase Orders folder). */
+async function attachPoStatus(rows: DocumentRow[]): Promise<DocumentRow[]> {
+  const ids = [...new Set(rows.map((r) => r.po_id).filter(Boolean))] as string[]
+  if (ids.length === 0) return rows
+
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('id, status')
+    .in('id', ids)
+
+  const statusById = new Map(
+    (data ?? []).map((p) => [p.id as string, p.status as PoStatus]),
+  )
+  for (const r of rows) {
+    if (r.po_id) r.po_status = statusById.get(r.po_id) ?? null
+  }
+  return rows
 }
 
 /**
@@ -59,7 +85,7 @@ export async function fetchDocuments(
 
   const { data, error } = await q
   if (error) throw error
-  return (data ?? []).map(mapRow)
+  return attachPoStatus((data ?? []).map(mapRow))
 }
 
 /** Per-folder counts for the project, after RLS has done its filtering. */
@@ -89,6 +115,7 @@ export async function createDocument(input: NewDocument): Promise<void> {
     file_path: input.file_path,
     file_type: input.file_type,
     is_confidential: input.is_confidential,
+    po_id: input.po_id ?? null,
   })
   if (error) throw error
 }

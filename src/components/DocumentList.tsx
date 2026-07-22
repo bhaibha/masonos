@@ -1,6 +1,17 @@
 import { useState } from 'react'
 import { signedDocumentUrl } from '@/lib/storage'
-import type { DocumentRow } from '@/lib/types'
+import { type DocumentRow, PO_STATUS_LABEL, type PoStatus } from '@/lib/types'
+import { cn } from '@/lib/utils'
+
+const PO_STATUS_TONE: Partial<Record<PoStatus, string>> = {
+  requested: 'bg-[color-mix(in_oklab,var(--warning)_16%,transparent)] text-[var(--warning)]',
+  approved: 'bg-[color-mix(in_oklab,var(--positive)_14%,transparent)] text-[var(--positive)]',
+  receiving: 'bg-secondary text-secondary-foreground',
+  received: 'bg-[color-mix(in_oklab,var(--positive)_14%,transparent)] text-[var(--positive)]',
+  rejected: 'bg-destructive/10 text-destructive',
+  closed: 'bg-secondary text-muted-foreground',
+  cancelled: 'bg-secondary text-muted-foreground',
+}
 
 function prettyType(mime: string | null): string {
   if (!mime) return 'File'
@@ -56,7 +67,20 @@ function DocumentItem({ doc }: { doc: DocumentRow }) {
         className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50"
       >
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{doc.title}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-medium">{doc.title}</p>
+            {doc.po_status && (
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  PO_STATUS_TONE[doc.po_status] ??
+                    'bg-secondary text-muted-foreground',
+                )}
+              >
+                {PO_STATUS_LABEL[doc.po_status]}
+              </span>
+            )}
+          </div>
           <p className="truncate text-xs text-muted-foreground">
             {prettyType(doc.file_type)} · {prettyDate(doc.created_at)}
             {doc.uploaded_by_name && ` · ${doc.uploaded_by_name}`}

@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { COMPANY, companyNeedsSetup } from '@/lib/company'
 import { formatInr } from '@/lib/format'
-import { generatePoPdf } from '@/lib/poPdf'
+import { generatePoFile, generatePoPdf } from '@/lib/poPdf'
+import { createDocument } from '@/lib/queries/documents'
 import { fetchProject } from '@/lib/queries/projects'
 import {
   approvePurchaseOrder,
@@ -17,6 +18,8 @@ import {
   fetchPurchaseOrders,
 } from '@/lib/queries/procurement'
 import { fetchVendor, fetchVendors } from '@/lib/queries/vendors'
+import { uploadDocument } from '@/lib/storage'
+import { supabase } from '@/lib/supabase'
 import {
   canApprovePO,
   canRaisePR,
@@ -31,6 +34,57 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
 import RaiseRequest from './RaiseRequest'
+
+/**
+ * Generates the approved PO on the letterhead and files it in the Document
+ * Vault's Purchase Orders folder, linked to the PO so the folder shows its live
+ * status. Marked confidential (it carries rates), so supervisors don't see it.
+ * Re-fetches the PO with rates + vendor + project fresh, since the caller only
+ * has the pre-approval row.
+ */
+async function archivePoDocument(poId: string): Promise<void> {
+  const { data: poRow } = await supabase
+    .from('purchase_orders')
+    .select(
+      'id, po_number, project_id, vendor_id, status, need_by, notes, raised_by, approved_by, created_at',
+    )
+    .eq('id', poId)
+    .single()
+  if (!poRow) return
+
+  const po = {
+    ...(poRow as Record<string, unknown>),
+    vendor_name: null,
+    line_count: 0,
+    ordered_value: null,
+  } as unknown as PurchaseOrder
+
+  const [lines, vendor, project] = await Promise.all([
+    fetchPoLines(poId, true),
+    po.vendor_id ? fetchVendor(po.vendor_id) : Promise.resolve(null),
+    fetchProject(po.project_id),
+  ])
+
+  const file = generatePoFile({
+    po,
+    lines,
+    vendor,
+    projectName: project?.name ?? '',
+    siteAddress: project?.site_address ?? null,
+    gstPct: COMPANY.defaultGstPct,
+  })
+
+  const { path, fileType } = await uploadDocument(po.project_id, file)
+  await createDocument({
+    project_id: po.project_id,
+    folder: 'purchase_orders',
+    title: `${po.po_number}${vendor?.name ? ` · ${vendor.name}` : ''}`,
+    file_path: path,
+    file_type: fileType,
+    is_confidential: true,
+    po_id: po.id,
+  })
+}
 
 const STATUS_TONE: Record<PoStatus, string> = {
   requested: 'bg-[color-mix(in_oklab,var(--warning)_16%,transparent)] text-[var(--warning)]',
@@ -317,6 +371,11 @@ function ApproveForm({
     try {
       await approvePurchaseOrder(poId, vendorId, parsed)
       toast.success('Purchase order approved')
+      // Archive the PO PDF into the vault's Purchase Orders folder. A failure
+      // here must not undo the approval, so it's caught separately.
+      await archivePoDocument(poId).catch(() => {
+        toast.warning('Approved, but could not file the PO in Docs')
+      })
       await onDone()
     } catch (err) {
       toast.error('Could not approve', {

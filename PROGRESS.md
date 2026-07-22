@@ -47,6 +47,12 @@
         authorised-signatory footer. Line amounts are the Postgres `line_total`; subtotal/GST/total
         are a print-time roll-up for the document only (not stored — the invoice is the authoritative
         cost record). Warns via toast while company.ts still has placeholders.
+      - **PO auto-filed to Docs** (migration 014): approving a PO generates the letterhead PDF and
+        uploads it to the vault's new **Purchase Orders** folder, `is_confidential=true` (carries
+        rates → hidden from supervisors), linked via `documents.po_id`. The folder shows each PO's
+        **live status** (a pill resolved by joining `purchase_orders.status`), so it updates as the PO
+        moves requested → approved → receiving → received. Archive failure never blocks the approval.
+        Migration 014 also adds `'purchase_orders'` to the `doc_folder` enum.
       - **NEXT (Part 2):** GRN-receipt screen and the 3-way-match / invoice screen with
         `fn_post_invoice`. No further migration needed — the schema is complete.
 - [x] **A2 Safety (Module 04)** — **migration 011 written, NOT yet applied** (append is in
