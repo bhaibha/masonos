@@ -45,10 +45,39 @@
       `public/_redirects` and adding `wrangler.jsonc` with
       `assets.not_found_handling: single-page-application` (the Workers-native
       SPA fallback). Re-push to redeploy.
-- [ ] Confirm `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set as **build**
-      variables (Vite inlines them at build time — runtime-only vars give a
-      blank page)
-- [ ] Add the 3 GitHub secrets, then run both workflows once by hand from the Actions tab
+- [x] **LIVE and login working** — masonos.muhamdwaseem.workers.dev
+- [x] Env delivered via committed `.env` (public anon key + URL — safe to commit,
+      ships in the bundle anyway; `.env.local` stays gitignored)
+- [x] `src/lib/supabase.ts` normalises the URL — strips a trailing `/rest/v1`,
+      `/auth/v1` etc. and any trailing slash. The Project URL had `/rest/v1/` on
+      it, which doubled every request path → "Invalid path specified in request
+      URL". Now bulletproof regardless of where the value is set.
+- [x] **Migration 010 written** (`supabase/migrations/010_project_commercials_privacy.sql`)
+      + coordinated frontend change — closes the last UI-only money gap.
+      - SQL: `revoke select on projects from authenticated`, re-grant the safe
+        columns (id/name/client_name/site_address/status/dates/created_at), and
+        expose `contract_value` / `management_fee_pct` / `management_fee_amount`
+        through owner-run `v_project_commercials`, whose WHERE clause is the
+        access control (is_member AND founder/pm/accounts). Same shape as 006.
+      - Frontend: `fetchProjects` / `fetchProject` now select ONLY safe columns
+        (requesting the revoked ones would 400 for everyone since all app users
+        share the `authenticated` role). New `fetchProjectCommercials()` reads
+        the gated view, called only for money-roles; ProjectDetail passes the
+        result to the header. Order-independent: the fetch falls back to a
+        direct table read before 010 is applied, so nothing breaks in the gap
+        between deploying code and running the migration.
+      - Appended to `supabase/APPLY_pending.sql` (now 004–010).
+      - Caveat recorded in the migration: a future project-edit screen must use
+        `Prefer: return=minimal` on UPDATE, or PostgREST re-SELECTs the revoked
+        columns and 400s.
+- Deploy gotchas hit and recorded (see Known bugs): Workers not Pages flow;
+  `_redirects` catch-all invalid on Workers (use wrangler `not_found_handling`);
+  Cloudflare dashboard build vars override committed `.env`; service worker
+  caches old bundle → hard-refresh after deploy.
+- [x] **GitHub Actions live and green** — `supabase-keepalive.yml` (daily REST
+      ping) and `supabase-backup.yml` (weekly `pg_dump` → `postgres:17-alpine`
+      → gzipped 90-day artifact). 3 secrets added; both ran green by hand.
+      `SUPABASE_DB_URL` = Session pooler URI (IPv4; Direct is IPv6-only).
 - [ ] Set Supabase Site URL / redirect URLs to the Pages domain
 - [ ] Re-run supervisor incognito RLS test on Project Detail
 - [ ] Roll design system across remaining tabs (Money/Tasks/Materials/Docs)
@@ -64,6 +93,5 @@
 - Projects added via SQL currently; admin screen parked
 - "View ledger/tasks/stock/documents" buttons verified: `ProjectDetail` calls `select(id)` on mount and
   each layout keeps a still-valid selection, so the tabs open already scoped
-- `projects.contract_value`, `management_fee_pct` and `management_fee_amount` are readable by
-  supervisors via PostgREST — the UI hides them but RLS can't restrict columns. Needs a migration in
-  the shape of 006 (column grants + a gated view). Last hole of this kind.
+- ~~`projects` commercial columns readable by supervisors~~ — **closed by migration 010**
+  (written; apply via `APPLY_pending.sql`). No UI-only money gaps remain.

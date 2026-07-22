@@ -8,13 +8,14 @@ Legend: [x] done · [ ] pending · [~] partial
 
 ---
 
-## PHASE 0 — Protect the work (DO BEFORE any new module)
-- [ ] Deploy live to Cloudflare Pages as installable PWA (manifest + service worker + icon)
-- [ ] GitHub Actions: daily Supabase keep-alive ping (free tier auto-pauses after 7 days)
-- [ ] GitHub Actions: weekly pg_dump backup (store as artifact or private backups/ commit)
-- [ ] Re-run supervisor incognito RLS test on Project Detail screen (confirm money hidden there too)
+## PHASE 0 — Protect the work — CLOSED
+- [x] Deployed live as installable PWA — masonos.muhamdwaseem.workers.dev (Cloudflare **Workers**, not Pages)
+- [x] GitHub Actions: daily Supabase keep-alive ping (green)
+- [x] GitHub Actions: weekly pg_dump backup → 90-day artifact (green)
+- [x] Commercial-figure privacy closed at the DB level (migration 010) — no UI-only money gaps remain
+- [ ] Re-run supervisor incognito RLS test on the LIVE Project Detail (do after 010 is applied)
 
-## ALREADY BUILT (migrations 001–006)
+## ALREADY BUILT (migrations 001–010)
 - [x] M01 Command Dashboard + Project Detail
 - [x] M06 Financial / Open Book (expenses, budgets, receipts)
 - [x] M21 Petty Cash

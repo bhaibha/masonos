@@ -18,7 +18,12 @@ import {
   fetchProjectSummary,
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
-import { fetchProject, fetchProjectSpend } from '@/lib/queries/projects'
+import {
+  fetchProject,
+  fetchProjectCommercials,
+  fetchProjectSpend,
+  type ProjectCommercials,
+} from '@/lib/queries/projects'
 import {
   type ActivityItem,
   canLogMaterials,
@@ -42,6 +47,7 @@ export default function ProjectDetail() {
   const select = useProjects((s) => s.select)
 
   const [project, setProject] = useState<Project | null | 'missing'>(null)
+  const [commercials, setCommercials] = useState<ProjectCommercials | null>(null)
   const [spend, setSpend] = useState<ProjectSpend | null>(null)
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
@@ -66,6 +72,16 @@ export default function ProjectDetail() {
           description: err instanceof Error ? err.message : undefined,
         })
       })
+
+    // Contract value + fee come from the role-gated view, and only for
+    // money-roles. Supervisors never fetch them.
+    if (showMoney) {
+      fetchProjectCommercials(id)
+        .then((c) => {
+          if (!cancelled) setCommercials(c)
+        })
+        .catch(() => {})
+    }
 
     fetchProjectSpend()
       .then((all) => {
@@ -113,7 +129,11 @@ export default function ProjectDetail() {
         <HeaderSkeleton />
       ) : (
         <FadeUp>
-          <ProjectHeading project={project} showMoney={showMoney} />
+          <ProjectHeading
+            project={project}
+            commercials={commercials}
+            showMoney={showMoney}
+          />
         </FadeUp>
       )}
 
@@ -170,11 +190,19 @@ function BackBar() {
 
 function ProjectHeading({
   project,
+  commercials,
   showMoney,
 }: {
   project: Project
+  commercials: ProjectCommercials | null
   showMoney: boolean
 }) {
+  // Commercials come from the role-gated view (migration 010), never off the
+  // project row. Supervisors never fetch them, so this block stays empty.
+  const contract = commercials?.contract_value ?? null
+  const feePct = commercials?.management_fee_pct ?? null
+  const feeAmount = commercials?.management_fee_amount ?? null
+
   return (
     <div className="mt-2">
       <div className="flex items-start justify-between gap-4">
@@ -195,33 +223,31 @@ function ProjectHeading({
         </p>
       )}
 
-      {/* Contract value and fee are commercial figures — same restriction as
-          the rest of the money surface. */}
-      {showMoney && (project.contract_value !== null || project.management_fee_pct !== null) && (
+      {showMoney && (contract !== null || feePct !== null) && (
         <div className="mt-5 flex gap-8 border-t border-border pt-4">
-          {project.contract_value !== null && (
+          {contract !== null && (
             <div>
               <p className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
                 Contract
               </p>
               <p className="figure mt-1 text-[19px] font-semibold">
-                {formatInr(project.contract_value)}
+                {formatInr(contract)}
               </p>
             </div>
           )}
-          {project.management_fee_pct !== null && (
+          {feePct !== null && (
             <div>
               <p className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
                 Mgmt fee
               </p>
               <p className="figure mt-1 text-[19px] font-semibold">
-                {project.management_fee_pct}%
+                {feePct}%
               </p>
               {/* Rupee value is the generated column from migration 008 —
                   never contract x pct computed here. */}
-              {project.management_fee_amount !== null && (
+              {feeAmount !== null && (
                 <p className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
-                  {formatInr(project.management_fee_amount)}
+                  {formatInr(feeAmount)}
                 </p>
               )}
             </div>

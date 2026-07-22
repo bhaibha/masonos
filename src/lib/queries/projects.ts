@@ -1,10 +1,13 @@
 import { supabase } from '@/lib/supabase'
 import type { Project, ProjectSpend } from '@/lib/types'
 
-const PROJECT_BASE =
-  'id, name, client_name, site_address, status, contract_value, management_fee_pct'
-/** management_fee_amount is the generated column from migration 008. */
-const PROJECT_FULL = `${PROJECT_BASE}, management_fee_amount`
+/**
+ * Only the non-commercial columns. Since migration 010, `authenticated` has no
+ * SELECT on contract_value / management_fee_pct / management_fee_amount, so
+ * requesting them here would 400 for everyone. Commercials come from
+ * v_project_commercials via fetchProjectCommercials().
+ */
+const PROJECT_COLUMNS = 'id, name, client_name, site_address, status'
 
 function toProject(r: Record<string, unknown>): Project {
   return {
@@ -13,54 +16,83 @@ function toProject(r: Record<string, unknown>): Project {
     client_name: (r.client_name as string | null) ?? null,
     site_address: (r.site_address as string | null) ?? null,
     status: r.status as Project['status'],
-    contract_value: num(r.contract_value),
-    management_fee_pct: num(r.management_fee_pct),
-    management_fee_amount: num(r.management_fee_amount),
+    // Filled in separately for money-roles; null everywhere else.
+    contract_value: null,
+    management_fee_pct: null,
+    management_fee_amount: null,
   }
 }
 
 /** Projects visible to the signed-in user (RLS: projects_read → is_member). */
 export async function fetchProjects(): Promise<Project[]> {
-  const full = await supabase
+  const { data, error } = await supabase
     .from('projects')
-    .select(PROJECT_FULL)
+    .select(PROJECT_COLUMNS)
     .order('name')
 
-  let rows: unknown[] = full.data ?? []
-
-  if (full.error) {
-    const retry = await supabase
-      .from('projects')
-      .select(PROJECT_BASE)
-      .order('name')
-    if (retry.error) throw retry.error
-    rows = retry.data ?? []
-  }
-
-  return rows.map((r) => toProject(r as Record<string, unknown>))
+  if (error) throw error
+  return (data ?? []).map((r) => toProject(r as Record<string, unknown>))
 }
 
 /** Returns null when RLS hides the project rather than throwing. */
 export async function fetchProject(id: string): Promise<Project | null> {
-  const full = await supabase
+  const { data, error } = await supabase
     .from('projects')
-    .select(PROJECT_FULL)
+    .select(PROJECT_COLUMNS)
     .eq('id', id)
     .maybeSingle()
 
-  let row: unknown = full.data
+  if (error) throw error
+  return data ? toProject(data as Record<string, unknown>) : null
+}
 
-  if (full.error) {
-    const retry = await supabase
-      .from('projects')
-      .select(PROJECT_BASE)
-      .eq('id', id)
-      .maybeSingle()
-    if (retry.error) throw retry.error
-    row = retry.data
+export interface ProjectCommercials {
+  contract_value: number | null
+  management_fee_pct: number | null
+  management_fee_amount: number | null
+}
+
+/**
+ * Contract value + management fee for one project, from the role-gated
+ * v_project_commercials view (migration 010). Only call this for money-roles.
+ *
+ * Returns null rather than throwing when the caller isn't permitted (the view
+ * returns zero rows for supervisors) or — before 010 is applied — when the view
+ * doesn't exist yet. In that pre-010 window it falls back to reading the
+ * columns straight off projects, which still works until the revoke lands.
+ */
+export async function fetchProjectCommercials(
+  id: string,
+): Promise<ProjectCommercials | null> {
+  const view = await supabase
+    .from('v_project_commercials')
+    .select('contract_value, management_fee_pct, management_fee_amount')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!view.error) {
+    return view.data
+      ? {
+          contract_value: num(view.data.contract_value),
+          management_fee_pct: num(view.data.management_fee_pct),
+          management_fee_amount: num(view.data.management_fee_amount),
+        }
+      : null
   }
 
-  return row ? toProject(row as Record<string, unknown>) : null
+  // Pre-010 fallback: the view isn't there yet, read the table directly.
+  const direct = await supabase
+    .from('projects')
+    .select('contract_value, management_fee_pct, management_fee_amount')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (direct.error || !direct.data) return null
+  return {
+    contract_value: num(direct.data.contract_value),
+    management_fee_pct: num(direct.data.management_fee_pct),
+    management_fee_amount: num(direct.data.management_fee_amount),
+  }
 }
 
 const SPEND_BASE = 'project_id, name, total_spent, total_budget'
