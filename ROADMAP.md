@@ -38,7 +38,10 @@ Order within group:
        Pass/Fail/NA + remark + photo, one per site per day), incident & near-miss reports (type, people,
        action, photos, open/close), safety summary on Project Detail (days incident-free, checklist %).
        Migration 011 (tables + RLS + audit + fn_safety_summary). Full design system.
-- [ ] A3. M22 Procurement: PR → PO → GRN → 3-way match (PR raise → PO approve → GRN on delivery → match qty/rate)
+- [~] A3. M22 Procurement — PART 1 done: migration 012 (full backend: PO/GRN/invoice tables,
+       GRN→stock trigger, v_po_match 3-way view, fn_post_invoice → Open Book, rate privacy, RLS,
+       audit) + raise-request/approve screens under Materials + Money. PART 2 pending: GRN receipt
+       screen + 3-way-match/invoice screen.
 - [ ] A4. M15 Invoice Generator (client-side PDF: progress bill, management-fee invoice, vendor payment voucher)
 - [ ] A5. M26 Variation Orders (VO register: raise, cost impact, status, links to project; PM raises, founder approves)
 - [ ] A6. M56 Site Instruction (SI) — issue instruction to contractor/labour, status, PDF

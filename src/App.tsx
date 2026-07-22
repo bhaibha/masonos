@@ -23,6 +23,7 @@ import IssueForm from '@/pages/materials/IssueForm'
 import MaterialMaster from '@/pages/materials/MaterialMaster'
 import MaterialsLayout from '@/pages/materials/MaterialsLayout'
 import StockRegister from '@/pages/materials/StockRegister'
+import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import SiteLog from '@/pages/tasks/SiteLog'
@@ -65,6 +66,7 @@ export default function App() {
                 {/* vendors_read/write is founder/pm/accounts — identical to
                     MONEY_ROLES, so the parent guard already covers it. */}
                 <Route path="vendors" element={<Vendors />} />
+                <Route path="orders" element={<Orders />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>
@@ -76,6 +78,7 @@ export default function App() {
               <Route index element={<StockRegister />} />
               <Route path="inward" element={<InwardForm />} />
               <Route path="issue" element={<IssueForm />} />
+              <Route path="orders" element={<Orders />} />
               <Route path="master" element={<MaterialMaster />} />
             </Route>
             {/* Confidential rows are filtered by docs_read in Postgres,

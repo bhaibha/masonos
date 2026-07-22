@@ -267,6 +267,99 @@ export interface NewDocument {
   is_confidential: boolean
 }
 
+// ---------- Procurement ----------
+
+export type PoStatus =
+  | 'requested'
+  | 'approved'
+  | 'rejected'
+  | 'receiving'
+  | 'received'
+  | 'closed'
+  | 'cancelled'
+
+export const PO_STATUS_LABEL: Record<PoStatus, string> = {
+  requested: 'Requested',
+  approved: 'Approved',
+  rejected: 'Rejected',
+  receiving: 'Receiving',
+  received: 'Received',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+}
+
+/** Who may raise a purchase request. */
+export function canRaisePR(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
+/** Who may approve a PR into a PO (add rates). PM can approve too, per setup. */
+export function canApprovePO(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Who may post a matched invoice to Open Book. */
+export function canPostInvoice(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+export interface PoLine {
+  id: string
+  po_id: string
+  material_id: string
+  qty_ordered: number
+  /** null for supervisors (rate revoked) and until approved */
+  rate: number | null
+  line_total: number | null
+  material_name?: string
+  material_unit?: string
+}
+
+export interface PurchaseOrder {
+  id: string
+  po_number: string
+  project_id: string
+  vendor_id: string | null
+  status: PoStatus
+  need_by: string | null
+  notes: string | null
+  raised_by: string
+  approved_by: string | null
+  created_at: string
+  vendor_name: string | null
+  line_count: number
+  /** ordered value — null for supervisors (rates hidden) */
+  ordered_value: number | null
+}
+
+export interface NewPoLine {
+  material_id: string
+  qty_ordered: number
+}
+
+export interface NewPurchaseOrder {
+  project_id: string
+  vendor_id: string | null
+  need_by: string | null
+  notes: string
+  lines: NewPoLine[]
+}
+
+export type MatchStatus =
+  | 'pending'
+  | 'ok'
+  | 'qty_variance'
+  | 'rate_variance'
+  | 'both'
+
+export const MATCH_STATUS_LABEL: Record<MatchStatus, string> = {
+  pending: 'Awaiting invoice',
+  ok: 'Matched',
+  qty_variance: 'Qty variance',
+  rate_variance: 'Rate variance',
+  both: 'Qty + rate variance',
+}
+
 // ---------- Safety ----------
 
 /** Same write set as tasks — founder/pm/supervisor. accounts is read-only. */

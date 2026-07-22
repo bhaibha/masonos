@@ -26,6 +26,7 @@ export default function MoneyLayout() {
     ...(canEditBudgets(role)
       ? [{ to: '/money/budget/edit', label: 'Set budgets' }]
       : []),
+    { to: '/money/orders', label: 'Orders' },
     { to: '/money/vendors', label: 'Vendors' },
   ]
 

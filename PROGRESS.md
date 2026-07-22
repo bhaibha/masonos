@@ -11,6 +11,31 @@
 - [x] Project Detail drill-down navigation
 
 ## GROUP A
+- [~] **A3 Procurement (Module 22) — PART 1 of 2.** **Migration 012 written, NOT applied**
+      (appended to `APPLY_pending.sql`). Full backend now exists:
+      - `purchase_orders` (carries the PR→PO lifecycle: starts 'requested', becomes 'approved'
+        when rates are set), `po_lines` (qty + rate, `line_total` generated), `goods_receipts`
+        + `grn_lines`, `po_invoices` + `invoice_lines`.
+      - **GRN → stock**: `fn_grn_to_inward` trigger posts a `material_inward` row per GRN line
+        (single source of truth for stock), carrying the PO rate, security-definer so a
+        rate-blind receiver can still write it.
+      - **3-way match view** `v_po_match`: ordered vs received vs invoiced per line, with
+        `match_status` (ok / qty_variance / rate_variance / both / pending), tolerances qty 0.5 /
+        rate 2%. `v_po_totals` for PO value.
+      - **Invoice → Open Book**: `fn_post_invoice` (founder/accounts only) approves an invoice and
+        writes ONE expense row for the net, so procured cost hits the ledger + budgets. Money math
+        server-side throughout (generated columns + views + fn).
+      - **Rate privacy**: `po_lines.rate`/`line_total` revoked from `authenticated`; served via
+        `v_po_lines_rated` gated to founder/pm/accounts. Supervisors see quantities only. Same
+        pattern as 006/010.
+      - RLS across all 6 tables; audit triggers on PO / GRN / invoice.
+      - **Built this turn (Part 1):** raise request (qty-only, supervisor-friendly) +
+        Orders list + inline approve-with-rates. Reachable from **both** the Materials tab
+        (supervisors: /materials/orders) and the Money tab (money-roles: /money/orders) — the same
+        `Orders` screen adapts by role, since supervisors have no Money tab and accounts no
+        Materials tab.
+      - **NEXT (Part 2):** GRN-receipt screen and the 3-way-match / invoice screen with
+        `fn_post_invoice`. No further migration needed — the schema is complete.
 - [x] **A2 Safety (Module 04)** — **migration 011 written, NOT yet applied** (append is in
       `APPLY_pending.sql`). Tables: `safety_checklists` (one per project per day),
       `safety_checklist_items`, `incidents`. RLS mirrors tasks (members read; founder/pm/supervisor
