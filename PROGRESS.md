@@ -35,8 +35,22 @@
       No action needed. (If a chunk-size warning ever matters, the fix is route-level `lazy()`
       splitting — not urgent for ~15 internal users on a fast connection.)
 
+- [x] Pushed to GitHub — `github.com/bhaibha/masonos`, private, `main`
+- [x] `.gitattributes` added (LF normalisation; CRLF in `.yml` breaks Actions runners)
+- [x] `.gitignore` hardened with `.env` / `.env.*` — `*.local` alone missed `.env.local.txt`
+
 ## Next (see ROADMAP.md)
-- [ ] Deploy to Cloudflare Pages (steps in DEPLOY.md), add the 3 GitHub secrets, run both workflows once by hand
+- [x] Repo connected to Cloudflare — landed in the **Workers** flow, not Pages
+- [x] First deploy failed on `_redirects` ("infinite loop"); fixed by deleting
+      `public/_redirects` and adding `wrangler.jsonc` with
+      `assets.not_found_handling: single-page-application` (the Workers-native
+      SPA fallback). Re-push to redeploy.
+- [ ] Confirm `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set as **build**
+      variables (Vite inlines them at build time — runtime-only vars give a
+      blank page)
+- [ ] Add the 3 GitHub secrets, then run both workflows once by hand from the Actions tab
+- [ ] Set Supabase Site URL / redirect URLs to the Pages domain
+- [ ] Re-run supervisor incognito RLS test on Project Detail
 - [ ] Roll design system across remaining tabs (Money/Tasks/Materials/Docs)
 - [ ] GROUP A → A1 Vendors screen
 

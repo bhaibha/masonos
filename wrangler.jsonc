@@ -1,0 +1,12 @@
+{
+  "name": "masonos",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./dist",
+    // SPA fallback the Workers way. Any path with no matching file serves
+    // /index.html with 200, which is what React Router needs for deep links
+    // like /project/<id>. This replaces the _redirects `/* /index.html 200`
+    // rule, which Workers static-asset hosting rejects as an infinite loop.
+    "not_found_handling": "single-page-application"
+  }
+}
