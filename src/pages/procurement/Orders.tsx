@@ -7,13 +7,16 @@ import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { COMPANY, companyNeedsSetup } from '@/lib/company'
 import { formatInr } from '@/lib/format'
+import { generatePoPdf } from '@/lib/poPdf'
+import { fetchProject } from '@/lib/queries/projects'
 import {
   approvePurchaseOrder,
   fetchPoLines,
   fetchPurchaseOrders,
 } from '@/lib/queries/procurement'
-import { fetchVendors } from '@/lib/queries/vendors'
+import { fetchVendor, fetchVendors } from '@/lib/queries/vendors'
 import {
   canApprovePO,
   canRaisePR,
@@ -180,25 +183,96 @@ function OrderCard({
               onDone={onChanged}
             />
           ) : (
-            <ul className="space-y-2">
-              {lines.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-baseline justify-between gap-3 text-sm"
-                >
-                  <span className="min-w-0 truncate">{l.material_name}</span>
-                  <span className="shrink-0 text-muted-foreground tabular-nums">
-                    {l.qty_ordered} {l.material_unit}
-                    {l.rate !== null && ` · ${formatInr(l.rate)}`}
-                    {l.line_total !== null && ` = ${formatInr(l.line_total)}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="space-y-2">
+                {lines.map((l) => (
+                  <li
+                    key={l.id}
+                    className="flex items-baseline justify-between gap-3 text-sm"
+                  >
+                    <span className="min-w-0 truncate">{l.material_name}</span>
+                    <span className="shrink-0 text-muted-foreground tabular-nums">
+                      {l.qty_ordered} {l.material_unit}
+                      {l.rate !== null && ` · ${formatInr(l.rate)}`}
+                      {l.line_total !== null && ` = ${formatInr(l.line_total)}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* PO document — only once approved and only for money-roles
+                  (needs rates + vendor GSTIN). */}
+              {withRates && po.status !== 'requested' && po.status !== 'rejected' && (
+                <PoDocument po={po} lines={lines} />
+              )}
+            </>
           )}
         </div>
       )}
     </article>
+  )
+}
+
+function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
+  const [gst, setGst] = useState(String(COMPANY.defaultGstPct))
+  const [busy, setBusy] = useState(false)
+
+  async function download() {
+    setBusy(true)
+    try {
+      const [vendor, project] = await Promise.all([
+        po.vendor_id ? fetchVendor(po.vendor_id) : Promise.resolve(null),
+        fetchProject(po.project_id),
+      ])
+      generatePoPdf({
+        po,
+        lines,
+        vendor,
+        projectName: project?.name ?? '',
+        siteAddress: project?.site_address ?? null,
+        gstPct: Number(gst) || 0,
+      })
+      if (companyNeedsSetup()) {
+        toast.warning('PO generated — fill in company details in src/lib/company.ts', {
+          description: 'The letterhead still has placeholder GSTIN / address.',
+        })
+      } else {
+        toast.success('Purchase order PDF downloaded')
+      }
+    } catch (err) {
+      toast.error('Could not generate the PO', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+    setBusy(false)
+  }
+
+  return (
+    <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
+      <label className="text-xs text-muted-foreground" htmlFor={`gst_${po.id}`}>
+        GST
+      </label>
+      <Select
+        id={`gst_${po.id}`}
+        value={gst}
+        onChange={(e) => setGst(e.target.value)}
+        className="h-11 w-24"
+      >
+        {['0', '5', '12', '18', '28'].map((g) => (
+          <option key={g} value={g}>
+            {g}%
+          </option>
+        ))}
+      </Select>
+      <Button
+        variant="outline"
+        className="h-11 flex-1"
+        disabled={busy}
+        onClick={() => void download()}
+      >
+        {busy ? 'Preparing…' : 'Download PO'}
+      </Button>
+    </div>
   )
 }
 

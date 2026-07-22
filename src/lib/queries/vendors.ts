@@ -17,6 +17,16 @@ export async function fetchVendors(includeInactive = false): Promise<Vendor[]> {
   return (data ?? []) as Vendor[]
 }
 
+export async function fetchVendor(id: string): Promise<Vendor | null> {
+  const { data, error } = await supabase
+    .from('vendors')
+    .select(COLUMNS)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return (data as Vendor | null) ?? null
+}
+
 /** Returns the created row so callers can select it straight away. */
 export async function createVendor(input: NewVendor): Promise<Vendor> {
   const { data, error } = await supabase
