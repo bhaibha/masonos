@@ -59,6 +59,17 @@ async function archivePoDocument(poId: string): Promise<void> {
     ordered_value: null,
   } as unknown as PurchaseOrder
 
+  // Don't refile copies that already exist (makes this safe to run manually
+  // and on re-approval). Full = confidential, delivery = not.
+  const { data: existing } = await supabase
+    .from('documents')
+    .select('is_confidential')
+    .eq('po_id', poId)
+    .eq('folder', 'purchase_orders')
+  const hasFull = (existing ?? []).some((d) => d.is_confidential === true)
+  const hasDelivery = (existing ?? []).some((d) => d.is_confidential === false)
+  if (hasFull && hasDelivery) return
+
   const [lines, vendor, project] = await Promise.all([
     fetchPoLines(poId, true),
     po.vendor_id ? fetchVendor(po.vendor_id) : Promise.resolve(null),
@@ -79,29 +90,33 @@ async function archivePoDocument(poId: string): Promise<void> {
   //  1. Full priced PO — confidential (has rates), for founder/pm/accounts.
   //  2. Delivery copy — no rates, NOT confidential, so the supervisor can open
   //     it and chase the vendor for delivery.
-  const fullFile = generatePoFile(pdfOpts, 'full')
-  const fullUp = await uploadDocument(po.project_id, fullFile)
-  await createDocument({
-    project_id: po.project_id,
-    folder: 'purchase_orders',
-    title: `${po.po_number}${vsuffix}`,
-    file_path: fullUp.path,
-    file_type: fullUp.fileType,
-    is_confidential: true,
-    po_id: po.id,
-  })
+  if (!hasFull) {
+    const fullFile = generatePoFile(pdfOpts, 'full')
+    const fullUp = await uploadDocument(po.project_id, fullFile)
+    await createDocument({
+      project_id: po.project_id,
+      folder: 'purchase_orders',
+      title: `${po.po_number}${vsuffix}`,
+      file_path: fullUp.path,
+      file_type: fullUp.fileType,
+      is_confidential: true,
+      po_id: po.id,
+    })
+  }
 
-  const delFile = generatePoFile(pdfOpts, 'delivery')
-  const delUp = await uploadDocument(po.project_id, delFile)
-  await createDocument({
-    project_id: po.project_id,
-    folder: 'purchase_orders',
-    title: `${po.po_number} · Delivery copy${vsuffix}`,
-    file_path: delUp.path,
-    file_type: delUp.fileType,
-    is_confidential: false,
-    po_id: po.id,
-  })
+  if (!hasDelivery) {
+    const delFile = generatePoFile(pdfOpts, 'delivery')
+    const delUp = await uploadDocument(po.project_id, delFile)
+    await createDocument({
+      project_id: po.project_id,
+      folder: 'purchase_orders',
+      title: `${po.po_number} · Delivery copy${vsuffix}`,
+      file_path: delUp.path,
+      file_type: delUp.fileType,
+      is_confidential: false,
+      po_id: po.id,
+    })
+  }
 }
 
 const STATUS_TONE: Record<PoStatus, string> = {
@@ -288,6 +303,22 @@ function OrderCard({
 function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
   const [gst, setGst] = useState(String(COMPANY.defaultGstPct))
   const [busy, setBusy] = useState(false)
+  const [filing, setFiling] = useState(false)
+
+  async function fileToDocs() {
+    setFiling(true)
+    try {
+      await archivePoDocument(po.id)
+      toast.success('Filed to Docs → Purchase Orders', {
+        description: 'The supervisor can now open the delivery copy.',
+      })
+    } catch (err) {
+      toast.error('Could not file to Docs', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+    setFiling(false)
+  }
 
   async function download() {
     setBusy(true)
@@ -343,6 +374,14 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
         onClick={() => void download()}
       >
         {busy ? 'Preparing…' : 'Download PO'}
+      </Button>
+      <Button
+        variant="outline"
+        className="h-11 flex-1"
+        disabled={filing}
+        onClick={() => void fileToDocs()}
+      >
+        {filing ? 'Filing…' : 'File to Docs'}
       </Button>
     </div>
   )
