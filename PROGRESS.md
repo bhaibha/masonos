@@ -10,7 +10,19 @@
 - [x] UI: premium design system applied to Dashboard + Project Detail
 - [x] Project Detail drill-down navigation
 
-## PHASE 0 (this session)
+## GROUP A
+- [x] **A1 Vendor Management** — upgraded to the full design system. `Vendors.tsx`
+      now has search (name/category/phone/GSTIN), a brass primary "Add vendor",
+      sonner toasts on every add/edit/deactivate/restore (no more inline
+      banners), `ListSkeleton` while loading, an `EmptyState` with a primary
+      action, and a staggered reveal on the list. `VendorForm` toasts on save
+      failure (keeps inline validation for the empty-name case); the
+      `VendorPicker` inline-add on the expense form toasts "added and selected".
+      Functionality (list/add/edit/deactivate + inline add) was already built in
+      the Vendors session; this pass brought it up to the design standard.
+      Deactivate stays a soft delete (FK-safe), founder/pm/accounts only.
+
+## PHASE 0 (earlier session)
 - [x] PWA: `public/manifest.webmanifest`, brass-monogram icons (192/512/maskable/apple-touch), meta tags
 - [x] Service worker `public/sw.js` — hand-written, no Workbox. Network-first navigations with cached
       shell fallback; cache-first for hashed `/assets/*`. **All cross-origin requests pass straight
@@ -93,5 +105,8 @@
 - Projects added via SQL currently; admin screen parked
 - "View ledger/tasks/stock/documents" buttons verified: `ProjectDetail` calls `select(id)` on mount and
   each layout keeps a still-valid selection, so the tabs open already scoped
-- ~~`projects` commercial columns readable by supervisors~~ — **closed by migration 010**
-  (written; apply via `APPLY_pending.sql`). No UI-only money gaps remain.
+- ~~`projects` commercial columns readable by supervisors~~ — **closed by migration 010, APPLIED.**
+  No UI-only money gaps remain.
+- **Migrations 004–010 are all APPLIED to production** (via APPLY_pending.sql). Delta lines,
+  portfolio roll-up, scoped rollover, storage RLS, rate + commercial privacy all live.
+- 006 made idempotent (drop-policy-if-exists before each create) so the batch re-runs cleanly.

@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Store } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { EmptyState } from '@/components/EmptyState'
+import { RevealItem, Stagger } from '@/components/Reveal'
+import { ListSkeleton } from '@/components/Skeleton'
 import { VendorForm } from '@/components/VendorForm'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { fetchVendors, setVendorActive } from '@/lib/queries/vendors'
 import { canManageVendors, type Vendor } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -14,15 +20,16 @@ export default function Vendors() {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [term, setTerm] = useState('')
 
   const reload = useCallback(async () => {
-    setError(null)
     try {
       setVendors(await fetchVendors(showInactive))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load vendors.')
+      toast.error('Could not load vendors', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+      setVendors([])
     }
   }, [showInactive])
 
@@ -30,6 +37,19 @@ export default function Vendors() {
     setVendors(null)
     void reload()
   }, [reload])
+
+  const filtered = useMemo(() => {
+    if (!vendors) return null
+    const t = term.trim().toLowerCase()
+    if (t === '') return vendors
+    return vendors.filter(
+      (v) =>
+        v.name.toLowerCase().includes(t) ||
+        (v.category ?? '').toLowerCase().includes(t) ||
+        (v.phone ?? '').includes(t) ||
+        (v.gstin ?? '').toLowerCase().includes(t),
+    )
+  }, [vendors, term])
 
   if (!canManageVendors(role)) {
     return (
@@ -42,7 +62,7 @@ export default function Vendors() {
   async function toggleActive(v: Vendor) {
     const next = !v.is_active
     if (
-      next === false &&
+      !next &&
       !window.confirm(
         `Deactivate ${v.name}? Past expenses keep the link — it just stops ` +
           `appearing in pickers.`,
@@ -52,35 +72,25 @@ export default function Vendors() {
     }
 
     setBusyId(v.id)
-    setError(null)
-    setNotice(null)
     try {
       await setVendorActive(v.id, next)
-      setNotice(next ? 'Vendor reactivated.' : 'Vendor deactivated.')
+      toast.success(next ? `${v.name} reactivated` : `${v.name} deactivated`)
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update the vendor.')
+      toast.error('Could not update the vendor', {
+        description: err instanceof Error ? err.message : undefined,
+      })
     }
     setBusyId(null)
   }
 
+  const hasVendors = filtered !== null && filtered.length > 0
+  const searching = term.trim() !== ''
+
   return (
     <div className="space-y-4 pb-6">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {notice && !error && (
-        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">{notice}</p>
-      )}
-
       {!adding && !editingId && (
         <Button
-          variant="outline"
           className="h-12 w-full text-base"
           onClick={() => setAdding(true)}
         >
@@ -89,13 +99,15 @@ export default function Vendors() {
       )}
 
       {adding && (
-        <div className="rounded-xl border border-border p-4">
-          <p className="mb-3 text-sm font-medium">New vendor</p>
+        <div className="paper p-5">
+          <p className="mb-4 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+            New vendor
+          </p>
           <VendorForm
             idPrefix="new_vendor"
-            onSaved={() => {
+            onSaved={(v) => {
               setAdding(false)
-              setNotice('Vendor added.')
+              toast.success(`${v.name} added`)
               void reload()
             }}
             onCancel={() => setAdding(false)}
@@ -103,50 +115,73 @@ export default function Vendors() {
         </div>
       )}
 
-      <label className="flex items-center gap-3 text-sm">
-        <input
-          type="checkbox"
-          checked={showInactive}
-          onChange={(e) => setShowInactive(e.target.checked)}
-          className="size-5"
-        />
-        Show deactivated vendors
-      </label>
-
-      {vendors === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      {/* Search + inactive toggle only once there's something to search. */}
+      {(hasVendors || searching || showInactive) && (
+        <div className="space-y-3">
+          <Input
+            type="search"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+            placeholder="Search name, category, phone or GSTIN"
+            aria-label="Search vendors"
+            className="h-12 text-base"
+          />
+          <label className="flex items-center gap-3 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(e) => setShowInactive(e.target.checked)}
+              className="size-5 accent-[var(--primary)]"
+            />
+            Show deactivated vendors
+          </label>
+        </div>
       )}
 
-      {vendors?.length === 0 && (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No vendors yet.
-        </p>
+      {vendors === null && <ListSkeleton rows={4} />}
+
+      {vendors !== null && filtered !== null && filtered.length === 0 && (
+        searching ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No vendor matches “{term}”.
+          </p>
+        ) : (
+          <EmptyState
+            icon={Store}
+            title="No vendors yet"
+            body="Add the suppliers and contractors you buy from — they'll show up as options when you record an expense."
+            actionLabel="Add your first vendor"
+            onAction={() => setAdding(true)}
+          />
+        )
       )}
 
-      {vendors && vendors.length > 0 && (
-        <ul className="divide-y divide-border rounded-xl border border-border">
-          {vendors.map((v) =>
-            editingId === v.id ? (
-              <li key={v.id} className="p-4">
-                <p className="mb-3 text-sm font-medium">Edit vendor</p>
-                <VendorForm
-                  vendor={v}
-                  idPrefix={`edit_${v.id}`}
-                  onSaved={() => {
-                    setEditingId(null)
-                    setNotice('Vendor updated.')
-                    void reload()
-                  }}
-                  onCancel={() => setEditingId(null)}
-                />
-              </li>
-            ) : (
-              <li key={v.id} className="px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
+      {hasVendors && (
+        <Stagger className="paper divide-y divide-border overflow-hidden">
+          {filtered.map((v) => (
+            <RevealItem key={v.id}>
+              {editingId === v.id ? (
+                <div className="p-5">
+                  <p className="mb-4 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                    Edit vendor
+                  </p>
+                  <VendorForm
+                    vendor={v}
+                    idPrefix={`edit_${v.id}`}
+                    onSaved={(saved) => {
+                      setEditingId(null)
+                      toast.success(`${saved.name} updated`)
+                      void reload()
+                    }}
+                    onCancel={() => setEditingId(null)}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3 px-5 py-4">
                   <div className="min-w-0">
                     <p
                       className={cn(
-                        'truncate text-sm font-medium',
+                        'truncate font-medium',
                         !v.is_active && 'text-muted-foreground line-through',
                       )}
                     >
@@ -156,7 +191,7 @@ export default function Vendors() {
                       {[v.category, v.phone].filter(Boolean).join(' · ') || '—'}
                     </p>
                     {v.gstin && (
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground tabular-nums">
                         GSTIN {v.gstin}
                       </p>
                     )}
@@ -179,16 +214,18 @@ export default function Vendors() {
                     </Button>
                   </div>
                 </div>
-              </li>
-            ),
-          )}
-        </ul>
+              )}
+            </RevealItem>
+          ))}
+        </Stagger>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Vendors are shared across all projects. Deactivating keeps history
-        intact and only hides the vendor from pickers.
-      </p>
+      {hasVendors && (
+        <p className="text-xs text-muted-foreground">
+          Vendors are shared across all projects. Deactivating keeps history
+          intact and only hides the vendor from pickers.
+        </p>
+      )}
     </div>
   )
 }

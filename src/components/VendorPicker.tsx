@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { VendorForm } from '@/components/VendorForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -83,6 +84,7 @@ export function VendorPicker({
               onVendorCreated(v)
               onChange(v.id)
               close()
+              toast.success(`${v.name} added and selected`)
             }}
             onCancel={() => setAdding(false)}
           />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { FieldRow } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -51,9 +52,13 @@ export function VendorForm({
       const saved = vendor
         ? await updateVendor(vendor.id, payload)
         : await createVendor(payload)
+      // Success toast is raised by the parent (which knows add vs edit vs
+      // inline-on-expense-form context). Here we only surface failures.
       onSaved(saved)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the vendor.')
+      const msg = err instanceof Error ? err.message : 'Could not save the vendor.'
+      setError(msg)
+      toast.error('Could not save the vendor', { description: msg })
       setBusy(false)
     }
   }

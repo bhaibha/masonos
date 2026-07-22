@@ -31,7 +31,9 @@ Legend: [x] done · [ ] pending · [~] partial
 
 ## GROUP A — Straightforward workflow modules (build first) ~2–3 weeks
 Order within group:
-- [ ] A1. M08 Vendor Management screen (list, add/edit/deactivate; inline "add new vendor" on expense form)
+- [x] A1. M08 Vendor Management screen — list + search, add/edit/deactivate, inline "add new vendor"
+       on the expense form. Full design system (brass primary, toasts, ListSkeleton, EmptyState,
+       staggered reveal).
 - [ ] A2. M04 Safety (daily safety checklist per site + incident/near-miss report with photos)
 - [ ] A3. M22 Procurement: PR → PO → GRN → 3-way match (PR raise → PO approve → GRN on delivery → match qty/rate)
 - [ ] A4. M15 Invoice Generator (client-side PDF: progress bill, management-fee invoice, vendor payment voucher)
