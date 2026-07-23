@@ -71,8 +71,8 @@ begin
   where pl.po_id = p_po;
 
   update public.purchase_orders
-     set status = case when coalesce(v_all_received, false) then 'received'
-                       else 'receiving' end,
+     set status = (case when coalesce(v_all_received, false) then 'received'
+                        else 'receiving' end)::po_status,
          updated_at = now()
    where id = p_po and status in ('approved', 'receiving');
 
