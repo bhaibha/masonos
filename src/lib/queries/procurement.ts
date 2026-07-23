@@ -1,6 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import type {
+  InvoiceLineInput,
+  MatchRow,
   NewPurchaseOrder,
+  PoInvoiceRow,
   PoLine,
   PurchaseOrder,
 } from '@/lib/types'
@@ -191,5 +194,146 @@ export async function setPoStatus(
     .from('purchase_orders')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', poId)
+  if (error) throw error
+}
+
+// ---------- Part 2: receiving, invoicing, 3-way match ----------
+
+/** qty already received per po_line, summed from grn_lines (members can read). */
+export async function fetchReceivedByLine(
+  lineIds: string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (lineIds.length === 0) return out
+
+  const { data, error } = await supabase
+    .from('grn_lines')
+    .select('po_line_id, qty_received')
+    .in('po_line_id', lineIds)
+
+  if (error) throw error
+  for (const r of data ?? []) {
+    const id = r.po_line_id as string
+    out.set(id, (out.get(id) ?? 0) + Number(r.qty_received))
+  }
+  return out
+}
+
+/**
+ * Records a goods receipt via fn_receive_goods (migration 015). The function
+ * inserts the GRN + lines (which posts to stock through a trigger) and flips
+ * the PO status, all with the receiver's membership + role checked server-side.
+ * Returns the new GRN id.
+ */
+export async function receiveGoods(
+  poId: string,
+  date: string,
+  note: string,
+  lines: { po_line_id: string; qty: number }[],
+): Promise<string> {
+  const { data, error } = await supabase.rpc('fn_receive_goods', {
+    p_po: poId,
+    p_date: date,
+    p_note: note || null,
+    p_lines: lines,
+  })
+  if (error) throw error
+  return data as string
+}
+
+/** 3-way match rows for a PO from v_po_match (money-roles only). */
+export async function fetchMatch(poId: string): Promise<MatchRow[]> {
+  const { data, error } = await supabase
+    .from('v_po_match')
+    .select(
+      'po_line_id, po_id, material_id, qty_ordered, rate_ordered, qty_received, qty_invoiced, rate_invoiced, match_status',
+    )
+    .eq('po_id', poId)
+
+  if (error) throw error
+
+  const rows = (data ?? []).map((r) => r as Record<string, unknown>)
+  const matIds = [...new Set(rows.map((r) => r.material_id as string))]
+  const names = new Map<string, { name: string; unit: string }>()
+  if (matIds.length > 0) {
+    const { data: mats } = await supabase
+      .from('materials')
+      .select('id, name, unit')
+      .in('id', matIds)
+    for (const m of mats ?? [])
+      names.set(m.id as string, { name: m.name as string, unit: m.unit as string })
+  }
+
+  return rows.map((r) => ({
+    po_line_id: r.po_line_id as string,
+    po_id: r.po_id as string,
+    material_id: r.material_id as string,
+    qty_ordered: Number(r.qty_ordered),
+    rate_ordered: r.rate_ordered === null ? null : Number(r.rate_ordered),
+    qty_received: Number(r.qty_received),
+    qty_invoiced: Number(r.qty_invoiced),
+    rate_invoiced: r.rate_invoiced === null ? null : Number(r.rate_invoiced),
+    match_status: r.match_status as MatchRow['match_status'],
+    material_name: names.get(r.material_id as string)?.name,
+    material_unit: names.get(r.material_id as string)?.unit,
+  }))
+}
+
+export async function fetchInvoices(poId: string): Promise<PoInvoiceRow[]> {
+  const { data, error } = await supabase
+    .from('po_invoices')
+    .select('id, invoice_no, invoice_date, gst_amount, approved')
+    .eq('po_id', poId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    invoice_no: (r.invoice_no as string | null) ?? null,
+    invoice_date: r.invoice_date as string,
+    gst_amount: Number(r.gst_amount),
+    approved: Boolean(r.approved),
+  }))
+}
+
+/** Records a vendor invoice + its lines. Returns the invoice id. */
+export async function createInvoice(
+  poId: string,
+  header: { invoice_no: string; invoice_date: string; gst_amount: number },
+  lines: InvoiceLineInput[],
+): Promise<string> {
+  const { data: inv, error } = await supabase
+    .from('po_invoices')
+    .insert({
+      po_id: poId,
+      invoice_no: header.invoice_no || null,
+      invoice_date: header.invoice_date,
+      gst_amount: header.gst_amount,
+    })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  const invoiceId = inv.id as string
+
+  const payload = lines
+    .filter((l) => l.qty_invoiced > 0)
+    .map((l) => ({
+      invoice_id: invoiceId,
+      po_line_id: l.po_line_id,
+      qty_invoiced: l.qty_invoiced,
+      rate_invoiced: l.rate_invoiced,
+    }))
+
+  const { error: lineErr } = await supabase.from('invoice_lines').insert(payload)
+  if (lineErr) throw lineErr
+  return invoiceId
+}
+
+/** Posts a matched invoice to Open Book via fn_post_invoice (founder/accounts). */
+export async function postInvoice(invoiceId: string): Promise<void> {
+  const { error } = await supabase.rpc('fn_post_invoice', {
+    p_invoice: invoiceId,
+  })
   if (error) throw error
 }

@@ -366,6 +366,35 @@ export const MATCH_STATUS_LABEL: Record<MatchStatus, string> = {
   both: 'Qty + rate variance',
 }
 
+/** Row of public.v_po_match (gated to money-roles). */
+export interface MatchRow {
+  po_line_id: string
+  po_id: string
+  material_id: string
+  qty_ordered: number
+  rate_ordered: number | null
+  qty_received: number
+  qty_invoiced: number
+  rate_invoiced: number | null
+  match_status: MatchStatus
+  material_name?: string
+  material_unit?: string
+}
+
+export interface InvoiceLineInput {
+  po_line_id: string
+  qty_invoiced: number
+  rate_invoiced: number
+}
+
+export interface PoInvoiceRow {
+  id: string
+  invoice_no: string | null
+  invoice_date: string
+  gst_amount: number
+  approved: boolean
+}
+
 // ---------- Safety ----------
 
 /** Same write set as tasks — founder/pm/supervisor. accounts is read-only. */

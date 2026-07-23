@@ -59,8 +59,21 @@
              keeping the money-hiding rule intact.
         `poPdf.ts` gained a `variant: 'full' | 'delivery'` switch. Archive failure never blocks the
         approval. Migration 014 also adds `'purchase_orders'` to the `doc_folder` enum.
-      - **NEXT (Part 2):** GRN-receipt screen and the 3-way-match / invoice screen with
-        `fn_post_invoice`. No further migration needed — the schema is complete.
+      - **A3 PART 2 built (migration 015):**
+        - **GRN receipt** (`ReceiveForm.tsx`) — on an approved/receiving PO, founder/pm/supervisor
+          record what arrived per line (ordered vs already-received vs outstanding). Saves via
+          `fn_receive_goods` (migration 015, security-definer so supervisors can receive AND flip the
+          PO status, which po_update otherwise reserves to founder/pm). Inserting grn_lines fires the
+          012 trigger → `material_inward`, so **stock updates automatically**. Over-receipt warns but
+          doesn't block. Status advances receiving → received when every line is fully received.
+        - **Invoice + 3-way match** (`InvoiceMatch.tsx`, money-roles) — enter the vendor invoice
+          (qty + rate per line, GST), then `v_po_match` shows ordered/received/invoiced with a
+          per-line status pill (Matched / Qty variance / Rate variance / both, tolerances 0.5 qty /
+          2% rate). "Post to Open Book" (founder/accounts) calls `fn_post_invoice` → writes one
+          expense row → ledger + budgets. Variance warns before posting but posting overrides
+          (the approved flag).
+        - Both surfaces live inside the expanded PO card on the Orders screen, shown by status + role.
+        - **A3 is now complete end to end.** Migration 015 appended to APPLY_pending.sql.
 - [x] **A2 Safety (Module 04)** — **migration 011 written, NOT yet applied** (append is in
       `APPLY_pending.sql`). Tables: `safety_checklists` (one per project per day),
       `safety_checklist_items`, `incidents`. RLS mirrors tasks (members read; founder/pm/supervisor

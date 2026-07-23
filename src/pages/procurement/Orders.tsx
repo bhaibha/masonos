@@ -33,7 +33,9 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
+import InvoiceMatch from './InvoiceMatch'
 import RaiseRequest from './RaiseRequest'
+import ReceiveForm from './ReceiveForm'
 
 /**
  * Generates the approved PO on the letterhead and files it in the Document
@@ -286,6 +288,26 @@ function OrderCard({
                   </li>
                 ))}
               </ul>
+
+              {/* Receiving — founder/pm/supervisor, once approved and not yet
+                  fully received. Feeds stock via the GRN trigger. */}
+              {canRaisePR(role) &&
+                (po.status === 'approved' || po.status === 'receiving') && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <p className="mb-3 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                      Receive delivery
+                    </p>
+                    <ReceiveForm poId={po.id} lines={lines} onDone={onChanged} />
+                  </div>
+                )}
+
+              {/* Invoice + 3-way match — money-roles only (rates). */}
+              {withRates &&
+                (po.status === 'receiving' || po.status === 'received') && (
+                  <div className="mt-4 border-t border-border pt-4">
+                    <InvoiceMatch poId={po.id} />
+                  </div>
+                )}
 
               {/* PO document — only once approved and only for money-roles
                   (needs rates + vendor GSTIN). */}
