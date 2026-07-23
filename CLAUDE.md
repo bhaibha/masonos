@@ -11,6 +11,31 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 - User runs the app + migrations and pastes runtime errors verbatim. Fix errors before adding features.
 - Every schema change = a new numbered migration in `supabase/migrations/`. Never edit schema ad-hoc.
 
+## MIGRATION DISCIPLINE (mandatory — an unapplied migration cost 3 debug rounds once)
+1. **At the START of every session**, list the files in `supabase/migrations/` and ASK the user to
+   confirm the highest-numbered migration has been applied to the database. Wait for confirmation.
+2. **Never build on an unapplied migration.** If new code reads a view/function/column from an
+   unconfirmed migration, stop and confirm first. Symptom to watch for: "0 items", blank totals, or
+   empty lists usually mean a view/function from a migration that never ran.
+3. When a module needs SQL, deliver it BOTH ways: a numbered file in `supabase/migrations/0XX_*.sql`
+   AND the full runnable block pasted in chat (users run it in the Supabase SQL editor).
+4. Keep `supabase/APPLY_pending.sql` as the concatenation of all not-yet-confirmed migrations, in
+   order. Every migration must be idempotent/re-runnable (enums `add value if not exists`, tables
+   `if not exists`, functions/views `create or replace` or `drop … if exists` first, policies
+   `drop policy if exists` before `create policy`). Cast enum assignments explicitly (`::po_status`).
+5. **End every session that added SQL** with an explicit line: **"Run migration 0XX before testing."**
+   (list every new migration number).
+
+### Applied-migration ledger (update at session end)
+- **001–015 ALL APPLIED** (confirmed live, full APPLY_pending re-run on 2026-07-23). Next migration = 016.
+- Re-run lessons baked into APPLY_pending.sql: drop dependent views with CASCADE (v_project_spend →
+  v_portfolio_summary); use drop-then-create (not create-or-replace) for any view whose columns change
+  across migrations (v_po_match / v_po_totals gained/lost columns between 012 and 013); cast enum
+  assignments explicitly (`::po_status`).
+- Views/functions that break silently if their migration is skipped (watch for "0 items"/blank totals):
+  007 (`v_project_spend.remaining/pct_used`), 009 (`v_portfolio_summary`),
+  013 (`v_po_totals`/`v_po_value`/`v_po_match`), 015 (`fn_receive_goods`).
+
 ## Stack (fixed — never substitute)
 - Frontend: Vite + React 18 + TypeScript + Tailwind v4 + shadcn/ui (Base UI / Nova preset) + Zustand + React Router
 - Motion: framer-motion. Toasts: sonner. Icons: lucide-react.

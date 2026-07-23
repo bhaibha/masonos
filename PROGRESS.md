@@ -1,7 +1,7 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
-## Done (migrations 001–006 applied)
+## Done (migrations 001–015 ALL APPLIED — confirmed 2026-07-23)
 - [x] Day 1: Foundation — auth, roles/RLS, app shell, Dashboard
 - [x] Day 2: Open Book — expenses, budgets, receipts, budget-vs-actual
 - [x] Day 3: Tasks + rollover + Daily Site Log; Materials (inward/issue/stock)

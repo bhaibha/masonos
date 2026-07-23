@@ -137,7 +137,11 @@ create index if not exists invoice_lines_inv_idx on public.invoice_lines (invoic
 -- ---------- 3-WAY MATCH (per PO line) ----------
 -- ordered vs received vs invoiced, with variance flags. Tolerances: qty within
 -- 0.5 unit, rate within 2%. security_invoker so RLS still applies.
-create or replace view public.v_po_match with (security_invoker = true) as
+-- Drop-first (not create-or-replace): migration 013 recreates this view with an
+-- extra project_id column, so on a re-run the columns differ and replace-in-place
+-- would fail with "cannot drop columns from view".
+drop view if exists public.v_po_match cascade;
+create view public.v_po_match with (security_invoker = true) as
 with recv as (
   select po_line_id, sum(qty_received) as qty_received
   from public.grn_lines group by po_line_id
@@ -176,7 +180,9 @@ left join recv r on r.po_line_id = pl.id
 left join inv i on i.po_line_id = pl.id;
 
 -- ---------- PO TOTALS ----------
-create or replace view public.v_po_totals with (security_invoker = true) as
+-- Drop-first: 013 redefines this view's columns too.
+drop view if exists public.v_po_totals cascade;
+create view public.v_po_totals with (security_invoker = true) as
 select po.id as po_id, po.project_id,
        count(pl.id) as line_count,
        coalesce(sum(pl.qty_ordered), 0) as total_qty,

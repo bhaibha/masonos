@@ -12,7 +12,9 @@
 -- Nothing depends on this view.
 -- ============================================================
 
-drop view if exists public.v_project_spend;
+-- CASCADE because v_portfolio_summary (migration 009) depends on this view.
+-- 009 runs after this in the batch, so it recreates the dependent immediately.
+drop view if exists public.v_project_spend cascade;
 
 create view public.v_project_spend with (security_invoker = true) as
 select
