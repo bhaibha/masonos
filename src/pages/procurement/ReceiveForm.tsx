@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { fetchReceivedByLine, receiveGoods } from '@/lib/queries/procurement'
 import type { PoLine } from '@/lib/types'
 import { todayIst } from '@/lib/useSelectedDate'
@@ -72,9 +73,7 @@ export default function ReceiveForm({
       toast.success('Delivery recorded — stock updated')
       await onDone()
     } catch (err) {
-      toast.error('Could not record the delivery', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+      toast.error('Could not record the delivery', { description: errText(err) })
       setBusy(false)
     }
   }
