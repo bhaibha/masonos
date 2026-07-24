@@ -20,6 +20,7 @@ import {
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
 import { fetchSafetySummary } from '@/lib/queries/safety'
+import { fetchProjectContract } from '@/lib/queries/variations'
 import {
   fetchProject,
   fetchProjectCommercials,
@@ -34,6 +35,7 @@ import {
   type DocFolder,
   type Project,
   PROJECT_STATUS_LABEL,
+  type ProjectContract,
   type ProjectSpend,
   type ProjectSummary,
   type SafetySummary,
@@ -51,6 +53,7 @@ export default function ProjectDetail() {
 
   const [project, setProject] = useState<Project | null | 'missing'>(null)
   const [commercials, setCommercials] = useState<ProjectCommercials | null>(null)
+  const [contract, setContract] = useState<ProjectContract | null>(null)
   const [spend, setSpend] = useState<ProjectSpend | null>(null)
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
   const [safety, setSafety] = useState<SafetySummary | null>(null)
@@ -83,6 +86,11 @@ export default function ProjectDetail() {
       fetchProjectCommercials(id)
         .then((c) => {
           if (!cancelled) setCommercials(c)
+        })
+        .catch(() => {})
+      fetchProjectContract(id)
+        .then((c) => {
+          if (!cancelled) setContract(c)
         })
         .catch(() => {})
     }
@@ -142,6 +150,7 @@ export default function ProjectDetail() {
           <ProjectHeading
             project={project}
             commercials={commercials}
+            contract={contract}
             showMoney={showMoney}
           />
         </FadeUp>
@@ -203,17 +212,21 @@ function BackBar() {
 function ProjectHeading({
   project,
   commercials,
+  contract,
   showMoney,
 }: {
   project: Project
   commercials: ProjectCommercials | null
+  contract: ProjectContract | null
   showMoney: boolean
 }) {
   // Commercials come from the role-gated view (migration 010), never off the
   // project row. Supervisors never fetch them, so this block stays empty.
-  const contract = commercials?.contract_value ?? null
+  const contractVal = commercials?.contract_value ?? null
   const feePct = commercials?.management_fee_pct ?? null
   const feeAmount = commercials?.management_fee_amount ?? null
+  // Revised value only when approved variations exist (migration 016).
+  const hasVariations = contract !== null && contract.variations_value !== 0
 
   return (
     <div className="mt-2">
@@ -235,16 +248,27 @@ function ProjectHeading({
         </p>
       )}
 
-      {showMoney && (contract !== null || feePct !== null) && (
+      {showMoney && (contractVal !== null || feePct !== null) && (
         <div className="mt-5 flex gap-8 border-t border-border pt-4">
-          {contract !== null && (
+          {contractVal !== null && (
             <div>
               <p className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
-                Contract
+                {hasVariations ? 'Revised contract' : 'Contract'}
               </p>
               <p className="figure mt-1 text-[19px] font-semibold">
-                {formatInr(contract)}
+                {formatInr(
+                  hasVariations && contract
+                    ? contract.revised_contract_value
+                    : contractVal,
+                )}
               </p>
+              {hasVariations && contract && (
+                <p className="mt-0.5 text-[13px] text-muted-foreground tabular-nums">
+                  {formatInr(contract.contract_value)}{' '}
+                  {contract.variations_value >= 0 ? '+' : '−'}{' '}
+                  {formatInr(Math.abs(contract.variations_value))} VOs
+                </p>
+              )}
             </div>
           )}
           {feePct !== null && (

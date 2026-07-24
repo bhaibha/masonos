@@ -13,6 +13,7 @@ import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
 import Ledger from '@/pages/money/Ledger'
 import MoneyLayout from '@/pages/money/MoneyLayout'
+import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
 import DocsLayout from '@/pages/docs/DocsLayout'
 import FolderView from '@/pages/docs/FolderView'
@@ -67,6 +68,7 @@ export default function App() {
                     MONEY_ROLES, so the parent guard already covers it. */}
                 <Route path="vendors" element={<Vendors />} />
                 <Route path="orders" element={<Orders />} />
+                <Route path="variations" element={<Variations />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

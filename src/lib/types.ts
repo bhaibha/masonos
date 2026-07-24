@@ -395,6 +395,54 @@ export interface PoInvoiceRow {
   approved: boolean
 }
 
+// ---------- Variation Orders ----------
+
+export type VoStatus = 'submitted' | 'approved' | 'rejected'
+
+export const VO_STATUS_LABEL: Record<VoStatus, string> = {
+  submitted: 'Submitted',
+  approved: 'Approved',
+  rejected: 'Rejected',
+}
+
+/** vo_insert — PM or founder raise. */
+export function canRaiseVO(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** vo_update approval — founder only. */
+export function canApproveVO(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
+export interface VariationOrder {
+  id: string
+  vo_number: string
+  project_id: string
+  title: string
+  description: string | null
+  cost_impact: number
+  status: VoStatus
+  raised_by: string
+  approved_by: string | null
+  created_at: string
+}
+
+export interface NewVariationOrder {
+  project_id: string
+  title: string
+  description: string
+  cost_impact: number
+}
+
+/** Row of v_project_contract (owner-run, money-roles). */
+export interface ProjectContract {
+  contract_value: number
+  variations_value: number
+  pending_value: number
+  revised_contract_value: number
+}
+
 // ---------- Safety ----------
 
 /** Same write set as tasks — founder/pm/supervisor. accounts is read-only. */

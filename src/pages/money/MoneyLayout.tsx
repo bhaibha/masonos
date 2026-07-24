@@ -27,6 +27,7 @@ export default function MoneyLayout() {
       ? [{ to: '/money/budget/edit', label: 'Set budgets' }]
       : []),
     { to: '/money/orders', label: 'Orders' },
+    { to: '/money/variations', label: 'Variations' },
     { to: '/money/vendors', label: 'Vendors' },
   ]
 

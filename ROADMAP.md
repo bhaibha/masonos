@@ -42,7 +42,9 @@ Order within group:
        raise/approve, PO PDF (full + delivery copy) auto-filed to Docs, GRN receipt (feeds stock),
        vendor invoice + 3-way match with variance flags, post-to-Open-Book. Rate privacy throughout.
 - [ ] A4. M15 Invoice Generator (client-side PDF: progress bill, management-fee invoice, vendor payment voucher)
-- [ ] A5. M26 Variation Orders (VO register: raise, cost impact, status, links to project; PM raises, founder approves)
+- [x] A5. M26 Variation Orders — register (raise/approve/reject, +/- cost impact, status), revised
+       contract value on Project Detail, VO PDF on letterhead + file to Docs. Migration 016. PM raises,
+       founder approves. Money-gated (supervisors excluded).
 - [ ] A6. M56 Site Instruction (SI) — issue instruction to contractor/labour, status, PDF
 - [ ] A7. M57 RFI Management — raise to design consultant, categories, response tracking, status
 - [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)

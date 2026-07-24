@@ -11,6 +11,22 @@
 - [x] Project Detail drill-down navigation
 
 ## GROUP A
+- [x] **A5 Variation Orders (Module 26)** — **migration 016 written, NOT yet applied**
+      (appended to `APPLY_pending.sql`). `variation_orders` table, money-gated RLS (founder/pm/accounts
+      read; pm/founder raise; founder approve/reject; supervisors see NOTHING — whole table is money,
+      so row-level RLS suffices, no column tricks). Audit trigger. `+/- cost_impact` (add or omit).
+      - **`v_project_contract`** (owner-run, money-roles) computes original + approved variations =
+        **revised contract value** — server-side, never in the browser.
+      - **Variations screen** (`src/pages/money/Variations.tsx`) under Money tab: contract summary
+        (original / approved VOs / revised / pending), raise form (title, description, +Add/−Omit
+        toggle + amount), approve/reject (founder), per-VO status pill.
+      - **VO PDF** (`src/lib/voPdf.ts`) on letterhead — VO number, description, cost impact,
+        before/after contract value, client-acceptance + signatory lines. Download or File to Docs
+        (Contracts folder, confidential).
+      - **Project Detail header** now shows "Revised contract" with the original ± VOs breakdown when
+        approved variations exist; plain "Contract" otherwise.
+      - **Run migration 016 before testing.**
+
 - [~] **A3 Procurement (Module 22) — PART 1 of 2.** **Migration 012 written, NOT applied**
       (appended to `APPLY_pending.sql`). Full backend now exists:
       - `purchase_orders` (carries the PR→PO lifecycle: starts 'requested', becomes 'approved'
