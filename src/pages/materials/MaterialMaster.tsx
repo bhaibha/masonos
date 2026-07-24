@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { FieldRow, Select } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { fetchCategories } from '@/lib/queries/expenses'
 import { createMaterial, fetchMaterials } from '@/lib/queries/materials'
 import {
@@ -82,11 +83,13 @@ export default function MaterialMaster() {
       setNotice('Material added.')
       await reload()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not add the material.'
-      // unique (name, unit) in 003_materials_docs.sql
+      // Supabase errors aren't Error instances — dig out the real message/code.
+      const msg = errText(err) ?? 'Could not add the material.'
+      const code = (err as { code?: string })?.code
+      // unique (name, unit) in 003_materials_docs.sql → 23505
       setError(
-        msg.includes('duplicate key')
-          ? 'That material and unit combination already exists.'
+        code === '23505' || msg.toLowerCase().includes('duplicate')
+          ? `“${name.trim()}” in ${unit} is already in the material list.`
           : msg,
       )
     }
