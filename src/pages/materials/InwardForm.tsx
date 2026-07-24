@@ -1,16 +1,15 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FieldRow, Select, Textarea } from '@/components/Field'
+import { EMPTY_VENDOR, VendorField, type VendorValue } from '@/components/VendorField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createInward, fetchMaterials } from '@/lib/queries/materials'
-import { fetchVendors } from '@/lib/queries/vendors'
 import { compressImage, uploadReceipt } from '@/lib/storage'
 import {
   canLogMaterials,
   canSeeMaterialRates,
   type Material,
-  type Vendor,
 } from '@/lib/types'
 import { todayIst } from '@/lib/useSelectedDate'
 import { useAuth } from '@/store/auth'
@@ -23,12 +22,11 @@ export default function InwardForm() {
   const navigate = useNavigate()
 
   const [materials, setMaterials] = useState<Material[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
 
   const [materialId, setMaterialId] = useState('')
   const [inwardDate, setInwardDate] = useState(todayIst())
   const [qty, setQty] = useState('')
-  const [vendorId, setVendorId] = useState('')
+  const [vendor, setVendor] = useState<VendorValue>(EMPTY_VENDOR)
   const [challanNo, setChallanNo] = useState('')
   const [rate, setRate] = useState('')
   const [remarks, setRemarks] = useState('')
@@ -44,11 +42,7 @@ export default function InwardForm() {
 
   useEffect(() => {
     fetchMaterials().then(setMaterials).catch(() => setMaterials([]))
-    // vendors_read excludes supervisors, so this comes back empty for them.
-    if (showRates) {
-      fetchVendors().then(setVendors).catch(() => setVendors([]))
-    }
-  }, [showRates])
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -131,7 +125,8 @@ export default function InwardForm() {
         material_id: materialId,
         inward_date: inwardDate,
         qty: qtyNum,
-        vendor_id: vendorId || null,
+        vendor_id: vendor.vendorId,
+        vendor_name: vendor.vendorName,
         challan_no: challanNo,
         rate: rateNum,
         challan_photo: photoPath,
@@ -197,20 +192,9 @@ export default function InwardForm() {
           <FieldRow
             label="Vendor"
             htmlFor="vendor"
-            hint={vendors.length === 0 ? 'No vendors added yet.' : undefined}
+            hint="Optional. Type to search or enter a new name."
           >
-            <Select
-              id="vendor"
-              value={vendorId}
-              onChange={(e) => setVendorId(e.target.value)}
-            >
-              <option value="">None</option>
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </Select>
+            <VendorField id="vendor" value={vendor} onChange={setVendor} />
           </FieldRow>
 
           <FieldRow label="Rate per unit (₹)" htmlFor="rate">

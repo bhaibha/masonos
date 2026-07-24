@@ -80,6 +80,7 @@ export async function createInward(input: NewInward): Promise<void> {
     inward_date: input.inward_date,
     qty: input.qty,
     vendor_id: input.vendor_id,
+    vendor_name: input.vendor_name || null,
     challan_no: input.challan_no || null,
     rate: input.rate,
     challan_photo: input.challan_photo,

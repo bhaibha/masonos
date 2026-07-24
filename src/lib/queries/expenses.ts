@@ -28,7 +28,7 @@ export async function fetchExpenses(
   let q = supabase
     .from('expenses')
     .select(
-      'id, expense_date, amount, gst_amount, source, invoice_no, description, receipt_path, category_id, vendor_id, expense_categories(name), vendors(name)',
+      'id, expense_date, amount, gst_amount, source, invoice_no, description, receipt_path, category_id, vendor_id, vendor_name, expense_categories(name), vendors(name)',
     )
     .eq('project_id', projectId)
     .order('expense_date', { ascending: false })
@@ -46,12 +46,14 @@ export async function fetchExpenses(
   type Joined = {
     expense_categories: { name: string } | { name: string }[] | null
     vendors: { name: string } | { name: string }[] | null
+    vendor_name: string | null
   }
   const one = (v: Joined['vendors']) =>
     (Array.isArray(v) ? v[0]?.name : v?.name) ?? null
 
   return (data ?? []).map((r) => {
     const row = r as unknown as ExpenseRow & Joined
+    const registeredName = one(row.vendors)
     return {
       id: row.id,
       expense_date: row.expense_date,
@@ -64,7 +66,9 @@ export async function fetchExpenses(
       category_id: row.category_id,
       vendor_id: row.vendor_id,
       category_name: one(row.expense_categories),
-      vendor_name: one(row.vendors),
+      // Registered vendor name if linked, else the free-text name.
+      vendor_display: row.vendor_id ? registeredName : (row.vendor_name ?? null),
+      vendor_registered: row.vendor_id !== null,
     }
   })
 }
@@ -75,6 +79,7 @@ export async function createExpense(input: NewExpense): Promise<void> {
     expense_date: input.expense_date,
     category_id: input.category_id,
     vendor_id: input.vendor_id,
+    vendor_name: input.vendor_name || null,
     description: input.description || null,
     amount: input.amount,
     gst_amount: input.gst_amount,

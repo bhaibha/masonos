@@ -17,6 +17,35 @@ export async function fetchVendors(includeInactive = false): Promise<Vendor[]> {
   return (data ?? []) as Vendor[]
 }
 
+export interface UnregisteredVendor {
+  vendor_name: string
+  uses: number
+}
+
+/** Distinct free-text vendor names not yet registered (v_unregistered_vendors). */
+export async function fetchUnregisteredVendors(): Promise<UnregisteredVendor[]> {
+  const { data, error } = await supabase
+    .from('v_unregistered_vendors')
+    .select('vendor_name, uses')
+  if (error) return []
+  return (data ?? []).map((r) => ({
+    vendor_name: r.vendor_name as string,
+    uses: Number(r.uses),
+  }))
+}
+
+/**
+ * Registers a free-text vendor name and back-links every record that used it
+ * (fn_register_vendor, migration 017). Returns the vendor id.
+ */
+export async function registerFreeTextVendor(name: string): Promise<string> {
+  const { data, error } = await supabase.rpc('fn_register_vendor', {
+    p_name: name,
+  })
+  if (error) throw error
+  return data as string
+}
+
 export async function fetchVendor(id: string): Promise<Vendor | null> {
   const { data, error } = await supabase
     .from('vendors')

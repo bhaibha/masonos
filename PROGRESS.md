@@ -1,7 +1,7 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
-## Done (migrations 001–015 ALL APPLIED — confirmed 2026-07-23)
+## Done (migrations 001–016 ALL APPLIED — confirmed 2026-07-23)
 - [x] Day 1: Foundation — auth, roles/RLS, app shell, Dashboard
 - [x] Day 2: Open Book — expenses, budgets, receipts, budget-vs-actual
 - [x] Day 3: Tasks + rollover + Daily Site Log; Materials (inward/issue/stock)
@@ -11,6 +11,24 @@
 - [x] Project Detail drill-down navigation
 
 ## GROUP A
+- [x] **Flexible vendor entry everywhere** — **migration 017 written, NOT yet applied**
+      (appended to `APPLY_pending.sql`). Every vendor reference now keeps an optional `vendor_id`
+      link PLUS a free-text `vendor_name`:
+      - Columns added to `expenses`, `purchase_orders`, `material_inward` (po_invoices derives from
+        the PO; `fn_post_invoice` updated to copy the PO's `vendor_name` onto the posted expense).
+      - **`VendorField`** (`src/components/VendorField.tsx`) — reusable typeahead. Type to search
+        registered vendors; pick one → id + registered name; type an unknown name → free text, id
+        null; one-tap **"Save to vendor list"** registers it and back-links past records
+        (`fn_register_vendor`). Replaces the old button-based `VendorPicker` (deleted). Wired into
+        the Expense form, PR raise, PO approve, and Materials inward.
+      - **Unregistered indicator** — a small amber dot next to free-text vendors in the ledger and
+        on PO cards.
+      - **Vendors screen → "Unregistered vendors"** section: distinct free-text names in use
+        (`v_unregistered_vendors`, money-gated), each with **"Add to vendor list"** (registers +
+        back-links via the same fn). Design system throughout (toasts, skeleton, empty states).
+      - Spend-by-vendor display coalesces registered-name-else-free-text everywhere it shows.
+      - **Run migration 017 before testing.**
+
 - [x] **A5 Variation Orders (Module 26)** — **migration 016 written, NOT yet applied**
       (appended to `APPLY_pending.sql`). `variation_orders` table, money-gated RLS (founder/pm/accounts
       read; pm/founder raise; founder approve/reject; supervisors see NOTHING — whole table is money,

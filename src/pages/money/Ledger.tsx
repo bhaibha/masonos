@@ -231,7 +231,19 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {row.expense_date}
-            {row.vendor_name && ` · ${row.vendor_name}`}
+            {row.vendor_display && (
+              <>
+                {' · '}
+                {row.vendor_display}
+                {!row.vendor_registered && (
+                  <span
+                    className="ml-1 inline-block size-1.5 rounded-full bg-[var(--warning)] align-middle"
+                    title="Unregistered vendor"
+                    aria-label="Unregistered vendor"
+                  />
+                )}
+              </>
+            )}
             {` · ${SOURCE_LABEL[row.source] ?? row.source}`}
           </p>
         </div>

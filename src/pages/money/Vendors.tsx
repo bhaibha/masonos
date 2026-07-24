@@ -7,7 +7,14 @@ import { ListSkeleton } from '@/components/Skeleton'
 import { VendorForm } from '@/components/VendorForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { fetchVendors, setVendorActive } from '@/lib/queries/vendors'
+import { errText } from '@/lib/errText'
+import {
+  fetchUnregisteredVendors,
+  fetchVendors,
+  registerFreeTextVendor,
+  setVendorActive,
+  type UnregisteredVendor,
+} from '@/lib/queries/vendors'
 import { canManageVendors, type Vendor } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -16,6 +23,7 @@ export default function Vendors() {
   const role = useAuth((s) => s.role)
 
   const [vendors, setVendors] = useState<Vendor[] | null>(null)
+  const [unregistered, setUnregistered] = useState<UnregisteredVendor[]>([])
   const [showInactive, setShowInactive] = useState(false)
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -24,14 +32,29 @@ export default function Vendors() {
 
   const reload = useCallback(async () => {
     try {
-      setVendors(await fetchVendors(showInactive))
+      const [list, unreg] = await Promise.all([
+        fetchVendors(showInactive),
+        fetchUnregisteredVendors(),
+      ])
+      setVendors(list)
+      setUnregistered(unreg)
     } catch (err) {
-      toast.error('Could not load vendors', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+      toast.error('Could not load vendors', { description: errText(err) })
       setVendors([])
     }
   }, [showInactive])
+
+  async function registerUnregistered(name: string) {
+    setBusyId(name)
+    try {
+      await registerFreeTextVendor(name)
+      toast.success(`${name} added to vendor list`)
+      await reload()
+    } catch (err) {
+      toast.error('Could not add the vendor', { description: errText(err) })
+    }
+    setBusyId(null)
+  }
 
   useEffect(() => {
     setVendors(null)
@@ -225,6 +248,49 @@ export default function Vendors() {
           Vendors are shared across all projects. Deactivating keeps history
           intact and only hides the vendor from pickers.
         </p>
+      )}
+
+      {unregistered.length > 0 && (
+        <div className="space-y-3 pt-2">
+          <div>
+            <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+              Unregistered vendors
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Names typed into expenses, orders or deliveries that aren't in the
+              list yet. Adding one registers it and links those past records.
+            </p>
+          </div>
+          <ul className="paper divide-y divide-border overflow-hidden">
+            {unregistered.map((u) => (
+              <li
+                key={u.vendor_name}
+                className="flex items-center justify-between gap-3 px-5 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium">
+                    {u.vendor_name}
+                    <span
+                      className="inline-block size-1.5 shrink-0 rounded-full bg-[var(--warning)]"
+                      aria-hidden="true"
+                    />
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    used on {u.uses} {u.uses === 1 ? 'record' : 'records'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busyId === u.vendor_name}
+                  onClick={() => void registerUnregistered(u.vendor_name)}
+                >
+                  {busyId === u.vendor_name ? 'Adding…' : 'Add to vendor list'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   )

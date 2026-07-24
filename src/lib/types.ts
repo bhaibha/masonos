@@ -332,7 +332,9 @@ export interface PurchaseOrder {
   raised_by: string
   approved_by: string | null
   created_at: string
-  vendor_name: string | null
+  /** display name: registered vendor if linked, else free-text */
+  vendor_display: string | null
+  vendor_registered: boolean
   line_count: number
   /** ordered value — null for supervisors (rates hidden) */
   ordered_value: number | null
@@ -346,6 +348,7 @@ export interface NewPoLine {
 export interface NewPurchaseOrder {
   project_id: string
   vendor_id: string | null
+  vendor_name: string
   need_by: string | null
   notes: string
   lines: NewPoLine[]
@@ -595,6 +598,7 @@ export interface NewInward {
   inward_date: string
   qty: number
   vendor_id: string | null
+  vendor_name: string
   challan_no: string
   rate: number | null
   challan_photo: string | null
@@ -674,7 +678,10 @@ export interface ExpenseRow {
   category_id: number
   vendor_id: string | null
   category_name: string | null
-  vendor_name: string | null
+  /** display name: registered vendor if linked, else the free-text name */
+  vendor_display: string | null
+  /** false = free-text vendor (vendor_id null but a name was typed) */
+  vendor_registered: boolean
 }
 
 export interface NewExpense {
@@ -682,6 +689,7 @@ export interface NewExpense {
   expense_date: string
   category_id: number
   vendor_id: string | null
+  vendor_name: string
   description: string
   amount: number
   gst_amount: number

@@ -1,17 +1,15 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { FieldRow, Select, Textarea } from '@/components/Field'
-import { VendorPicker } from '@/components/VendorPicker'
+import { EMPTY_VENDOR, VendorField, type VendorValue } from '@/components/VendorField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { createExpense, fetchCategories } from '@/lib/queries/expenses'
-import { fetchVendors } from '@/lib/queries/vendors'
 import { compressReceipt, uploadReceipt } from '@/lib/storage'
 import {
   EXPENSE_SOURCES,
   type ExpenseCategory,
   type ExpenseSource,
-  type Vendor,
 } from '@/lib/types'
 import type { MoneyContext } from './MoneyLayout'
 
@@ -30,11 +28,10 @@ export default function ExpenseForm() {
   const navigate = useNavigate()
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
 
   const [expenseDate, setExpenseDate] = useState(today())
   const [categoryId, setCategoryId] = useState('')
-  const [vendorId, setVendorId] = useState('')
+  const [vendor, setVendor] = useState<VendorValue>(EMPTY_VENDOR)
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
   const [gstAmount, setGstAmount] = useState('')
@@ -52,7 +49,6 @@ export default function ExpenseForm() {
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => setCategories([]))
-    fetchVendors().then(setVendors).catch(() => setVendors([]))
   }, [])
 
   useEffect(() => {
@@ -119,7 +115,8 @@ export default function ExpenseForm() {
         project_id: projectId,
         expense_date: expenseDate,
         category_id: Number(categoryId),
-        vendor_id: vendorId || null,
+        vendor_id: vendor.vendorId,
+        vendor_name: vendor.vendorName,
         description,
         amount: amountNum,
         gst_amount: gstNum,
@@ -168,18 +165,9 @@ export default function ExpenseForm() {
       <FieldRow
         label="Vendor"
         htmlFor="vendor"
-        hint="Optional. Search, or add a new vendor without leaving this form."
+        hint="Optional. Type to search, or enter a new name — save it to the list if you like."
       >
-        <VendorPicker
-          vendors={vendors}
-          value={vendorId}
-          onChange={setVendorId}
-          onVendorCreated={(v) =>
-            setVendors((list) =>
-              [...list, v].sort((a, b) => a.name.localeCompare(b.name)),
-            )
-          }
-        />
+        <VendorField id="vendor" value={vendor} onChange={setVendor} />
       </FieldRow>
 
       <div className="grid grid-cols-2 gap-3">

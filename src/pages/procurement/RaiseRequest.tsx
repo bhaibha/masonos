@@ -2,12 +2,12 @@ import { Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { FieldRow, Select, Textarea } from '@/components/Field'
+import { EMPTY_VENDOR, VendorField, type VendorValue } from '@/components/VendorField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { fetchMaterials } from '@/lib/queries/materials'
 import { createPurchaseOrder } from '@/lib/queries/procurement'
-import { fetchVendors } from '@/lib/queries/vendors'
-import { canSeeMoney, type Material, type Vendor } from '@/lib/types'
+import { canSeeMoney, type Material } from '@/lib/types'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
 
@@ -25,8 +25,7 @@ export default function RaiseRequest({ onDone }: { onDone: () => void }) {
   const showVendor = canSeeMoney(role) // supervisors can't resolve vendors
 
   const [materials, setMaterials] = useState<Material[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
-  const [vendorId, setVendorId] = useState('')
+  const [vendor, setVendor] = useState<VendorValue>(EMPTY_VENDOR)
   const [needBy, setNeedBy] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([
@@ -36,8 +35,7 @@ export default function RaiseRequest({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     fetchMaterials().then(setMaterials).catch(() => setMaterials([]))
-    if (showVendor) fetchVendors().then(setVendors).catch(() => setVendors([]))
-  }, [showVendor])
+  }, [])
 
   function patch(key: number, change: Partial<DraftLine>) {
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...change } : l)))
@@ -58,7 +56,8 @@ export default function RaiseRequest({ onDone }: { onDone: () => void }) {
     try {
       await createPurchaseOrder({
         project_id: projectId,
-        vendor_id: vendorId || null,
+        vendor_id: vendor.vendorId,
+        vendor_name: vendor.vendorName,
         need_by: needBy || null,
         notes,
         lines: clean,
@@ -140,20 +139,9 @@ export default function RaiseRequest({ onDone }: { onDone: () => void }) {
         <FieldRow
           label="Suggested vendor"
           htmlFor="pr_vendor"
-          hint={vendors.length === 0 ? 'No vendors yet — optional.' : 'Optional'}
+          hint="Optional. Type to search or enter a new name."
         >
-          <Select
-            id="pr_vendor"
-            value={vendorId}
-            onChange={(e) => setVendorId(e.target.value)}
-          >
-            <option value="">None</option>
-            {vendors.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name}
-              </option>
-            ))}
-          </Select>
+          <VendorField id="pr_vendor" value={vendor} onChange={setVendor} />
         </FieldRow>
       )}
 

@@ -22,7 +22,7 @@ export async function fetchPurchaseOrders(
   const { data, error } = await supabase
     .from('purchase_orders')
     .select(
-      'id, po_number, project_id, vendor_id, status, need_by, notes, raised_by, approved_by, created_at, vendors(name)',
+      'id, po_number, project_id, vendor_id, vendor_name, status, need_by, notes, raised_by, approved_by, created_at, vendors(name)',
     )
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
@@ -33,18 +33,23 @@ export async function fetchPurchaseOrders(
   const pos = (data ?? []).map((r) => {
     const row = r as Record<string, unknown>
     const v = row.vendors as { name: string } | { name: string }[] | null
+    const registered = (Array.isArray(v) ? v[0]?.name : v?.name) ?? null
+    const vendorId = (row.vendor_id as string | null) ?? null
     return {
       id: row.id as string,
       po_number: row.po_number as string,
       project_id: row.project_id as string,
-      vendor_id: (row.vendor_id as string | null) ?? null,
+      vendor_id: vendorId,
       status: row.status as PurchaseOrder['status'],
       need_by: (row.need_by as string | null) ?? null,
       notes: (row.notes as string | null) ?? null,
       raised_by: row.raised_by as string,
       approved_by: (row.approved_by as string | null) ?? null,
       created_at: row.created_at as string,
-      vendor_name: (Array.isArray(v) ? v[0]?.name : v?.name) ?? null,
+      vendor_display: vendorId
+        ? registered
+        : ((row.vendor_name as string | null) ?? null),
+      vendor_registered: vendorId !== null,
       line_count: 0,
       ordered_value: null as number | null,
     }
@@ -137,6 +142,7 @@ export async function createPurchaseOrder(
     .insert({
       project_id: input.project_id,
       vendor_id: input.vendor_id,
+      vendor_name: input.vendor_name || null,
       need_by: input.need_by,
       notes: input.notes || null,
     })
@@ -162,7 +168,7 @@ export async function createPurchaseOrder(
  */
 export async function approvePurchaseOrder(
   poId: string,
-  vendorId: string,
+  vendor: { vendorId: string | null; vendorName: string },
   rates: { lineId: string; rate: number }[],
 ): Promise<void> {
   for (const r of rates) {
@@ -176,7 +182,8 @@ export async function approvePurchaseOrder(
   const { error } = await supabase
     .from('purchase_orders')
     .update({
-      vendor_id: vendorId,
+      vendor_id: vendor.vendorId,
+      vendor_name: vendor.vendorName || null,
       status: 'approved',
       approved_by: (await supabase.auth.getUser()).data.user?.id ?? null,
       approved_at: new Date().toISOString(),

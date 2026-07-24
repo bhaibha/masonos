@@ -17,7 +17,8 @@ import {
   fetchPoLines,
   fetchPurchaseOrders,
 } from '@/lib/queries/procurement'
-import { fetchVendor, fetchVendors } from '@/lib/queries/vendors'
+import { fetchVendor } from '@/lib/queries/vendors'
+import { VendorField, type VendorValue } from '@/components/VendorField'
 import { uploadDocument } from '@/lib/storage'
 import { supabase } from '@/lib/supabase'
 import {
@@ -37,6 +38,11 @@ import InvoiceMatch from './InvoiceMatch'
 import RaiseRequest from './RaiseRequest'
 import ReceiveForm from './ReceiveForm'
 
+/** A name-only vendor for PDFs when the PO used a free-text vendor. */
+function synthVendor(name: string): Vendor {
+  return { id: '', name, phone: null, gstin: null, category: null, is_active: true }
+}
+
 /**
  * Generates the approved PO on the letterhead and files it in the Document
  * Vault's Purchase Orders folder, linked to the PO so the folder shows its live
@@ -48,15 +54,17 @@ async function archivePoDocument(poId: string): Promise<void> {
   const { data: poRow } = await supabase
     .from('purchase_orders')
     .select(
-      'id, po_number, project_id, vendor_id, status, need_by, notes, raised_by, approved_by, created_at',
+      'id, po_number, project_id, vendor_id, vendor_name, status, need_by, notes, raised_by, approved_by, created_at',
     )
     .eq('id', poId)
     .single()
   if (!poRow) return
 
+  const raw = poRow as Record<string, unknown>
   const po = {
-    ...(poRow as Record<string, unknown>),
-    vendor_name: null,
+    ...raw,
+    vendor_display: (raw.vendor_name as string | null) ?? null,
+    vendor_registered: raw.vendor_id !== null,
     line_count: 0,
     ordered_value: null,
   } as unknown as PurchaseOrder
@@ -78,15 +86,20 @@ async function archivePoDocument(poId: string): Promise<void> {
     fetchProject(po.project_id),
   ])
 
+  // Free-text vendor (no id): give the PDF a name-only vendor so the block
+  // isn't blank.
+  const pdfVendor =
+    vendor ?? (po.vendor_display ? synthVendor(po.vendor_display) : null)
+
   const pdfOpts = {
     po,
     lines,
-    vendor,
+    vendor: pdfVendor,
     projectName: project?.name ?? '',
     siteAddress: project?.site_address ?? null,
     gstPct: COMPANY.defaultGstPct,
   }
-  const vsuffix = vendor?.name ? ` · ${vendor.name}` : ''
+  const vsuffix = pdfVendor?.name ? ` · ${pdfVendor.name}` : ''
 
   // Two copies filed to the Purchase Orders folder:
   //  1. Full priced PO — confidential (has rates), for founder/pm/accounts.
@@ -238,8 +251,16 @@ function OrderCard({
             {po.po_number}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            {po.vendor_name ?? 'No vendor'} · {po.line_count}{' '}
-            {po.line_count === 1 ? 'item' : 'items'}
+            {po.vendor_display ?? 'No vendor'}
+            {po.vendor_display && !po.vendor_registered && (
+              <span
+                className="ml-1 inline-block size-1.5 rounded-full bg-[var(--warning)] align-middle"
+                title="Unregistered vendor"
+                aria-label="Unregistered vendor"
+              />
+            )}
+            {' · '}
+            {po.line_count} {po.line_count === 1 ? 'item' : 'items'}
             {po.need_by && ` · need by ${po.need_by}`}
           </p>
         </div>
@@ -267,7 +288,10 @@ function OrderCard({
           ) : canApprove ? (
             <ApproveForm
               poId={po.id}
-              initialVendorId={po.vendor_id}
+              initialVendor={{
+                vendorId: po.vendor_id,
+                vendorName: po.vendor_display ?? '',
+              }}
               lines={lines}
               onDone={onChanged}
             />
@@ -352,7 +376,7 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
       generatePoPdf({
         po,
         lines,
-        vendor,
+        vendor: vendor ?? (po.vendor_display ? synthVendor(po.vendor_display) : null),
         projectName: project?.name ?? '',
         siteAddress: project?.site_address ?? null,
         gstPct: Number(gst) || 0,
@@ -411,29 +435,24 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
 
 function ApproveForm({
   poId,
-  initialVendorId,
+  initialVendor,
   lines,
   onDone,
 }: {
   poId: string
-  initialVendorId: string | null
+  initialVendor: VendorValue
   lines: PoLine[]
   onDone: () => Promise<void>
 }) {
-  const [vendors, setVendors] = useState<Vendor[]>([])
-  const [vendorId, setVendorId] = useState(initialVendorId ?? '')
+  const [vendor, setVendor] = useState<VendorValue>(initialVendor)
   const [rates, setRates] = useState<Record<string, string>>(() =>
     Object.fromEntries(lines.map((l) => [l.id, l.rate?.toString() ?? ''])),
   )
   const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    fetchVendors().then(setVendors).catch(() => setVendors([]))
-  }, [])
-
   async function approve() {
-    if (!vendorId) {
-      toast.error('Choose the vendor this order goes to')
+    if (vendor.vendorName.trim() === '') {
+      toast.error('Enter the vendor this order goes to')
       return
     }
     const parsed: { lineId: string; rate: number }[] = []
@@ -448,7 +467,7 @@ function ApproveForm({
 
     setBusy(true)
     try {
-      await approvePurchaseOrder(poId, vendorId, parsed)
+      await approvePurchaseOrder(poId, vendor, parsed)
       toast.success('Purchase order approved')
       // Archive the PO PDF into the vault's Purchase Orders folder. A failure
       // here must not undo the approval, so it's caught separately.
@@ -472,18 +491,11 @@ function ApproveForm({
       </p>
 
       <FieldRow label="Vendor" htmlFor={`appr_vendor_${poId}`}>
-        <Select
+        <VendorField
           id={`appr_vendor_${poId}`}
-          value={vendorId}
-          onChange={(e) => setVendorId(e.target.value)}
-        >
-          <option value="">Select a vendor…</option>
-          {vendors.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </Select>
+          value={vendor}
+          onChange={setVendor}
+        />
       </FieldRow>
 
       {lines.map((l) => (

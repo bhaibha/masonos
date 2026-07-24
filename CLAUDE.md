@@ -27,8 +27,8 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
    (list every new migration number).
 
 ### Applied-migration ledger (update at session end)
-- **001–015 ALL APPLIED** (confirmed live, full APPLY_pending re-run on 2026-07-23).
-  **016 (variation orders) written, NOT yet applied** — next to run. Next migration = 017.
+- **001–016 ALL APPLIED** (confirmed live 2026-07-23; 016 verified via revised-contract-value working).
+  **017 (flexible vendor entry) written, NOT yet applied** — next to run. Next migration = 018.
 - Re-run lessons baked into APPLY_pending.sql: drop dependent views with CASCADE (v_project_spend →
   v_portfolio_summary); use drop-then-create (not create-or-replace) for any view whose columns change
   across migrations (v_po_match / v_po_totals gained/lost columns between 012 and 013); cast enum
