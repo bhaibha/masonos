@@ -1,6 +1,8 @@
 import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { NavLink, Outlet } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
+import { ListSkeleton } from '@/components/Skeleton'
 import { ProjectPicker } from '@/components/ProjectPicker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,6 +22,10 @@ export default function TasksLayout() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (error) toast.error('Could not load projects', { description: error })
+  }, [error])
 
   const tabs = [
     { to: '/tasks', label: 'Tasks', end: true },
@@ -102,18 +108,8 @@ export default function TasksLayout() {
       </div>
 
       <div className="mx-auto max-w-lg px-4 py-4">
-        {error && (
-          <p
-            role="alert"
-            className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          >
-            {error}
-          </p>
-        )}
 
-        {loading && projects.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-        )}
+        {loading && projects.length === 0 && <ListSkeleton rows={3} />}
 
         {!loading && !error && projects.length === 0 && (
           <p className="py-8 text-center text-sm text-muted-foreground">

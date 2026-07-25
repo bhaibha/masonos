@@ -1,9 +1,11 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { EMPTY_VENDOR, VendorField, type VendorValue } from '@/components/VendorField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { createInward, fetchMaterials } from '@/lib/queries/materials'
 import { compressImage, uploadReceipt } from '@/lib/storage'
 import {
@@ -38,7 +40,6 @@ export default function InwardForm() {
 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchMaterials().then(setMaterials).catch(() => setMaterials([]))
@@ -53,7 +54,6 @@ export default function InwardForm() {
   const unit = materials.find((m) => m.id === materialId)?.unit ?? ''
 
   async function onPickPhoto(file: File | null) {
-    setError(null)
     setPhotoKb(null)
     if (preview) URL.revokeObjectURL(preview)
 
@@ -69,7 +69,7 @@ export default function InwardForm() {
       setPreview(URL.createObjectURL(compressed))
       setPhotoKb(Math.round(compressed.size / 1024))
     } catch {
-      setError('Could not process that image. Try another photo.')
+      toast.error('Could not process that image. Try another photo.')
       setPhoto(null)
       setPreview(null)
     }
@@ -85,20 +85,19 @@ export default function InwardForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
 
     if (!projectId) {
-      setError('No project selected.')
+      toast.error('No project selected.')
       return
     }
     if (!materialId) {
-      setError('Pick a material.')
+      toast.error('Pick a material.')
       return
     }
 
     const qtyNum = Number(qty)
     if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      setError('Quantity must be greater than zero.')
+      toast.error('Quantity must be greater than zero.')
       return
     }
 
@@ -106,7 +105,7 @@ export default function InwardForm() {
     if (showRates && rate.trim() !== '') {
       rateNum = Number(rate)
       if (!Number.isFinite(rateNum) || rateNum < 0) {
-        setError('Rate must be zero or more.')
+        toast.error('Rate must be zero or more.')
         return
       }
     }
@@ -135,7 +134,7 @@ export default function InwardForm() {
 
       navigate('/materials')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the delivery.')
+      toast.error('Could not save the delivery.', { description: errText(err) })
       setBusy(false)
       setStatus(null)
     }
@@ -278,15 +277,6 @@ export default function InwardForm() {
           />
         )}
       </FieldRow>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
         {busy ? (status ?? 'Saving…') : 'Log delivery'}

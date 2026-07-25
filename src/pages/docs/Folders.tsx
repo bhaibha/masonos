@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Link, useSearchParams } from 'react-router-dom'
 import { DocumentList } from '@/components/DocumentList'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { fetchDocuments, fetchFolderCounts } from '@/lib/queries/documents'
 import { DOC_FOLDERS, type DocumentRow } from '@/lib/types'
 import { useProjects } from '@/store/project'
@@ -15,7 +17,6 @@ export default function Folders() {
   const [term, setTerm] = useState(query)
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [results, setResults] = useState<DocumentRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setTerm(query)
@@ -42,7 +43,6 @@ export default function Folders() {
 
     let cancelled = false
     setResults(null)
-    setError(null)
 
     fetchDocuments(projectId, { search: query })
       .then((d) => {
@@ -50,7 +50,7 @@ export default function Folders() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Search failed.')
+          toast.error('Search failed.', { description: errText(err) })
         }
       })
 
@@ -79,15 +79,6 @@ export default function Folders() {
           Search
         </Button>
       </form>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       {query.trim() !== '' ? (
         <>

@@ -1,7 +1,9 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { fetchMySiteLog, upsertSiteLog } from '@/lib/queries/siteLogs'
 import {
   compressImage,
@@ -42,15 +44,11 @@ export default function SiteLog() {
 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectId || !user) return
     let cancelled = false
     setLoading(true)
-    setError(null)
-    setNotice(null)
 
     fetchMySiteLog(projectId, date, user.id)
       .then((log) => {
@@ -68,7 +66,7 @@ export default function SiteLog() {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not load the log.')
+        toast.error('Could not load the log.', { description: errText(err) })
         setLoading(false)
       })
 
@@ -85,7 +83,6 @@ export default function SiteLog() {
 
   async function addPhotos(files: FileList | null) {
     if (!files || files.length === 0) return
-    setError(null)
     try {
       const next: PendingPhoto[] = []
       for (const file of Array.from(files)) {
@@ -98,7 +95,7 @@ export default function SiteLog() {
       }
       setPending((p) => [...p, ...next])
     } catch {
-      setError('Could not process one of those images.')
+      toast.error('Could not process one of those images.')
     }
   }
 
@@ -120,12 +117,9 @@ export default function SiteLog() {
     e.preventDefault()
     if (!projectId || !user) return
 
-    setError(null)
-    setNotice(null)
-
     const counts = [mason, helper, other].map((v) => Number(v || 0))
     if (counts.some((n) => !Number.isInteger(n) || n < 0)) {
-      setError('Labour counts must be whole numbers, zero or more.')
+      toast.error('Labour counts must be whole numbers, zero or more.')
       return
     }
 
@@ -158,9 +152,9 @@ export default function SiteLog() {
       setPending([])
       setSavedPhotos(photos)
       setExistingId(existingId ?? 'saved')
-      setNotice('Site log saved.')
+      toast.success('Site log saved.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the log.')
+      toast.error('Could not save the log.', { description: errText(err) })
     }
     setBusy(false)
     setStatus(null)
@@ -312,18 +306,6 @@ export default function SiteLog() {
           </div>
         )}
       </FieldRow>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {notice && !error && (
-        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">{notice}</p>
-      )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
         {busy ? (status ?? 'Saving…') : existingId ? 'Update log' : 'Save log'}

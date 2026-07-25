@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { DocumentList } from '@/components/DocumentList'
+import { ListSkeleton } from '@/components/Skeleton'
+import { errText } from '@/lib/errText'
 import { fetchDocuments } from '@/lib/queries/documents'
 import {
   canUploadDocs,
@@ -20,7 +23,6 @@ export default function FolderView() {
   const role = useAuth((s) => s.role)
 
   const [docs, setDocs] = useState<DocumentRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const valid = folder && VALID.has(folder as DocFolder)
 
@@ -28,7 +30,6 @@ export default function FolderView() {
     if (!projectId || !valid) return
     let cancelled = false
     setDocs(null)
-    setError(null)
 
     fetchDocuments(projectId, { folder: folder as DocFolder })
       .then((d) => {
@@ -36,7 +37,7 @@ export default function FolderView() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load documents.')
+          toast.error('Could not load documents.', { description: errText(err) })
         }
       })
 
@@ -61,18 +62,7 @@ export default function FolderView() {
         </Link>
       </div>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-
-      {docs === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
+      {docs === null && <ListSkeleton rows={4} />}
 
       {docs?.length === 0 && (
         <div className="py-10 text-center">

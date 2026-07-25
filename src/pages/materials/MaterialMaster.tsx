@@ -1,5 +1,9 @@
+import { Boxes } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select } from '@/components/Field'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
@@ -21,8 +25,6 @@ export default function MaterialMaster() {
 
   const [materials, setMaterials] = useState<Material[] | null>(null)
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
 
   const [name, setName] = useState('')
@@ -35,7 +37,7 @@ export default function MaterialMaster() {
     try {
       setMaterials(await fetchMaterials())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load materials.')
+      toast.error('Could not load materials.', { description: errText(err) })
     }
   }, [])
 
@@ -46,15 +48,13 @@ export default function MaterialMaster() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
-    setNotice(null)
 
     if (name.trim() === '') {
-      setError('Give the material a name.')
+      toast.error('Give the material a name.')
       return
     }
     if (unit === '') {
-      setError('Pick a unit.')
+      toast.error('Pick a unit.')
       return
     }
 
@@ -62,7 +62,7 @@ export default function MaterialMaster() {
     if (lowStock.trim() !== '') {
       low = Number(lowStock)
       if (!Number.isFinite(low) || low < 0) {
-        setError('Low-stock level must be zero or more.')
+        toast.error('Low-stock level must be zero or more.')
         return
       }
     }
@@ -80,35 +80,26 @@ export default function MaterialMaster() {
       setCategoryId('')
       setLowStock('')
       setAdding(false)
-      setNotice('Material added.')
+      toast.success('Material added.')
       await reload()
     } catch (err) {
       // Supabase errors aren't Error instances — dig out the real message/code.
       const msg = errText(err) ?? 'Could not add the material.'
       const code = (err as { code?: string })?.code
       // unique (name, unit) in 003_materials_docs.sql → 23505
-      setError(
-        code === '23505' || msg.toLowerCase().includes('duplicate')
-          ? `“${name.trim()}” in ${unit} is already in the material list.`
-          : msg,
-      )
+      if (code === '23505' || msg.toLowerCase().includes('duplicate')) {
+        toast.error('Already in the material list', {
+          description: `“${name.trim()}” in ${unit} already exists.`,
+        })
+      } else {
+        toast.error('Could not add the material', { description: msg })
+      }
     }
     setBusy(false)
   }
 
   return (
     <div className="space-y-4 pb-6">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {notice && !error && (
-        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">{notice}</p>
-      )}
 
       {canEdit && !adding && (
         <Button
@@ -200,18 +191,20 @@ export default function MaterialMaster() {
         </form>
       )}
 
-      {materials === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
+      {materials === null && <ListSkeleton rows={5} />}
 
       {materials?.length === 0 && (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No materials in the master list yet.
-        </p>
+        <EmptyState
+          icon={Boxes}
+          title="No materials yet"
+          body="Build the list of materials you buy — cement, steel, tiles. Stock is then tracked per project."
+          actionLabel={canEdit ? 'Add your first material' : undefined}
+          onAction={canEdit ? () => setAdding(true) : undefined}
+        />
       )}
 
       {materials && materials.length > 0 && (
-        <ul className="divide-y divide-border rounded-xl border border-border">
+        <ul className="paper divide-y divide-border overflow-hidden">
           {materials.map((m) => (
             <li
               key={m.id}

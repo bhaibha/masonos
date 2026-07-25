@@ -1,8 +1,10 @@
 import { type FormEvent, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { FieldRow, Select } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { createTask } from '@/lib/queries/tasks'
 import { canWriteTasks, QTY_UNITS, TRADES } from '@/lib/types'
 import { useSelectedDate } from '@/lib/useSelectedDate'
@@ -22,7 +24,6 @@ export default function TaskForm() {
   const [qtyUnit, setQtyUnit] = useState('')
 
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   if (!canWriteTasks(role)) {
     return (
@@ -34,14 +35,13 @@ export default function TaskForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
 
     if (!projectId) {
-      setError('No project selected.')
+      toast.error('No project selected.')
       return
     }
     if (title.trim() === '') {
-      setError('Give the task a title.')
+      toast.error('Give the task a title.')
       return
     }
 
@@ -49,7 +49,7 @@ export default function TaskForm() {
     if (targetQty.trim() !== '') {
       qty = Number(targetQty)
       if (!Number.isFinite(qty) || qty < 0) {
-        setError('Target quantity must be zero or more.')
+        toast.error('Target quantity must be zero or more.')
         return
       }
     }
@@ -67,7 +67,7 @@ export default function TaskForm() {
       })
       navigate({ pathname: '/tasks', search: `?date=${date}` })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add the task.')
+      toast.error('Could not add the task.', { description: errText(err) })
       setBusy(false)
     }
   }
@@ -155,15 +155,6 @@ export default function TaskForm() {
           </Select>
         </FieldRow>
       </div>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
         {busy ? 'Adding…' : 'Add task'}

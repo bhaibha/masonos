@@ -1,8 +1,10 @@
 import { type FormEvent, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { FieldRow, Select } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { createDocument } from '@/lib/queries/documents'
 import { uploadDocument } from '@/lib/storage'
 import {
@@ -27,7 +29,6 @@ export default function UploadForm() {
 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   if (!canUploadDocs(role)) {
     return (
@@ -38,7 +39,6 @@ export default function UploadForm() {
   }
 
   function pickFile(f: File | null) {
-    setError(null)
     setFile(f)
     if (f && title.trim() === '') {
       // Sensible default: filename without extension.
@@ -48,18 +48,17 @@ export default function UploadForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
 
     if (!projectId) {
-      setError('No project selected.')
+      toast.error('No project selected.')
       return
     }
     if (!file) {
-      setError('Choose a file to upload.')
+      toast.error('Choose a file to upload.')
       return
     }
     if (title.trim() === '') {
-      setError('Give the document a title.')
+      toast.error('Give the document a title.')
       return
     }
 
@@ -80,7 +79,7 @@ export default function UploadForm() {
 
       navigate(`/docs/${folder}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not upload the document.')
+      toast.error('Could not upload the document.', { description: errText(err) })
       setBusy(false)
       setStatus(null)
     }
@@ -180,15 +179,6 @@ export default function UploadForm() {
             </span>
           </span>
         </label>
-      )}
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
       )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">

@@ -1,8 +1,14 @@
+import { Receipt } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
+import { toast } from 'sonner'
+import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select } from '@/components/Field'
+import { RevealItem, Stagger } from '@/components/Reveal'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { formatInr } from '@/lib/format'
 import {
   fetchCategories,
@@ -26,11 +32,11 @@ const SOURCE_LABEL = Object.fromEntries(
 
 export default function Ledger() {
   const { projectId } = useOutletContext<MoneyContext>()
+  const navigate = useNavigate()
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [rows, setRows] = useState<ExpenseRow[] | null>(null)
   const [total, setTotal] = useState<ExpenseTotal | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
 
   const [categoryId, setCategoryId] = useState('')
@@ -48,7 +54,6 @@ export default function Ledger() {
     let cancelled = false
     setRows(null)
     setTotal(null)
-    setError(null)
 
     const filters: ExpenseFilters = {}
     if (categoryId) filters.categoryId = Number(categoryId)
@@ -68,9 +73,9 @@ export default function Ledger() {
         setTotal(sum)
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load the ledger.')
-        }
+        if (cancelled) return
+        toast.error('Could not load the ledger', { description: errText(err) })
+        setRows([])
       })
 
     return () => {
@@ -87,16 +92,16 @@ export default function Ledger() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 rounded-xl bg-secondary px-4 py-3">
+      <div className="paper flex items-center justify-between gap-3 p-5">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] tracking-[0.12em] text-muted-foreground uppercase">
             {filtered ? 'Filtered total' : 'Project total spent'}
           </p>
-          <p className="font-heading text-xl font-semibold tabular-nums">
+          <p className="figure mt-1 text-[28px] leading-none font-semibold">
             {total === null ? '—' : formatInr(total.total_with_gst)}
           </p>
           {total !== null && total.total_gst > 0 && (
-            <p className="text-xs text-muted-foreground tabular-nums">
+            <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
               {formatInr(total.total_amount)} + {formatInr(total.total_gst)} GST
             </p>
           )}
@@ -111,7 +116,7 @@ export default function Ledger() {
       </div>
 
       {showFilters && (
-        <div className="space-y-3 rounded-xl border border-border p-4">
+        <div className="paper space-y-3 p-5">
           <FieldRow label="Category" htmlFor="f_category">
             <Select
               id="f_category"
@@ -171,24 +176,22 @@ export default function Ledger() {
         </div>
       )}
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
+      {rows === null && <ListSkeleton rows={5} />}
 
-      {rows === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
-
-      {rows?.length === 0 && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          {filtered ? 'No expenses match these filters.' : 'No expenses recorded yet.'}
-        </p>
-      )}
+      {rows?.length === 0 &&
+        (filtered ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">
+            No expenses match these filters.
+          </p>
+        ) : (
+          <EmptyState
+            icon={Receipt}
+            title="No expenses yet"
+            body="Record what's been spent on this project — every entry lands in the ledger and counts against the budget."
+            actionLabel="Add your first expense"
+            onAction={() => navigate('/money/new')}
+          />
+        ))}
 
       {rows && rows.length > 0 && (
         <>
@@ -199,11 +202,13 @@ export default function Ledger() {
             {rows.length === 500 &&
               ' — listing the most recent 500, total covers all'}
           </p>
-          <ul className="divide-y divide-border rounded-xl border border-border">
+          <Stagger className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
-              <LedgerRow key={r.id} row={r} />
+              <RevealItem key={r.id}>
+                <LedgerRow row={r} />
+              </RevealItem>
             ))}
-          </ul>
+          </Stagger>
         </>
       )}
     </div>
@@ -218,12 +223,13 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
     if (!row.receipt_path || receiptUrl) return
     setLoadingReceipt(true)
     const url = await signedReceiptUrl(row.receipt_path)
+    if (!url) toast.error('Could not open the receipt')
     setReceiptUrl(url)
     setLoadingReceipt(false)
   }
 
   return (
-    <li className="px-4 py-3">
+    <div className="px-5 py-4">
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">
@@ -248,7 +254,7 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
           </p>
         </div>
         <div className="shrink-0 text-right">
-          <p className="font-heading text-base font-semibold tabular-nums">
+          <p className="figure text-[17px] font-semibold">
             {formatInr(row.amount)}
           </p>
           {row.gst_amount > 0 && (
@@ -296,6 +302,6 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
           )}
         </div>
       )}
-    </li>
+    </div>
   )
 }

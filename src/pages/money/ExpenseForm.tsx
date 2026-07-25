@@ -1,9 +1,11 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { EMPTY_VENDOR, VendorField, type VendorValue } from '@/components/VendorField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { createExpense, fetchCategories } from '@/lib/queries/expenses'
 import { compressReceipt, uploadReceipt } from '@/lib/storage'
 import {
@@ -45,7 +47,6 @@ export default function ExpenseForm() {
 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => setCategories([]))
@@ -58,7 +59,6 @@ export default function ExpenseForm() {
   }, [preview])
 
   async function onPickReceipt(file: File | null) {
-    setError(null)
     setCompressedKb(null)
     if (preview) URL.revokeObjectURL(preview)
 
@@ -75,7 +75,7 @@ export default function ExpenseForm() {
       setPreview(URL.createObjectURL(compressed))
       setCompressedKb(Math.round(compressed.size / 1024))
     } catch {
-      setError('Could not process that image. Try another photo.')
+      toast.error('Could not process that image. Try another photo.')
       setReceipt(null)
       setPreview(null)
     }
@@ -83,22 +83,21 @@ export default function ExpenseForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
     setStatus(null)
 
     if (!categoryId) {
-      setError('Pick a category.')
+      toast.error('Pick a category.')
       return
     }
 
     const amountNum = Number(amount)
     const gstNum = gstAmount === '' ? 0 : Number(gstAmount)
     if (!Number.isFinite(amountNum) || amountNum <= 0) {
-      setError('Amount must be greater than zero.')
+      toast.error('Amount must be greater than zero.')
       return
     }
     if (!Number.isFinite(gstNum) || gstNum < 0) {
-      setError('GST cannot be negative.')
+      toast.error('GST cannot be negative.')
       return
     }
 
@@ -127,7 +126,7 @@ export default function ExpenseForm() {
 
       navigate('/money')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the expense.')
+      toast.error('Could not save the expense.', { description: errText(err) })
       setBusy(false)
       setStatus(null)
     }
@@ -280,15 +279,6 @@ export default function ExpenseForm() {
           />
         )}
       </FieldRow>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
         {busy ? (status ?? 'Saving…') : 'Save expense'}

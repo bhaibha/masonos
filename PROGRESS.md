@@ -1,7 +1,7 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
-## Done (migrations 001–016 ALL APPLIED — confirmed 2026-07-23)
+## Done (migrations 001–018 ALL APPLIED — confirmed 2026-07-25)
 - [x] Day 1: Foundation — auth, roles/RLS, app shell, Dashboard
 - [x] Day 2: Open Book — expenses, budgets, receipts, budget-vs-actual
 - [x] Day 3: Tasks + rollover + Daily Site Log; Materials (inward/issue/stock)
@@ -9,6 +9,53 @@
 - [x] Security: supervisor RLS test PASSED (money + confidential docs hidden)
 - [x] UI: premium design system applied to Dashboard + Project Detail
 - [x] Project Detail drill-down navigation
+
+## DESIGN-SYSTEM ROLLOUT COMPLETE (2026-07-25)
+The paused rollout is done. **Visual/interaction layer only — no query, RLS or money-math changes.**
+All 13 remaining screens + the 4 layout shells now match Dashboard/Project Detail.
+
+- **Inline error banners → sonner toasts.** Every `{error && <p role="alert">}` block removed across
+  Money, Tasks, Materials, Docs (and the 4 layouts, where a project-load failure now toasts). All
+  failures route through `errText()` so Supabase errors show their real message instead of a generic
+  line — the bug that masked three separate issues during procurement testing.
+- **"Loading…" text → skeletons.** `ListSkeleton` on Ledger, BudgetVsActual, TaskList, StockRegister,
+  MaterialMaster, FolderView, and all 4 layout shells.
+- **Bare empty text → `EmptyState`** with icon, friendly line and a primary action: Ledger ("Add your
+  first expense"), TaskList ("Add a task"), MaterialMaster ("Add your first material"). Filtered-empty
+  states stay as plain text — a filter returning nothing isn't an empty state, it's a non-match.
+- **Surfaces →`.paper`** (warm border, soft layered shadow, 20px padding) replacing
+  `rounded-xl border border-border`; money figures → `.figure` (Fraunces, tabular-nums).
+- **Staggered reveal** on the Ledger and Task lists, matching the Dashboard entrance.
+- Validation messages that were inline errors are now toasts too (e.g. "Pick a category", "Work area
+  is required"), and IssueForm's insufficient-stock message became a two-line toast with the
+  available quantity.
+- Structural fix: list items that moved inside `Stagger`/`RevealItem` wrappers changed `<li>` → `<div>`
+  to keep the markup valid.
+- `tsc -b --force` clean.
+
+## CONSOLIDATION AUDIT (2026-07-23)
+Verified four invariants. Two gaps found → **migration 018 written, NOT applied**.
+
+- [x] **Money reconciles from one server-side source.** ✅ Grepped all of `src/` for money
+      arithmetic: the only client-side math is bar-width ratios (`format.ts` spendRatio/barGeometry,
+      never rendered as currency) and the PO PDF's print-time subtotal/GST roll-up (documented, not
+      stored). Every figure traces to `v_project_spend`, `v_portfolio_summary`, `v_budget_vs_actual`,
+      `v_project_contract`, `v_po_value`, `v_po_match`, `v_stock`, or `fn_expense_total`.
+- [x] **Supervisor RLS hides money at API level (A1–A5).** ✅ `expenses`, `budgets`, `vendors`,
+      `po_invoices`, `invoice_lines`, `variation_orders` all carry a role check in their SELECT
+      policy. `po_lines` and `material_inward` are readable by members but their rate columns are
+      revoked at column level (006/012) and served via gated views — verified correct.
+- [~] **Audit trigger on every financial/material table — 6 WERE MISSING.** Fixed in 018:
+      `po_lines` (rate, line_total), `invoice_lines` (rate_invoiced), `grn_lines` (qty → stock),
+      `petty_cash_accounts` (imprest), `vendors` (payee master), `materials`. Previously a rate on
+      an approved PO could be edited with no trail.
+- [~] **`material_inward.vendor_name` was unreadable by anyone.** 006 revoked select + granted
+      explicit columns; 017 added `vendor_name`, which wasn't in that grant. Fixed in 018 (granted +
+      added to both material_inward views).
+- [x] ~~Design-system rollout outstanding on Money / Tasks / Materials / Docs~~ — **DONE 2026-07-25,
+      see the rollout section above.** Every screen in the app now uses toasts, skeletons and empty
+      states.
+- **Run migration 018 before testing.**
 
 ## GROUP A
 - [x] **Flexible vendor entry everywhere** — **migration 017 written, NOT yet applied**

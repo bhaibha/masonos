@@ -1,7 +1,14 @@
+import { ListChecks } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Textarea } from '@/components/Field'
+import { RevealItem, Stagger } from '@/components/Reveal'
+import { EmptyState } from '@/components/EmptyState'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { fetchTasks, rolloverTasks, updateTaskStatus } from '@/lib/queries/tasks'
 import {
   canWriteTasks,
@@ -15,6 +22,7 @@ import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
 
 export default function TaskList() {
+  const navigate = useNavigate()
   // Project comes from the store — the single source of truth, and immune to
   // where this screen sits in the route tree.
   const projectId = useProjects((s) => s.selectedId)
@@ -23,17 +31,14 @@ export default function TaskList() {
   const [date] = useSelectedDate()
 
   const [tasks, setTasks] = useState<TaskRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [rolling, setRolling] = useState(false)
-  const [rollNotice, setRollNotice] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     if (!projectId) return
-    setError(null)
     try {
       setTasks(await fetchTasks(projectId, date))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load tasks.')
+      toast.error('Could not load tasks.', { description: errText(err) })
     }
   }, [projectId, date])
 
@@ -56,58 +61,42 @@ export default function TaskList() {
     if (!ok) return
 
     setRolling(true)
-    setRollNotice(null)
-    setError(null)
     try {
       const n = await rolloverTasks(projectId, date)
-      setRollNotice(
+      toast.success(
         n === 0
           ? 'Nothing to roll over — everything was already carried forward or done.'
           : `${n} task${n === 1 ? '' : 's'} rolled over to ${formatDayLabel(addDays(date, 1))}.`,
       )
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rollover failed.')
+      toast.error('Rollover failed.', { description: errText(err) })
     }
     setRolling(false)
   }
 
   return (
     <div className="space-y-4 pb-6">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {rollNotice && !error && (
-        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">{rollNotice}</p>
-      )}
-
-      {tasks === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
+      {tasks === null && <ListSkeleton rows={4} />}
 
       {tasks?.length === 0 && (
-        <p className="py-10 text-center text-sm text-muted-foreground">
-          No tasks planned for this day.
-        </p>
+        <EmptyState
+          icon={ListChecks}
+          title="Nothing planned for this day"
+          body="Add the work you want done today — mark each one Done, Partial or Not done as the day goes."
+          actionLabel={canWrite ? 'Add a task' : undefined}
+          onAction={canWrite ? () => navigate('/tasks/new') : undefined}
+        />
       )}
 
       {tasks && tasks.length > 0 && (
-        <ul className="space-y-3">
+        <Stagger className="space-y-3">
           {tasks.map((t) => (
-            <TaskCard
-              key={t.id}
-              task={t}
-              canWrite={canWrite}
-              onChanged={reload}
-              onError={setError}
-            />
+            <RevealItem key={t.id}>
+              <TaskCard task={t} canWrite={canWrite} onChanged={reload} />
+            </RevealItem>
           ))}
-        </ul>
+        </Stagger>
       )}
 
       {canWrite && tasks && tasks.length > 0 && incomplete > 0 && (
@@ -137,12 +126,10 @@ function TaskCard({
   task,
   canWrite,
   onChanged,
-  onError,
 }: {
   task: TaskRow
   canWrite: boolean
   onChanged: () => Promise<void>
-  onError: (msg: string) => void
 }) {
   const [mode, setMode] = useState<'idle' | 'partial' | 'not_done'>('idle')
   const [doneQty, setDoneQty] = useState(
@@ -158,7 +145,7 @@ function TaskCard({
       setMode('idle')
       await onChanged()
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Could not update the task.')
+      toast.error('Could not update the task.', { description: errText(err) })
     }
     setBusy(false)
   }
@@ -166,7 +153,7 @@ function TaskCard({
   async function savePartial() {
     const qty = Number(doneQty)
     if (!Number.isFinite(qty) || qty < 0) {
-      onError('Enter the quantity completed.')
+      toast.error('Enter the quantity completed.')
       return
     }
     await apply('partial', { done_qty: qty })
@@ -174,14 +161,14 @@ function TaskCard({
 
   async function saveNotDone() {
     if (reason.trim() === '') {
-      onError('A reason is required when a task is not done.')
+      toast.error('A reason is required when a task is not done.')
       return
     }
     await apply('not_done', { not_done_reason: reason.trim() })
   }
 
   return (
-    <li className="rounded-xl border border-border p-4">
+    <div className="paper p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium">{task.title}</p>
@@ -313,6 +300,6 @@ function TaskCard({
           </div>
         </div>
       )}
-    </li>
+    </div>
   )
 }

@@ -28,11 +28,16 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 
 ### Applied-migration ledger (update at session end)
 - **001–016 ALL APPLIED** (confirmed live 2026-07-23; 016 verified via revised-contract-value working).
-  **017 (flexible vendor entry) written, NOT yet applied** — next to run. Next migration = 018.
+  **017 + 018 APPLIED** (confirmed 2026-07-25: 017 via the unregistered-vendor flow working end to
+  end; 018 via audit_log showing INSERT rows on `vendors`, which only the 018 trigger writes).
+  So: **001–018 ALL APPLIED.** Next migration = 019.
 - Re-run lessons baked into APPLY_pending.sql: drop dependent views with CASCADE (v_project_spend →
-  v_portfolio_summary); use drop-then-create (not create-or-replace) for any view whose columns change
-  across migrations (v_po_match / v_po_totals gained/lost columns between 012 and 013); cast enum
-  assignments explicitly (`::po_status`).
+  v_portfolio_summary); cast enum assignments explicitly (`::po_status`).
+- **NEVER use `create or replace view` when redefining an existing view.** It cannot add a column
+  mid-list, reorder, rename or drop one — Postgres reports it as "cannot change name of view column
+  X to Y" or "cannot drop columns from view". ALWAYS `drop view if exists <name> cascade;` then
+  `create view`. This has now bitten three times (013 v_po_match/v_po_totals, 018
+  v_material_inward). Default to drop-then-create for every view redefinition, no exceptions.
 - Views/functions that break silently if their migration is skipped (watch for "0 items"/blank totals):
   007 (`v_project_spend.remaining/pct_used`), 009 (`v_portfolio_summary`),
   013 (`v_po_totals`/`v_po_value`/`v_po_match`), 015 (`fn_receive_goods`).

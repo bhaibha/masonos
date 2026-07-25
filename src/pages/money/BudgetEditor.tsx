@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useOutletContext } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { errText } from '@/lib/errText'
 import { Input } from '@/components/ui/input'
 import { formatInr } from '@/lib/format'
 import {
@@ -23,8 +25,6 @@ export default function BudgetEditor() {
 
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +45,7 @@ export default function BudgetEditor() {
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Could not load budgets.')
+        toast.error('Could not load budgets.', { description: errText(err) })
         setLoading(false)
       })
     return () => {
@@ -54,8 +54,6 @@ export default function BudgetEditor() {
   }, [projectId])
 
   async function save(categoryId: number) {
-    setError(null)
-    setNotice(null)
     const raw = draft[categoryId] ?? ''
 
     setSavingId(categoryId)
@@ -67,20 +65,20 @@ export default function BudgetEditor() {
           delete next[categoryId]
           return next
         })
-        setNotice('Budget removed.')
+        toast.success('Budget removed.')
       } else {
         const amount = Number(raw)
         if (!Number.isFinite(amount) || amount < 0) {
-          setError('Budget must be zero or more.')
+          toast.error('Budget must be zero or more.')
           setSavingId(null)
           return
         }
         await upsertBudget(projectId, categoryId, amount)
         setSaved((s) => ({ ...s, [categoryId]: amount }))
-        setNotice('Saved.')
+        toast.success('Saved.')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save the budget.')
+      toast.error('Could not save the budget.', { description: errText(err) })
     }
     setSavingId(null)
   }
@@ -95,19 +93,7 @@ export default function BudgetEditor() {
         Set a budget per category. Leave a field blank and save to remove it.
       </p>
 
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {notice && !error && (
-        <p className="rounded-lg bg-secondary px-3 py-2 text-sm">{notice}</p>
-      )}
-
-      <ul className="divide-y divide-border rounded-xl border border-border">
+      <ul className="paper divide-y divide-border overflow-hidden">
         {categories.map((c) => {
           const current = saved[c.id]
           const value = draft[c.id] ?? ''

@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { useNavigate } from 'react-router-dom'
 import { FieldRow, Select, Textarea } from '@/components/Field'
+import { errText } from '@/lib/errText'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -32,7 +34,6 @@ export default function IssueForm() {
   const [remarks, setRemarks] = useState('')
 
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectId) return
@@ -51,24 +52,23 @@ export default function IssueForm() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    setError(null)
 
     if (!projectId) {
-      setError('No project selected.')
+      toast.error('No project selected.')
       return
     }
     if (!materialId) {
-      setError('Pick a material.')
+      toast.error('Pick a material.')
       return
     }
     if (workArea.trim() === '') {
-      setError('Work area is required.')
+      toast.error('Work area is required.')
       return
     }
 
     const qtyNum = Number(qty)
     if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      setError('Quantity must be greater than zero.')
+      toast.error('Quantity must be greater than zero.')
       return
     }
 
@@ -87,15 +87,16 @@ export default function IssueForm() {
     } catch (err) {
       if (err instanceof InsufficientStockError) {
         // The DB is the authority on stock, not the number we loaded earlier.
-        setError(
-          `Insufficient stock: available ${qtyFmt.format(err.available)}` +
+        toast.error('Insufficient stock', {
+          description:
+            `Available ${qtyFmt.format(err.available)}` +
             `${selected ? ` ${selected.unit}` : ''}, ` +
             `you asked for ${qtyFmt.format(err.requested)}.`,
-        )
+        })
         // Refresh so the on-screen figure matches reality.
         if (projectId) fetchStock(projectId).then(setStock).catch(() => {})
       } else {
-        setError(err instanceof Error ? err.message : 'Could not issue the material.')
+        toast.error('Could not issue the material.', { description: errText(err) })
       }
       setBusy(false)
     }
@@ -196,15 +197,6 @@ export default function IssueForm() {
           placeholder="Optional"
         />
       </FieldRow>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
         {busy ? 'Issuing…' : 'Issue material'}

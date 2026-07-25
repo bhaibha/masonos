@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Link, useOutletContext } from 'react-router-dom'
 import { formatInr, spendRatio } from '@/lib/format'
+import { errText } from '@/lib/errText'
 import { fetchBudgetVsActual } from '@/lib/queries/expenses'
 import { canEditBudgets, type BudgetVsActual as Row } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -12,7 +15,6 @@ export default function BudgetVsActual() {
   const role = useAuth((s) => s.role)
 
   const [rows, setRows] = useState<Row[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -23,7 +25,7 @@ export default function BudgetVsActual() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load budgets.')
+          toast.error('Could not load budgets.', { description: errText(err) })
         }
       })
     return () => {
@@ -33,18 +35,8 @@ export default function BudgetVsActual() {
 
   return (
     <div className="space-y-4">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
-      {rows === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
+      {rows === null && <ListSkeleton rows={5} />}
 
       {rows?.length === 0 && (
         <div className="py-10 text-center">
@@ -64,7 +56,7 @@ export default function BudgetVsActual() {
 
       {rows && rows.length > 0 && (
         <>
-          <ul className="divide-y divide-border rounded-xl border border-border">
+          <ul className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
               <CategoryRow key={r.category} row={r} />
             ))}

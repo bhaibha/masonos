@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Link } from 'react-router-dom'
+import { errText } from '@/lib/errText'
 import { fetchStock } from '@/lib/queries/materials'
 import { canLogMaterials, type StockRow } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -13,13 +16,11 @@ export default function StockRegister() {
   const role = useAuth((s) => s.role)
 
   const [rows, setRows] = useState<StockRow[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
     setRows(null)
-    setError(null)
 
     fetchStock(projectId)
       .then((data) => {
@@ -27,7 +28,7 @@ export default function StockRegister() {
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Could not load stock.')
+          toast.error('Could not load stock.', { description: errText(err) })
         }
       })
 
@@ -40,18 +41,8 @@ export default function StockRegister() {
 
   return (
     <div className="space-y-4 pb-6">
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
-      {rows === null && !error && (
-        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-      )}
+      {rows === null && <ListSkeleton rows={5} />}
 
       {rows?.length === 0 && (
         <div className="py-10 text-center">
@@ -78,7 +69,7 @@ export default function StockRegister() {
             </p>
           )}
 
-          <ul className="divide-y divide-border rounded-xl border border-border">
+          <ul className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
               <li key={r.material_id} className="px-4 py-3">
                 <div className="flex items-baseline justify-between gap-3">
