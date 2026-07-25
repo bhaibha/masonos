@@ -8,6 +8,89 @@ export interface Profile {
   phone: string | null
   role: UserRole
   is_active: boolean
+  /** Job title, display only (migration 019). Permissions come from `role`. */
+  designation: string | null
+}
+
+// ---------- Admin (founder only) ----------
+
+/**
+ * Job titles the business actually uses, each mapped to one of the four access
+ * roles the RLS policies understand.
+ *
+ * The title is cosmetic. `role` is the only thing Postgres checks — adding a
+ * title here can never widen anyone's access, which is why this lives in TS
+ * rather than as a database enum.
+ */
+export const DESIGNATIONS: {
+  title: string
+  role: UserRole
+  note: string
+}[] = [
+  { title: 'Founder', role: 'founder', note: 'Everything, all projects' },
+  { title: 'Project Lead', role: 'pm', note: 'All modules, assigned projects' },
+  { title: 'Project Manager', role: 'pm', note: 'All modules, assigned projects' },
+  { title: 'Planning Engineer', role: 'pm', note: 'All modules, assigned projects' },
+  { title: 'Quantity Surveyor', role: 'pm', note: 'All modules, assigned projects' },
+  { title: 'Billing Engineer', role: 'accounts', note: 'Money modules, all projects' },
+  { title: 'Accountant', role: 'accounts', note: 'Money modules, all projects' },
+  { title: 'Site Engineer', role: 'supervisor', note: 'Site work only — no money' },
+  { title: 'Site Supervisor', role: 'supervisor', note: 'Site work only — no money' },
+  { title: 'Safety Officer', role: 'supervisor', note: 'Site work only — no money' },
+  { title: 'Store Keeper', role: 'supervisor', note: 'Site work only — no money' },
+]
+
+export const ROLE_LABEL: Record<UserRole, string> = {
+  founder: 'Founder',
+  pm: 'Project manager',
+  supervisor: 'Site (no money)',
+  accounts: 'Accounts',
+}
+
+/** What each access role can reach — shown next to the picker so the founder
+ *  understands exactly what they're granting. */
+export const ROLE_ACCESS_NOTE: Record<UserRole, string> = {
+  founder: 'Full access to every project, every module, all figures.',
+  pm: 'All modules on assigned projects, including budgets and rates.',
+  supervisor:
+    'Tasks, site log, materials, safety, snags on assigned projects. All money, rates and confidential documents are hidden by the database.',
+  accounts: 'All money modules across every project. Cannot write site data.',
+}
+
+export function designationRole(title: string): UserRole | null {
+  return DESIGNATIONS.find((d) => d.title === title)?.role ?? null
+}
+
+/** Only founders reach the admin module. RLS agrees: projects_write,
+ *  members_write and profiles_admin all check is_founder(). */
+export const ADMIN_ROLES: UserRole[] = ['founder']
+
+export function canAdminister(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
+export interface TeamMember extends Profile {
+  /** ids of projects this person is assigned to */
+  project_ids: string[]
+}
+
+export interface NewProjectInput {
+  name: string
+  client_name: string
+  site_address: string
+  status: ProjectStatus
+  contract_value: number | null
+  management_fee_pct: number | null
+}
+
+export interface NewUserInput {
+  email: string
+  password: string
+  full_name: string
+  phone: string
+  designation: string
+  role: UserRole
+  project_ids: string[]
 }
 
 /** Row shape of public.v_project_spend (security_invoker view). */

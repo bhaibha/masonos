@@ -77,7 +77,9 @@ Order within group:
 ---
 
 ## Parked (decide later, not in active roadmap)
-- Add-Project + team-assignment admin screen (currently done via SQL)
+- ~~Add-Project + team-assignment admin screen (currently done via SQL)~~ — **BUILT.**
+  Founder-only `/admin`: create/edit projects, create users with a job title mapped to an access
+  role, assign project membership. Migration 019 + `admin-create-user` Edge Function.
 - Orphaned-storage cleanup job (removing a photo leaves the object in the bucket)
 - pg_cron nightly auto-rollover wrapper (needs owner-invoked function; current rollover is button-triggered)
 - Aadhaar e-sign, WhatsApp API — deferred paid integrations if ever needed

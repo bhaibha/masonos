@@ -30,7 +30,8 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 - **001–016 ALL APPLIED** (confirmed live 2026-07-23; 016 verified via revised-contract-value working).
   **017 + 018 APPLIED** (confirmed 2026-07-25: 017 via the unregistered-vendor flow working end to
   end; 018 via audit_log showing INSERT rows on `vendors`, which only the 018 trigger writes).
-  So: **001–018 ALL APPLIED.** Next migration = 019.
+  So: **001–018 ALL APPLIED.** **019 PENDING** (adds `profiles.designation` + audit trigger on
+  `profiles` + `profiles_admin_delete`). Next migration = 020.
 - Re-run lessons baked into APPLY_pending.sql: drop dependent views with CASCADE (v_project_spend →
   v_portfolio_summary); cast enum assignments explicitly (`::po_status`).
 - **NEVER use `create or replace view` when redefining an existing view.** It cannot add a column
@@ -107,7 +108,15 @@ Aesthetic: restrained luxury — architect's studio, not consumer app. Refined, 
 - "View ledger / tasks / stock / documents" buttons open the relevant tab already filtered to the project.
 
 ## What is BUILT (do not rebuild)
-Dashboard + Project Detail · Open Book (expenses/budgets/receipts) · Petty Cash · Tasks + rollover + Daily Site Log · Materials (inward/issue/stock) · Document Vault · Vendors (data only, screen pending) · Roles/RLS (tested) · Audit log · Storage security (migrations 001–006 applied).
+Dashboard + Project Detail · Open Book (expenses/budgets/receipts) · Petty Cash · Tasks + rollover + Daily Site Log · Materials (inward/issue/stock) · Document Vault · Vendors (data only, screen pending) · Roles/RLS (tested) · Audit log · Storage security (migrations 001–006 applied) · Safety (A2) · Procurement PR→PO→GRN→3-way match (A3) · Variation Orders (A5) · **Admin (founder-only): create projects, create users with job titles + access roles, assign project membership.**
+
+## Admin module — how roles work (don't redesign this)
+`profiles.designation` is a **display-only job title** (Site Engineer, Billing Engineer, Planning
+Engineer, Project Lead…). `profiles.role` stays the 4-value enum RLS checks. `DESIGNATIONS` in
+`src/lib/types.ts` maps each title → one access role. Adding a new job title is a TS-only change and
+can never widen anyone's data access. Never make `designation` load-bearing in a policy.
+User creation goes through the `admin-create-user` Edge Function, which holds the service-role key
+server-side and re-verifies the caller is a founder.
 
 ## What is CUT (never build — not software or out of scope)
 360°/Matterport(20), Payroll(23), CRM/website(25), Drone(40), IoT(41), Time-lapse(42), Digital Twin(43), WhatsApp(44), AR(45), Aadhaar OTP(49), Health Check(53), Carbon(54), Memory Book(55).

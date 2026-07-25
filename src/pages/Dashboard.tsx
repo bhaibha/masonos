@@ -1,4 +1,4 @@
-import { Building2, ChevronRight } from 'lucide-react'
+import { Building2, ChevronRight, Settings2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -13,6 +13,7 @@ import {
 } from '@/lib/queries/dashboard'
 import { fetchProjectSpend } from '@/lib/queries/projects'
 import {
+  canAdminister,
   canSeeMoney,
   type PortfolioSummary,
   type ProjectPulse,
@@ -24,6 +25,7 @@ import { useAuth } from '@/store/auth'
 export default function Dashboard() {
   const role = useAuth((s) => s.role)
   const showMoney = canSeeMoney(role)
+  const isAdmin = canAdminister(role)
 
   const [rows, setRows] = useState<ProjectSpend[] | null>(null)
   const [pulse, setPulse] = useState<Map<string, ProjectPulse>>(new Map())
@@ -91,8 +93,12 @@ export default function Dashboard() {
             body={
               failed
                 ? 'We could not reach the server. Pull down to try again.'
-                : 'Projects you are assigned to will appear here with spend against budget.'
+                : isAdmin
+                  ? 'Create your first project, then add the team who will work on it.'
+                  : 'Projects you are assigned to will appear here with spend against budget.'
             }
+            actionLabel={!failed && isAdmin ? 'New project' : undefined}
+            actionTo={!failed && isAdmin ? '/admin' : undefined}
           />
         )}
 
@@ -107,9 +113,21 @@ export default function Dashboard() {
               />
             </FadeUp>
 
-            <p className="mt-8 mb-4 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-              By project
-            </p>
+            <div className="mt-8 mb-4 flex items-center justify-between gap-3">
+              <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                By project
+              </p>
+              {/* Founder only — the route is guarded and RLS enforces it too. */}
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  className="flex min-h-11 items-center gap-1.5 text-[13px] font-medium text-primary"
+                >
+                  <Settings2 className="size-4" aria-hidden="true" />
+                  Manage
+                </Link>
+              )}
+            </div>
 
             {/* One column on a phone — two 180px cards can't hold a
                 ₹96,76,736 figure legibly. Two up from 640px. */}

@@ -1,13 +1,43 @@
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 
+const BASE = 'id, full_name, phone, role, is_active'
+const FULL = `${BASE}, designation`
+
+function toProfile(r: Record<string, unknown>): Profile {
+  return {
+    id: r.id as string,
+    full_name: (r.full_name as string) ?? '',
+    phone: (r.phone as string | null) ?? null,
+    role: r.role as Profile['role'],
+    is_active: Boolean(r.is_active),
+    designation: (r.designation as string | null) ?? null,
+  }
+}
+
+/**
+ * `designation` arrives with migration 019. Until that's applied PostgREST
+ * rejects the column list, so we retry without it — the same pattern used for
+ * v_project_spend's 007 columns. Sign-in must never break on a pending
+ * migration.
+ */
 export async function fetchMyProfile(userId: string): Promise<Profile | null> {
+  const full = await supabase
+    .from('profiles')
+    .select(FULL)
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (!full.error) {
+    return full.data ? toProfile(full.data as Record<string, unknown>) : null
+  }
+
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role, is_active')
+    .select(BASE)
     .eq('id', userId)
     .maybeSingle()
 
   if (error) throw error
-  return (data as Profile | null) ?? null
+  return data ? toProfile(data as Record<string, unknown>) : null
 }

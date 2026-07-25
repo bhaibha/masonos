@@ -4,10 +4,13 @@ import { AppShell } from '@/components/AppShell'
 import { RequireAuth } from '@/components/RequireAuth'
 import { Toaster } from '@/components/Toaster'
 import { RequireRole } from '@/components/RequireRole'
-import { BUDGET_WRITE_ROLES, MONEY_ROLES } from '@/lib/types'
+import { ADMIN_ROLES, BUDGET_WRITE_ROLES, MONEY_ROLES } from '@/lib/types'
 import Dashboard from '@/pages/Dashboard'
 import Login from '@/pages/Login'
 import ProjectDetail from '@/pages/ProjectDetail'
+import AdminLayout from '@/pages/admin/AdminLayout'
+import AdminProjects from '@/pages/admin/AdminProjects'
+import AdminTeam from '@/pages/admin/AdminTeam'
 import BudgetEditor from '@/pages/money/BudgetEditor'
 import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
@@ -49,6 +52,17 @@ export default function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             {/* Sets the store's selected project, so the tabs stay scoped. */}
             <Route path="/project/:id" element={<ProjectDetail />} />
+
+            {/* Founder only. RLS agrees: projects_write, members_write and
+                profiles_admin all check is_founder(), so this guard is the
+                second line of defence, not the boundary. */}
+            <Route element={<RequireRole allow={ADMIN_ROLES} />}>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminProjects />} />
+                <Route path="team" element={<AdminTeam />} />
+              </Route>
+            </Route>
+
             {/* All four roles may read; accounts is read-only per 001_core.sql. */}
             <Route path="/tasks" element={<TasksLayout />}>
               <Route index element={<TaskList />} />

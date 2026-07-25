@@ -270,3 +270,71 @@ Verified four invariants. Two gaps found → **migration 018 written, NOT applie
 - **Migrations 004–010 are all APPLIED to production** (via APPLY_pending.sql). Delta lines,
   portfolio roll-up, scoped rollover, storage RLS, rate + commercial privacy all live.
 - 006 made idempotent (drop-policy-if-exists before each create) so the batch re-runs cleanly.
+
+---
+
+## Session — Admin module (founder-only): projects + users
+
+**Built**
+
+- [x] **Migration 019** `019_admin_designations.sql` — the only SQL this module needs.
+      - `profiles.designation text` — a **display-only** job title.
+      - audit trigger on `profiles` (role changes decide who sees money, so the
+        table belongs in the log alongside vendors/materials from 018).
+      - `profiles_admin_delete` policy (founder-only DELETE).
+      - **No policy rewrite anywhere.** `projects_write`, `members_write` and
+        `profiles_admin` in 001_core.sql already gate INSERT/UPDATE/DELETE to
+        `is_founder()`, so creating projects and assigning members needed
+        no new RLS at all — only UI. This is why the module carries near-zero
+        risk of widening money access.
+- [x] **Job title → access role mapping lives in TypeScript**, not the database.
+      `DESIGNATIONS` in `src/lib/types.ts` maps each title (Site Engineer,
+      Planning Engineer, Billing Engineer, Project Lead, Quantity Surveyor,
+      Safety Officer, Store Keeper…) to one of the four enum roles. Adding a
+      title is a TS-only change that cannot affect a single policy. Never make
+      `designation` load-bearing in SQL.
+- [x] **`admin-create-user` Edge Function** (`supabase/functions/admin-create-user/`)
+      — the service-role key lives here and only here (CLAUDE.md rule 1).
+      Verifies the caller's JWT, reads their profile *through an anon client so
+      RLS applies*, and refuses anyone who isn't `founder` **before** the
+      service-role client is constructed. Creates the auth user, updates the
+      profile row the `handle_new_user` trigger already inserted, and upserts
+      project_members. Rolls back the auth user if the profile update fails, so
+      a half-created login can't be left behind.
+- [x] **`/admin` (founder-only)** — `RequireRole allow={ADMIN_ROLES}`:
+      - **Projects tab**: create + edit projects, incl. contract value and
+        management fee %. Reads existing commercials back through the gated
+        `v_project_commercials` view.
+      - **Team tab**: add a person (name, job title, access level, email,
+        temporary password, phone, project assignments); edit anyone's title,
+        role, phone and assignments; deactivate/reactivate. Every access level
+        shows a plain-English note of exactly what it grants, so the founder
+        can see that "Site Engineer" means money is hidden.
+      - Project assignment is a chip toggle writing `project_members` —
+        the table every `is_member()` check reads.
+- [x] Dashboard: founder-only **Manage** link beside "By project", and the empty
+      state now offers "New project" to founders instead of a dead end.
+
+**Deliberate decisions**
+
+- Access is still the 4-role enum. A fifth role would have meant auditing every
+  policy across 18 migrations for a purely cosmetic gain.
+- `createProject`/`updateProject` select only 010-granted columns on the way
+  back. PostgREST's default `return=representation` re-SELECTs every column
+  after a write, which would hit 010's revoke on `contract_value` and 400 —
+  the caveat recorded in migration 010 has now been honoured.
+- `fetchMyProfile` requests `designation` and silently retries without it, so
+  sign-in keeps working in the window between deploying code and running 019.
+
+**Pending**
+
+- [ ] Deploy the Edge Function: `supabase functions deploy admin-create-user`
+      (until then, "Add person" fails; editing existing people works fine).
+- [ ] Re-run the supervisor incognito test after 019 — expected unchanged, since
+      no read policy moved.
+- [ ] ROADMAP Group A: A6 Site Instructions, A7 RFI, A8 Snags + DLP,
+      A9 Compliance calendar, A10–A13.
+- [ ] Orphaned storage objects from before the data clear (receipts / site-photos
+      / PO PDFs) — clear via the Supabase dashboard if wanted.
+
+**Run migration 019 before testing.**
