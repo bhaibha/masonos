@@ -18,11 +18,16 @@ import {
   fetchVariations,
   setVariationStatus,
 } from '@/lib/queries/variations'
+import {
+  CancelDialog,
+  CancelNote,
+  RejectVoDialog,
+} from '@/components/VoidDialog'
 import { uploadDocument } from '@/lib/storage'
 import {
   canApproveVO,
+  canCancel,
   canRaiseVO,
-  type ProjectContract,
   type VariationOrder,
   VO_STATUS_LABEL,
   type VoStatus,
@@ -36,6 +41,7 @@ const STATUS_TONE: Record<VoStatus, string> = {
   submitted: 'bg-[color-mix(in_oklab,var(--warning)_16%,transparent)] text-[var(--warning)]',
   approved: 'bg-[color-mix(in_oklab,var(--positive)_14%,transparent)] text-[var(--positive)]',
   rejected: 'bg-destructive/10 text-destructive',
+  cancelled: 'bg-destructive/10 text-destructive',
 }
 
 export default function Variations() {
@@ -43,18 +49,12 @@ export default function Variations() {
   const role = useAuth((s) => s.role)
 
   const [rows, setRows] = useState<VariationOrder[] | null>(null)
-  const [contract, setContract] = useState<ProjectContract | null>(null)
   const [raising, setRaising] = useState(false)
 
   const reload = useCallback(async () => {
     if (!projectId) return
     try {
-      const [vos, c] = await Promise.all([
-        fetchVariations(projectId),
-        fetchProjectContract(projectId),
-      ])
-      setRows(vos)
-      setContract(c)
+      setRows(await fetchVariations(projectId))
     } catch (err) {
       toast.error('Could not load variations', { description: errText(err) })
       setRows([])
@@ -80,37 +80,9 @@ export default function Variations() {
 
   return (
     <div className="space-y-4 pb-6">
-      {contract && (
-        <div className="paper p-5">
-          <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-            Contract value
-          </p>
-          <div className="mt-3 space-y-1.5 text-sm tabular-nums">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Original</span>
-              <span>{formatInr(contract.contract_value)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Approved variations</span>
-              <span className={cn(contract.variations_value < 0 && 'text-destructive')}>
-                {contract.variations_value >= 0 ? '+ ' : '- '}
-                {formatInr(Math.abs(contract.variations_value))}
-              </span>
-            </div>
-            <div className="flex justify-between border-t border-border pt-1.5 font-medium">
-              <span>Revised contract</span>
-              <span className="figure text-base">
-                {formatInr(contract.revised_contract_value)}
-              </span>
-            </div>
-            {contract.pending_value !== 0 && (
-              <p className="pt-1 text-xs text-[var(--warning)]">
-                {formatInr(Math.abs(contract.pending_value))} in variations awaiting approval
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      {/* The contract-value summary lives on Project Detail, not here — this
+          screen is the list of variations. `contract` is still fetched below
+          because the VO PDF prints the before/after contract figures. */}
 
       {canRaiseVO(role) && (
         <Button className="h-12 w-full text-base" onClick={() => setRaising(true)}>
@@ -152,13 +124,18 @@ function VariationCard({
 }) {
   const role = useAuth((s) => s.role)
   const [busy, setBusy] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [rejecting, setRejecting] = useState(false)
   const over = vo.cost_impact < 0
+  const cancelled = vo.status === 'cancelled'
 
-  async function decide(status: 'approved' | 'rejected') {
+  async function approve() {
     setBusy(true)
     try {
-      await setVariationStatus(vo.id, status)
-      toast.success(status === 'approved' ? 'Variation approved' : 'Variation rejected')
+      await setVariationStatus(vo.id, 'approved')
+      toast.success('Variation approved', {
+        description: 'The revised contract value has moved.',
+      })
       await onChanged()
     } catch (err) {
       toast.error('Could not update the variation', { description: errText(err) })
@@ -239,45 +216,95 @@ function VariationCard({
         {formatInr(Math.abs(vo.cost_impact))}
       </p>
 
+      {/* Why it was cancelled or rejected — the figure moved, so say why. */}
+      {(cancelled || vo.status === 'rejected') && (
+        <CancelNote
+          reason={vo.cancel_reason}
+          at={vo.cancelled_at}
+          verb={cancelled ? 'Cancelled' : 'Rejected'}
+        />
+      )}
+
       {canApproveVO(role) && vo.status === 'submitted' && (
         <div className="mt-4 grid grid-cols-2 gap-2">
           <Button
             variant="outline"
-            className="h-11"
+            className="h-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
             disabled={busy}
-            onClick={() => void decide('rejected')}
+            onClick={() => setRejecting(true)}
           >
             Reject
           </Button>
-          <Button
-            className="h-11"
-            disabled={busy}
-            onClick={() => void decide('approved')}
-          >
+          <Button className="h-11" disabled={busy} onClick={() => void approve()}>
             Approve
           </Button>
         </div>
       )}
 
       {vo.status === 'approved' && (
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="h-11"
-            disabled={busy}
-            onClick={() => void download(false)}
-          >
-            Download VO
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            disabled={busy}
-            onClick={() => void download(true)}
-          >
-            File to Docs
-          </Button>
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              className="h-11"
+              disabled={busy}
+              onClick={() => void download(false)}
+            >
+              Download VO
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11"
+              disabled={busy}
+              onClick={() => void download(true)}
+            >
+              File to Docs
+            </Button>
+          </div>
+
+          {/* The only way to undo an approval. An approved VO has already moved
+              revised_contract_value; cancelling puts it back, server-side. */}
+          {canCancel(role, 'variation_orders') && (
+            <Button
+              variant="ghost"
+              className="mt-2 h-11 w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={busy}
+              onClick={() => setCancelling(true)}
+            >
+              Cancel variation
+            </Button>
+          )}
+        </>
+      )}
+
+      {cancelling && (
+        <CancelDialog
+          table="variation_orders"
+          id={vo.id}
+          summary={`${vo.vo_number} · ${vo.title} · ${over ? '−' : '+'}${formatInr(
+            Math.abs(vo.cost_impact),
+          )}`}
+          consequence="This variation has already been added to the contract value. Cancelling removes it again — the revised contract figure corrects itself. The VO keeps its number and stays on record."
+          onDone={async () => {
+            setCancelling(false)
+            await onChanged()
+          }}
+          onCancel={() => setCancelling(false)}
+        />
+      )}
+
+      {rejecting && (
+        <RejectVoDialog
+          id={vo.id}
+          summary={`${vo.vo_number} · ${vo.title} · ${over ? '−' : '+'}${formatInr(
+            Math.abs(vo.cost_impact),
+          )}`}
+          onDone={async () => {
+            setRejecting(false)
+            await onChanged()
+          }}
+          onCancel={() => setRejecting(false)}
+        />
       )}
     </article>
   )

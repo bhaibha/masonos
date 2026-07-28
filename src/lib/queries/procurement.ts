@@ -22,7 +22,7 @@ export async function fetchPurchaseOrders(
   const { data, error } = await supabase
     .from('purchase_orders')
     .select(
-      'id, po_number, project_id, vendor_id, vendor_name, status, need_by, notes, raised_by, approved_by, created_at, vendors(name)',
+      'id, po_number, project_id, vendor_id, vendor_name, status, need_by, notes, raised_by, approved_by, created_at, cancelled_at, cancelled_by, cancel_reason, vendors(name)',
     )
     .eq('project_id', projectId)
     .order('created_at', { ascending: false })
@@ -52,6 +52,9 @@ export async function fetchPurchaseOrders(
       vendor_registered: vendorId !== null,
       line_count: 0,
       ordered_value: null as number | null,
+      cancelled_at: (row.cancelled_at as string | null) ?? null,
+      cancelled_by: (row.cancelled_by as string | null) ?? null,
+      cancel_reason: (row.cancel_reason as string | null) ?? null,
     }
   })
 
@@ -289,7 +292,9 @@ export async function fetchMatch(poId: string): Promise<MatchRow[]> {
 export async function fetchInvoices(poId: string): Promise<PoInvoiceRow[]> {
   const { data, error } = await supabase
     .from('po_invoices')
-    .select('id, invoice_no, invoice_date, gst_amount, approved')
+    .select(
+      'id, invoice_no, invoice_date, gst_amount, approved, voided_at, voided_by, void_reason',
+    )
     .eq('po_id', poId)
     .order('created_at', { ascending: false })
 
@@ -300,6 +305,9 @@ export async function fetchInvoices(poId: string): Promise<PoInvoiceRow[]> {
     invoice_date: r.invoice_date as string,
     gst_amount: Number(r.gst_amount),
     approved: Boolean(r.approved),
+    voided_at: (r.voided_at as string | null) ?? null,
+    voided_by: (r.voided_by as string | null) ?? null,
+    void_reason: (r.void_reason as string | null) ?? null,
   }))
 }
 

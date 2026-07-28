@@ -33,6 +33,7 @@ export default function MaterialsLayout() {
           { to: '/materials/issue', label: 'Issue' },
         ]
       : []),
+    { to: '/materials/movements', label: 'Movements' },
     { to: '/materials/orders', label: 'Orders' },
     { to: '/materials/master', label: 'Materials' },
   ]

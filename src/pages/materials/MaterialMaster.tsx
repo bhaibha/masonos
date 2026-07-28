@@ -1,6 +1,7 @@
 import { Boxes } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { DeleteButton } from '@/components/DeleteAction'
 import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select } from '@/components/Field'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -8,13 +9,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
 import { fetchCategories } from '@/lib/queries/expenses'
-import { createMaterial, fetchMaterials } from '@/lib/queries/materials'
+import {
+  createMaterial,
+  fetchMaterials,
+  setMaterialActive,
+} from '@/lib/queries/materials'
 import {
   canEditMaterialMaster,
   type ExpenseCategory,
   type Material,
   MATERIAL_UNITS,
 } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 
 const qtyFmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
@@ -26,6 +32,8 @@ export default function MaterialMaster() {
   const [materials, setMaterials] = useState<Material[] | null>(null)
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [adding, setAdding] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   const [name, setName] = useState('')
   const [unit, setUnit] = useState('')
@@ -35,11 +43,31 @@ export default function MaterialMaster() {
 
   const reload = useCallback(async () => {
     try {
-      setMaterials(await fetchMaterials())
+      setMaterials(await fetchMaterials(showInactive))
     } catch (err) {
       toast.error('Could not load materials.', { description: errText(err) })
     }
-  }, [])
+  }, [showInactive])
+
+  async function toggleActive(m: Material) {
+    const next = !m.is_active
+    setBusyId(m.id)
+    try {
+      await setMaterialActive(m.id, next)
+      toast.success(
+        next ? `${m.name} restored` : `${m.name} deactivated`,
+        {
+          description: next
+            ? undefined
+            : 'Past deliveries and issues are untouched — it just stops appearing in pickers.',
+        },
+      )
+      await reload()
+    } catch (err) {
+      toast.error('Could not update the material', { description: errText(err) })
+    }
+    setBusyId(null)
+  }
 
   useEffect(() => {
     void reload()
@@ -191,6 +219,18 @@ export default function MaterialMaster() {
         </form>
       )}
 
+      {canEdit && !adding && (
+        <label className="flex items-center gap-3 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={(e) => setShowInactive(e.target.checked)}
+            className="size-5 accent-[var(--primary)]"
+          />
+          Show deactivated materials
+        </label>
+      )}
+
       {materials === null && <ListSkeleton rows={5} />}
 
       {materials?.length === 0 && (
@@ -206,16 +246,48 @@ export default function MaterialMaster() {
       {materials && materials.length > 0 && (
         <ul className="paper divide-y divide-border overflow-hidden">
           {materials.map((m) => (
-            <li
-              key={m.id}
-              className="flex items-baseline justify-between gap-3 px-4 py-3"
-            >
-              <p className="truncate text-sm font-medium">{m.name}</p>
-              <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                {m.unit}
-                {m.low_stock_level > 0 &&
-                  ` · low at ${qtyFmt.format(m.low_stock_level)}`}
-              </p>
+            <li key={m.id} className="px-4 py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <p
+                  className={cn(
+                    'truncate text-sm font-medium',
+                    !m.is_active && 'text-muted-foreground line-through',
+                  )}
+                >
+                  {m.name}
+                </p>
+                <p className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {m.unit}
+                  {m.low_stock_level > 0 &&
+                    ` · low at ${qtyFmt.format(m.low_stock_level)}`}
+                </p>
+              </div>
+
+              {canEdit && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {/* Deactivate is the realistic action: a material with any
+                      delivery, issue or order line is held by a foreign key and
+                      cannot be deleted at all. */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-ml-2 h-9"
+                    disabled={busyId === m.id}
+                    onClick={() => void toggleActive(m)}
+                  >
+                    {m.is_active ? 'Deactivate' : 'Restore'}
+                  </Button>
+                  {/* Only succeeds for a material nothing has used yet;
+                      fn_delete_record names what's in the way otherwise. */}
+                  <DeleteButton
+                    table="materials"
+                    id={m.id}
+                    name={`${m.name} (${m.unit})`}
+                    role={role}
+                    onDeleted={reload}
+                  />
+                </div>
+              )}
             </li>
           ))}
         </ul>

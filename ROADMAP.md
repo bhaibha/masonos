@@ -46,7 +46,10 @@ Order within group:
        contract value on Project Detail, VO PDF on letterhead + file to Docs. Migration 016. PM raises,
        founder approves. Money-gated (supervisors excluded).
 - [ ] A6. M56 Site Instruction (SI) — issue instruction to contractor/labour, status, PDF
+      **Ship with `cancelled` + cancel_reason in the status enum from day one** (migration 020's
+      removal/reversal pass covered PO and VO; SI didn't exist yet).
 - [ ] A7. M57 RFI Management — raise to design consultant, categories, response tracking, status
+      **Ship with `cancelled`/`rejected` + reason in the status enum from day one** — same reason.
 - [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)
 - [ ] A9. M31 Compliance / Statutory Calendar (dated reminders: TDS, GST, labour, permits; alert via pg_cron)
 - [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)

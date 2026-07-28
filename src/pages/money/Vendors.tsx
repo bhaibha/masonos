@@ -1,6 +1,7 @@
 import { Store } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { DeleteButton } from '@/components/DeleteAction'
 import { EmptyState } from '@/components/EmptyState'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -235,6 +236,17 @@ export default function Vendors() {
                     >
                       {v.is_active ? 'Deactivate' : 'Restore'}
                     </Button>
+                    {/* Only possible for a vendor nothing references —
+                        fn_delete_record refuses with the count otherwise and
+                        points at Deactivate. */}
+                    <DeleteButton
+                      table="vendors"
+                      id={v.id}
+                      name={v.name}
+                      role={role}
+                      onDeleted={reload}
+                      label=""
+                    />
                   </div>
                 </div>
               )}

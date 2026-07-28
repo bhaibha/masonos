@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { DocumentList } from '@/components/DocumentList'
@@ -26,25 +26,19 @@ export default function FolderView() {
 
   const valid = folder && VALID.has(folder as DocFolder)
 
-  useEffect(() => {
+  const reload = useCallback(async () => {
     if (!projectId || !valid) return
-    let cancelled = false
-    setDocs(null)
-
-    fetchDocuments(projectId, { folder: folder as DocFolder })
-      .then((d) => {
-        if (!cancelled) setDocs(d)
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          toast.error('Could not load documents.', { description: errText(err) })
-        }
-      })
-
-    return () => {
-      cancelled = true
+    try {
+      setDocs(await fetchDocuments(projectId, { folder: folder as DocFolder }))
+    } catch (err) {
+      toast.error('Could not load documents.', { description: errText(err) })
     }
   }, [projectId, folder, valid])
+
+  useEffect(() => {
+    setDocs(null)
+    void reload()
+  }, [reload])
 
   if (!valid) return <Navigate to="/docs" replace />
 
@@ -78,7 +72,7 @@ export default function FolderView() {
         </div>
       )}
 
-      {docs && docs.length > 0 && <DocumentList docs={docs} />}
+      {docs && docs.length > 0 && <DocumentList docs={docs} onChanged={reload} />}
     </div>
   )
 }

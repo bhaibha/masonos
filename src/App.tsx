@@ -26,6 +26,7 @@ import InwardForm from '@/pages/materials/InwardForm'
 import IssueForm from '@/pages/materials/IssueForm'
 import MaterialMaster from '@/pages/materials/MaterialMaster'
 import MaterialsLayout from '@/pages/materials/MaterialsLayout'
+import Movements from '@/pages/materials/Movements'
 import StockRegister from '@/pages/materials/StockRegister'
 import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
@@ -94,6 +95,8 @@ export default function App() {
               <Route index element={<StockRegister />} />
               <Route path="inward" element={<InwardForm />} />
               <Route path="issue" element={<IssueForm />} />
+              {/* Movement history — where a delivery or issue gets voided. */}
+              <Route path="movements" element={<Movements />} />
               <Route path="orders" element={<Orders />} />
               <Route path="master" element={<MaterialMaster />} />
             </Route>

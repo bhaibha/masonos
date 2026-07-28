@@ -31,6 +31,27 @@ export async function fetchMaterials(
   }))
 }
 
+/**
+ * Soft delete. A material with any delivery, issue or order line CANNOT be
+ * hard-deleted — there's a foreign key from those tables, so Postgres refuses
+ * regardless of policy. Deactivating keeps the history intact and stops the
+ * material appearing in pickers, which is what "remove it" actually means once
+ * it's been used.
+ *
+ * `mat_write` (003) is founder/pm for ALL commands, so a plain update works.
+ */
+export async function setMaterialActive(
+  id: string,
+  isActive: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('materials')
+    .update({ is_active: isActive })
+    .eq('id', id)
+
+  if (error) throw error
+}
+
 export async function createMaterial(input: NewMaterial): Promise<void> {
   const { error } = await supabase.from('materials').insert({
     name: input.name,

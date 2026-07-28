@@ -2,6 +2,7 @@ import { PackageSearch } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { FieldRow, Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -19,10 +20,13 @@ import {
 } from '@/lib/queries/procurement'
 import { fetchVendor } from '@/lib/queries/vendors'
 import { VendorField, type VendorValue } from '@/components/VendorField'
+import { DeleteButton } from '@/components/DeleteAction'
+import { CancelDialog, CancelNote } from '@/components/VoidDialog'
 import { uploadDocument } from '@/lib/storage'
 import { supabase } from '@/lib/supabase'
 import {
   canApprovePO,
+  canCancel,
   canRaisePR,
   canSeeMoney,
   PO_STATUS_LABEL,
@@ -191,13 +195,16 @@ export default function Orders() {
       {rows === null && <ListSkeleton rows={3} />}
 
       {rows !== null && rows.length === 0 && (
-        <EmptyState
-          icon={PackageSearch}
-          title="No purchase orders yet"
-          body="Raise a request for materials — it becomes a purchase order once rates are approved."
-          actionLabel={canRaisePR(role) ? 'Raise a request' : undefined}
-          onAction={canRaisePR(role) ? () => setRaising(true) : undefined}
-        />
+        <>
+          <EmptyState
+            icon={PackageSearch}
+            title="No purchase orders yet"
+            body="Raise a request for materials — it becomes a purchase order once rates are approved."
+            actionLabel={canRaisePR(role) ? 'Raise a request' : undefined}
+            onAction={canRaisePR(role) ? () => setRaising(true) : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {rows && rows.length > 0 && (
@@ -225,7 +232,18 @@ function OrderCard({
   const role = useAuth((s) => s.role)
   const [open, setOpen] = useState(false)
   const [lines, setLines] = useState<PoLine[] | null>(null)
+  const [cancelling, setCancelling] = useState(false)
   const canApprove = canApprovePO(role) && po.status === 'requested'
+  const cancelled = po.status === 'cancelled'
+  // A still-requested PR has no number in anyone's hands yet — it's deletable.
+  const isDraft = po.status === 'requested'
+  // Closed orders are history. Everything else is still cancellable — the RPC
+  // refuses if live receipts or invoices exist, and says which.
+  const showCancel =
+    canCancel(role, 'purchase_orders') &&
+    !cancelled &&
+    !isDraft &&
+    po.status !== 'closed'
 
   async function toggle() {
     const next = !open
@@ -334,13 +352,64 @@ function OrderCard({
                 )}
 
               {/* PO document — only once approved and only for money-roles
-                  (needs rates + vendor GSTIN). */}
-              {withRates && po.status !== 'requested' && po.status !== 'rejected' && (
-                <PoDocument po={po} lines={lines} />
+                  (needs rates + vendor GSTIN). Not for a cancelled order. */}
+              {withRates &&
+                po.status !== 'requested' &&
+                po.status !== 'rejected' &&
+                !cancelled && <PoDocument po={po} lines={lines} />}
+
+              {(showCancel || isDraft) && (
+                <div className="mt-4 border-t border-border pt-4">
+                  {/* A draft nobody has seen is deleted outright. Once approved
+                      it has a number a vendor may hold, so it's cancelled and
+                      keeps its place in the sequence. */}
+                  {isDraft ? (
+                    <DeleteButton
+                      table="purchase_orders"
+                      id={po.id}
+                      name={`${po.po_number} · ${po.line_count} ${
+                        po.line_count === 1 ? 'line' : 'lines'
+                      }`}
+                      role={role}
+                      onDeleted={onChanged}
+                      label="Delete request"
+                      className="h-11 w-full"
+                    />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      className="h-11 w-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setCancelling(true)}
+                    >
+                      Cancel order
+                    </Button>
+                  )}
+                </div>
               )}
             </>
           )}
         </div>
+      )}
+
+      {/* Why it was cancelled — visible without expanding the card. */}
+      {cancelled && (
+        <CancelNote reason={po.cancel_reason} at={po.cancelled_at} />
+      )}
+
+      {cancelling && (
+        <CancelDialog
+          table="purchase_orders"
+          id={po.id}
+          summary={`${po.po_number}${
+            po.vendor_display ? ` · ${po.vendor_display}` : ''
+          } · ${po.line_count} ${po.line_count === 1 ? 'line' : 'lines'}`}
+          consequence="The order keeps its number and stays on record, but drops out of active lists, committed value and the 3-way match. Blocked if any goods receipt or vendor invoice is still live — void those first."
+          onDone={async () => {
+            setCancelling(false)
+            await onChanged()
+          }}
+          onCancel={() => setCancelling(false)}
+        />
       )}
     </article>
   )

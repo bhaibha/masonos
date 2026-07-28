@@ -1,6 +1,7 @@
 import { ShieldAlert } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { DeleteButton } from '@/components/DeleteAction'
 import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
@@ -19,6 +20,7 @@ import {
   INCIDENT_TYPES,
   type IncidentRow,
   type IncidentType,
+  type UserRole,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -111,8 +113,10 @@ export default function Incidents() {
               <IncidentCard
                 inc={inc}
                 canWrite={canWrite}
+                role={role}
                 busy={busyId === inc.id}
                 onToggle={() => void toggleStatus(inc)}
+                onDeleted={reload}
               />
             </RevealItem>
           ))}
@@ -125,13 +129,17 @@ export default function Incidents() {
 function IncidentCard({
   inc,
   canWrite,
+  role,
   busy,
   onToggle,
+  onDeleted,
 }: {
   inc: IncidentRow
   canWrite: boolean
+  role: UserRole | null
   busy: boolean
   onToggle: () => void
+  onDeleted: () => Promise<void>
 }) {
   const when = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
@@ -188,17 +196,26 @@ function IncidentCard({
 
       {inc.photos.length > 0 && <IncidentPhotos paths={inc.photos} />}
 
-      {canWrite && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          disabled={busy}
-          onClick={onToggle}
-        >
-          {inc.status === 'open' ? 'Mark closed' : 'Reopen'}
-        </Button>
-      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {canWrite && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={onToggle}
+          >
+            {inc.status === 'open' ? 'Mark closed' : 'Reopen'}
+          </Button>
+        )}
+        {/* An incident logged in error — nothing references it. */}
+        <DeleteButton
+          table="incidents"
+          id={inc.id}
+          name={`${INCIDENT_TYPE_LABEL[inc.incident_type]} · ${when}`}
+          role={role}
+          onDeleted={onDeleted}
+        />
+      </div>
     </article>
   )
 }

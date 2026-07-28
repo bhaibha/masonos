@@ -338,3 +338,255 @@ Verified four invariants. Two gaps found → **migration 018 written, NOT applie
       / PO PDFs) — clear via the Supabase dashboard if wanted.
 
 **Run migration 019 before testing.**
+
+---
+
+## Session — Record removal & reversal, part 1: void/reverse (migration 020)
+
+Scope agreed up front: this session does the **correctness-critical half** — the full backend
+(every column, every view and RPC rewrite) plus the void UI for money and stock. Hard delete and
+cancel/reject are migration 021, next session.
+
+**Built**
+
+- [x] **Migration 020** `020_void_and_reverse.sql` — the whole void backend in one atomic file.
+      - `voided_at` / `voided_by` / `void_reason` on **expenses, petty_cash_entries,
+        material_inward, material_issues, goods_receipts, po_invoices**.
+      - A CHECK constraint per table makes the reason a **database** rule: all three columns are
+        null, or all three are set with a non-blank reason. The form can't be the only guard.
+      - Partial indexes on `(… ) where voided_at is null` — every hot query now carries that filter.
+- [x] **Two back-links added, because the cascade had nothing to follow.** This was a real hole:
+      - `material_inward.grn_line_id` — `fn_grn_to_inward` used to write inward rows tagged only
+        with the remark 'Auto from GRN'. There was **no way to reverse a goods receipt's own stock**.
+      - `expenses.pc_entry_id` — `fn_pc_to_expense` mirrored petty-cash spends into the ledger with
+        no link back, so voiding a petty cash entry would have left a **ghost expense** still
+        counting against the budget.
+      Both trigger functions now set the link. Nothing to back-fill (transaction data was cleared
+      before real entry began) — noted in the migration.
+- [x] **`fn_void_record(p_table, p_id, p_reason)`** — SECURITY DEFINER, and the *only* path to a
+      void. Checks the role (money = founder/accounts, stock = founder/pm), refuses a blank reason,
+      cascades, and logs. **No UPDATE policy on `voided_at` was added on purpose**, so the client
+      physically cannot flip the flag itself.
+      Guards it enforces, each with a message the UI shows verbatim:
+      - voiding a delivery that a GRN created → "void the goods receipt instead"
+      - voiding an expense a petty-cash entry created → "void the petty cash entry instead"
+      - voiding an expense a vendor invoice posted → "void the invoice instead"
+      - voiding stock that's already been issued → blocked, names the materials
+      - voiding a GRN when an invoice is already posted → blocked, "void the invoice first"
+      Cascades: GRN void → its inward rows + PO status walked back to what the *remaining live*
+      receipts justify; petty cash void → the mirrored expense; invoice void → the posted expense.
+- [x] **`fn_stock_on_hand(project, material)`** — one definition of live stock, used by both the
+      void guard and `fn_check_stock`, so the two can never disagree.
+- [x] **Every server-side total rewritten to exclude voided rows** — this is the part that makes
+      voiding *mean* something (CLAUDE.md rule 2: the browser never filters money):
+      `v_project_spend` (→ `v_portfolio_summary` via cascade) · `v_budget_vs_actual` ·
+      `v_petty_cash_balance` · `v_stock` · `v_po_match` · `v_material_inward` ·
+      `v_material_inward_rates` · `fn_expense_total` · `fn_check_stock` · `fn_receive_goods` ·
+      `fn_post_invoice`.
+- [x] **UI** — shared `VoidDialog` (danger-coloured, mandatory reason, states the consequence,
+      Escape to close), `VoidBadge`, `voidRowClass` (dimmed + struck through), `VoidNote`
+      ("Voided by X on date — reason"). Wired into:
+      - **Ledger** — void an expense; the total above it comes from `fn_expense_total`, so it drops
+        the moment the void lands.
+      - **Materials → Movements** (new screen) — every delivery and issue for the project, newest
+        first, filterable. Reads the rate-free `v_material_inward`, so supervisors can review it
+        even though they can't void.
+      - **Orders → invoice/match panel** — goods receipts are now listed (they never were) and can
+        be voided there, which is the only correct place since voiding the GRN is what reverses its
+        stock. Invoices can be voided posted or unposted.
+
+**Deliberate decisions**
+
+- Voiding is RPC-only. Adding an UPDATE policy would have been less code and a much bigger hole.
+- Voided rows stay in lists rather than disappearing — that's the point of a reversal over a delete.
+- `v_petty_cash_balance` filters voided entries in the **JOIN**, not the WHERE: in the WHERE, an
+  account whose only entries were voided would vanish from the list entirely.
+- The GRN stock guard aggregates per material before comparing. Checking row-by-row would pass two
+  lines of the same material individually while the combined reversal still went negative.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar (`pglast`/libpg_query): outer SQL clean,
+  `fn_void_record` plpgsql body clean. Three trigger functions report a parser JSONDecodeError —
+  **the same three fail identically in the already-applied 002/003/012**, so it's a pglast quirk,
+  not a defect.
+- No `create or replace view` anywhere in 020 — every view is drop-then-create (the rule that had
+  been broken three times).
+- All eight recreated views explicitly re-granted; `DROP VIEW` discards privileges.
+- `tsc --noEmit` clean.
+
+- [x] **`CLEAR_transactions.sql` delete order fixed** — the two new FKs broke it. `material_inward`
+      must now precede `grn_lines`, and `expenses` must precede `petty_cash_entries`. The old order
+      would have failed halfway.
+
+**Pending / next session (migration 021)**
+
+- [ ] Hard delete (founder/PM, confirm, blocked-if-referenced) for draft PRs, tasks, unsubmitted
+      safety entries, documents, unused vendors/materials.
+- [ ] `cancelled`/`rejected` + reason on PO and VO, excluded from active lists and value/match.
+      Cancelling a PO with a live GRN blocked — void the GRN first.
+- [ ] **Petty cash has no screen** — the tables and the void path exist and work, but there's no UI
+      to reach them from. Either build the screen or drop the module.
+- [ ] Re-run the supervisor incognito test: supervisors must still see no money on Movements.
+
+**Migration 020 APPLIED** — confirmed 2026-07-27; the verify SELECT returned `fn_void_record` and
+`fn_stock_on_hand`, both of which sit near the end of the script, so every statement above them ran.
+
+---
+
+## Fix — records raised by a supervisor "missing" for the founder
+
+**Not a data or RLS problem.** `is_member()` already returns true for founders on every project, so
+a founder can read every PO, task and movement. The records were there the whole time; the founder
+was looking at a different project, and the UI gave no clue.
+
+Three causes, all fixed:
+
+- [x] **The selected project was stored under one shared localStorage key.** Signing out of one
+      account and into another on the same browser inherited the previous person's selection. Now
+      namespaced per user id (`masonos.selectedProjectId.<uid>`), with a one-time carry-over from
+      the old shared key so nobody's choice resets.
+- [x] **ProjectPicker rendered NOTHING when the user had a single project** — which is exactly the
+      supervisor's case. They had no way to see which project they were logging against. The active
+      project is now always named; only the ability to *change* it depends on having more than one.
+- [x] **Empty lists were ambiguous.** "Nothing was raised" and "you're on the wrong project" looked
+      identical. Added `OtherProjectsHint` under the empty states on Orders, Tasks and Movements:
+      "Showing <Project> only. You have N projects — switch with the picker above."
+
+Also: the store now tracks `autoSelected`, set when a stored selection is no longer valid and it
+falls back to the first project — available for a future "we switched you" notice.
+
+`tsc --noEmit` clean.
+
+---
+
+## Session — Record removal, part 2: cancel/reject + supervisor self-void (migration 021)
+
+**The hole this closes.** An approved VO immediately moves `revised_contract_value` through
+`v_project_contract`, and there was **no way back**: `vo_status` was submitted/approved/rejected,
+and 'rejected' is only reachable while still submitted. A VO approved by mistake permanently
+inflated the contract figure — on the one number that defines the job. Purchase orders had the same
+shape of hole: an approved PO couldn't be cancelled.
+
+**Built**
+
+- [x] **Migration 021** `021_cancel_and_supervisor_void.sql`
+      - `cancelled` added to `vo_status` (po_status already had it from 012).
+      - `cancelled_at` / `cancelled_by` / `cancel_reason` on `purchase_orders` and
+        `variation_orders`, with a CHECK: **status = 'cancelled' ⇒ all three present and the reason
+        non-blank**. Scoped to cancelled rows, so existing rows can't violate it.
+      - **Why the CHECK matters and the RPC alone didn't:** `purchase_orders` has a client-writable
+        UPDATE policy (`po_update`) and the app calls `setPoStatus()` directly. A client could have
+        flipped status to 'cancelled' with no reason. The constraint makes that impossible —
+        `cancelled_by` can only be stamped honestly by the SECURITY DEFINER function.
+      - **`fn_cancel_document(p_table, p_id, p_reason)`** — role check (PO = founder/pm, VO =
+        founder, mirroring who approves), mandatory reason, audit row. Refuses to cancel a PO that
+        still has live goods receipts or vendor invoices, naming the count: *"void the receipt(s)
+        first, then cancel the order."* Refuses a closed order.
+      - **`fn_reject_variation(p_id, p_reason)`** — rejection was a bare status flip with no
+        explanation; now the reason is recorded and shown on the card.
+      - **Cancelled documents drop out of the numbers, server-side:** `v_project_contract` (which
+        also now returns `cancelled_value`), `v_po_value`, `v_po_match`. `fn_receive_goods` and
+        `fn_post_invoice` refuse to act on a cancelled order.
+- [x] **Supervisor self-void** — `fn_void_record` now accepts a supervisor voiding a
+      `material_inward` / `material_issues` row **they created**. Goods receipts stay founder/pm
+      (voiding one reverses a whole delivery). Every 020 guard still applies: can't void consumed
+      stock, can't void a GRN-created inward row.
+      Scope chosen: **own entries, any date** — the literal reading of the instruction. The
+      migration documents the one-line change to tighten it to same-day only.
+- [x] **UI** — `VoidDialog` refactored into a shared `DestructiveDialog` shell so void, cancel and
+      reject read identically and can't drift. New `CancelDialog`, `RejectVoDialog`,
+      `CancelledBadge`, `CancelNote`. Wired into:
+      - **Variations** — "Cancel variation" on approved VOs (founder), Reject-with-reason on
+        submitted ones, and the reason shown on cancelled/rejected cards.
+      - **Orders** — "Cancel order" on any non-closed PO (founder/pm); the PO document is hidden
+        once cancelled; the reason shows on the collapsed card.
+      - **Movements** — supervisors now see Void on their own entries. On someone else's they get
+        *"Logged by someone else. Ask a PM or the founder to void it."* rather than a blank space,
+        which previously read as "corrections are impossible".
+
+**Verification**
+
+- Parsed against the real PostgreSQL grammar (pglast/libpg_query): outer SQL clean, all five
+  function bodies clean — including the two rewritten from 020.
+- **Enum/transaction trap avoided:** `alter type … add value` commits the label, but Postgres
+  refuses to USE it elsewhere in the same transaction, and the Supabase editor runs a script as one.
+  Every comparison against 'cancelled' outside a function body is written `status::text = '…'`.
+  Recorded in CLAUDE.md as a standing rule.
+- No `create or replace view` — all four views drop-then-create, and all are re-granted.
+- `tsc --noEmit` clean.
+
+**Still pending**
+
+- [ ] Hard delete (mechanism 1): draft PRs, tasks, unsubmitted safety entries, documents, unused
+      vendors/materials — founder/PM, confirm dialog, blocked with an explanation if referenced.
+- [ ] Petty cash still has no screen.
+- [ ] Supervisor incognito re-test after 021.
+
+**Run migration 021 before testing.**
+
+---
+
+## Session — Record removal, part 3: hard delete (migration 022)
+
+Asked for "delete/cancel on everything in the founder section". Built as: **a removal action on
+every record type, with the mechanism chosen by what the record affects.** Money and stock still
+can't be hard-deleted — that's void — and the RPC now says so explicitly instead of the button
+simply being absent.
+
+**Starting state was worse than it looked.** RLS is default-deny, and there were DELETE policies on
+only three things (documents, project_members, profiles). Tasks, site logs, safety entries,
+incidents, materials, vendors: none could be removed at all.
+
+**Built**
+
+- [x] **Migration 022** `022_hard_delete.sql` — `fn_delete_record(p_table, p_id)`.
+      Deletable, each reference-checked server-side:
+      - `tasks` — refused if another task was rolled over from it (the rollover chain is history)
+      - `site_logs`, `incidents`, `safety_checklists` (items cascade), `documents`
+      - `purchase_orders` **only while status = 'requested'** — anything approved has a number a
+        vendor may hold, so it's cancelled instead, and the error says so
+      - `materials` — refused with a count if any delivery, issue or PO line uses it
+      - `vendors` — refused with a count if any expense, delivery or PO references it
+      - `budgets` (founder/accounts, matching `budgets_write`)
+      Explicitly refused, with the right instruction rather than a generic error:
+      expenses / petty cash / inward / issues / GRNs / invoices → *"void it instead"*;
+      variation_orders → *"cancel it instead"*; projects → *"set it to Completed or On hold"*;
+      profiles → *"deactivate them"*.
+- [x] **No DELETE policies added.** RLS default-deny means the client cannot delete these tables
+      directly; `fn_delete_record` is SECURITY DEFINER and is the only route. Same shape as
+      `fn_void_record` and `fn_cancel_document`.
+- [x] Audit triggers added on `incidents`, `safety_checklists` and `budgets` — they were newly
+      deletable and a delete must leave a trail. Plus a `DELETE_HARD` audit row so deletions are
+      greppable alongside `VOID` and `CANCEL`.
+- [x] **UI** — shared `DeleteButton` + confirm (`src/components/DeleteAction.tsx`). No reason field,
+      unlike void/cancel: nothing moved, so what matters is that it's deliberate. The RPC's refusal
+      message is surfaced verbatim, because it tells the user what to do next. Wired into Tasks,
+      Materials, Vendors, Incidents, Documents, and draft requests on Orders.
+
+**Decisions taken (confirmed with the user)**
+
+- **Projects: archive, don't delete.** Every table cascades on project_id — one click would destroy
+  a whole job's history including its audit log.
+- **Users: deactivate, don't delete.** Their name is on `created_by` / `raised_by` / `approved_by`.
+- **Money/stock: still void only.** Deleting an expense destroys the audit trail on a figure someone
+  will later have to explain, and GST invoices carry a statutory retention requirement in India.
+
+**Verification**
+
+- Parsed against the real PostgreSQL grammar (pglast/libpg_query): outer SQL and the function body
+  both clean.
+- Caught during review: the top-level role gate was founder/pm, which would have made the
+  founder/accounts budgets branch unreachable. Split into a coarse gate plus per-branch rules, with
+  the not-deletable branches left reachable by accounts so they get *"void it instead"* rather than
+  a role refusal.
+- `tsc --noEmit` clean.
+
+**Still pending**
+
+- [ ] Petty cash still has no screen.
+- [ ] Supervisor incognito re-test after 021 + 022.
+- [ ] Orphaned storage objects: deleting a document row removes the listing, not the file in the
+      bucket. Worth a cleanup pass or a storage delete in the same call.
+
+**Run migration 021 then 022 before testing** — `APPLY_pending.sql` contains both, in order.

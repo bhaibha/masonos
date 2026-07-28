@@ -1,11 +1,17 @@
 import { Receipt } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
+import {
+  VoidBadge,
+  VoidDialog,
+  VoidNote,
+  voidRowClass,
+} from '@/components/VoidDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
@@ -15,15 +21,19 @@ import {
   fetchExpenses,
   fetchExpenseTotal,
 } from '@/lib/queries/expenses'
+import { fetchUserNames } from '@/lib/queries/voids'
 import { signedReceiptUrl } from '@/lib/storage'
 import {
+  canVoid,
   EXPENSE_SOURCES,
+  isVoid,
   type ExpenseCategory,
   type ExpenseFilters,
   type ExpenseRow,
   type ExpenseSource,
   type ExpenseTotal,
 } from '@/lib/types'
+import { useAuth } from '@/store/auth'
 import type { MoneyContext } from './MoneyLayout'
 
 const SOURCE_LABEL = Object.fromEntries(
@@ -33,11 +43,15 @@ const SOURCE_LABEL = Object.fromEntries(
 export default function Ledger() {
   const { projectId } = useOutletContext<MoneyContext>()
   const navigate = useNavigate()
+  const role = useAuth((s) => s.role)
+  const mayVoid = canVoid(role, 'expenses')
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
   const [rows, setRows] = useState<ExpenseRow[] | null>(null)
   const [total, setTotal] = useState<ExpenseTotal | null>(null)
+  const [names, setNames] = useState<Map<string, string>>(new Map())
   const [showFilters, setShowFilters] = useState(false)
+  const [voiding, setVoiding] = useState<ExpenseRow | null>(null)
 
   const [categoryId, setCategoryId] = useState('')
   const [source, setSource] = useState('')
@@ -50,11 +64,7 @@ export default function Ledger() {
 
   const filtered = Boolean(categoryId || source || from || to)
 
-  useEffect(() => {
-    let cancelled = false
-    setRows(null)
-    setTotal(null)
-
+  const load = useCallback(async () => {
     const filters: ExpenseFilters = {}
     if (categoryId) filters.categoryId = Number(categoryId)
     if (source) filters.source = source as ExpenseSource
@@ -62,26 +72,33 @@ export default function Ledger() {
     if (to) filters.to = to
 
     // List and total use identical filters. The sum is computed by
-    // fn_expense_total in Postgres — never added up from `rows`.
-    Promise.all([
+    // fn_expense_total in Postgres — never added up from `rows`. Since
+    // migration 020 that function excludes voided rows, which is why a voided
+    // entry can stay in this list without changing the figure above it.
+    const [data, sum] = await Promise.all([
       fetchExpenses(projectId, filters),
       fetchExpenseTotal(projectId, filters),
     ])
-      .then(([data, sum]) => {
-        if (cancelled) return
-        setRows(data)
-        setTotal(sum)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        toast.error('Could not load the ledger', { description: errText(err) })
-        setRows([])
-      })
+    setRows(data)
+    setTotal(sum)
+    setNames(await fetchUserNames(data.map((r) => r.voided_by)))
+  }, [projectId, categoryId, source, from, to])
+
+  useEffect(() => {
+    let cancelled = false
+    setRows(null)
+    setTotal(null)
+
+    load().catch((err: unknown) => {
+      if (cancelled) return
+      toast.error('Could not load the ledger', { description: errText(err) })
+      setRows([])
+    })
 
     return () => {
       cancelled = true
     }
-  }, [projectId, categoryId, source, from, to])
+  }, [load])
 
   function clearFilters() {
     setCategoryId('')
@@ -205,17 +222,48 @@ export default function Ledger() {
           <Stagger className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
               <RevealItem key={r.id}>
-                <LedgerRow row={r} />
+                <LedgerRow
+                  row={r}
+                  mayVoid={mayVoid}
+                  voidedByName={r.voided_by ? names.get(r.voided_by) : null}
+                  onVoid={() => setVoiding(r)}
+                />
               </RevealItem>
             ))}
           </Stagger>
         </>
       )}
+
+      {voiding && (
+        <VoidDialog
+          table="expenses"
+          id={voiding.id}
+          summary={`${formatInr(voiding.amount + voiding.gst_amount)} · ${
+            voiding.category_name ?? 'Uncategorised'
+          } · ${voiding.expense_date}`}
+          consequence="The entry stays in the ledger marked VOID, but stops counting towards project spend, the budget and every dashboard figure."
+          onDone={async () => {
+            setVoiding(null)
+            await load()
+          }}
+          onCancel={() => setVoiding(null)}
+        />
+      )}
     </div>
   )
 }
 
-function LedgerRow({ row }: { row: ExpenseRow }) {
+function LedgerRow({
+  row,
+  mayVoid,
+  voidedByName,
+  onVoid,
+}: {
+  row: ExpenseRow
+  mayVoid: boolean
+  voidedByName?: string | null
+  onVoid: () => void
+}) {
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
   const [loadingReceipt, setLoadingReceipt] = useState(false)
 
@@ -228,12 +276,16 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
     setLoadingReceipt(false)
   }
 
+  const voided = isVoid(row)
+
   return (
     <div className="px-5 py-4">
+      <div className={voidRowClass(voided)}>
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
+          <p className="flex items-center gap-2 truncate text-sm font-medium">
             {row.category_name ?? 'Uncategorised'}
+            {voided && <VoidBadge className="no-underline" />}
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {row.expense_date}
@@ -301,6 +353,26 @@ function LedgerRow({ row }: { row: ExpenseRow }) {
             </Button>
           )}
         </div>
+      )}
+      </div>
+
+      {voided ? (
+        <VoidNote
+          reason={row.void_reason}
+          by={voidedByName}
+          at={row.voided_at}
+        />
+      ) : (
+        mayVoid && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onVoid}
+            className="mt-1 -ml-2 h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            Void
+          </Button>
+        )
       )}
     </div>
   )

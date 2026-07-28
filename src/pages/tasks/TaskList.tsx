@@ -2,9 +2,11 @@ import { ListChecks } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { DeleteButton } from '@/components/DeleteAction'
 import { Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +17,7 @@ import {
   TASK_STATUS_LABEL,
   type TaskRow,
   type TaskStatus,
+  type UserRole,
 } from '@/lib/types'
 import { addDays, formatDayLabel, useSelectedDate } from '@/lib/useSelectedDate'
 import { cn } from '@/lib/utils'
@@ -80,20 +83,28 @@ export default function TaskList() {
       {tasks === null && <ListSkeleton rows={4} />}
 
       {tasks?.length === 0 && (
-        <EmptyState
-          icon={ListChecks}
-          title="Nothing planned for this day"
-          body="Add the work you want done today — mark each one Done, Partial or Not done as the day goes."
-          actionLabel={canWrite ? 'Add a task' : undefined}
-          onAction={canWrite ? () => navigate('/tasks/new') : undefined}
-        />
+        <>
+          <EmptyState
+            icon={ListChecks}
+            title="Nothing planned for this day"
+            body="Add the work you want done today — mark each one Done, Partial or Not done as the day goes."
+            actionLabel={canWrite ? 'Add a task' : undefined}
+            onAction={canWrite ? () => navigate('/tasks/new') : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {tasks && tasks.length > 0 && (
         <Stagger className="space-y-3">
           {tasks.map((t) => (
             <RevealItem key={t.id}>
-              <TaskCard task={t} canWrite={canWrite} onChanged={reload} />
+              <TaskCard
+                task={t}
+                canWrite={canWrite}
+                role={role}
+                onChanged={reload}
+              />
             </RevealItem>
           ))}
         </Stagger>
@@ -125,10 +136,12 @@ const STATUS_STYLE: Record<TaskStatus, string> = {
 function TaskCard({
   task,
   canWrite,
+  role,
   onChanged,
 }: {
   task: TaskRow
   canWrite: boolean
+  role: UserRole | null
   onChanged: () => Promise<void>
 }) {
   const [mode, setMode] = useState<'idle' | 'partial' | 'not_done'>('idle')
@@ -234,6 +247,19 @@ function TaskCard({
             Not done
           </Button>
         </div>
+      )}
+
+      {/* A task has no downstream effect, so it's a real delete — unless it
+          was rolled over, which fn_delete_record refuses and explains. */}
+      {mode === 'idle' && (
+        <DeleteButton
+          table="tasks"
+          id={task.id}
+          name={task.title}
+          role={role}
+          onDeleted={onChanged}
+          className="mt-2 -ml-2"
+        />
       )}
 
       {canWrite && mode === 'partial' && (

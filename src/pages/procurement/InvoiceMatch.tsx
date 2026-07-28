@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  VoidBadge,
+  VoidDialog,
+  VoidNote,
+  voidRowClass,
+} from '@/components/VoidDialog'
+import { errText } from '@/lib/errText'
 import { formatInr } from '@/lib/format'
 import {
   createInvoice,
@@ -9,9 +16,13 @@ import {
   fetchMatch,
   postInvoice,
 } from '@/lib/queries/procurement'
+import { fetchGoodsReceipts, fetchUserNames } from '@/lib/queries/voids'
 import {
   canPostInvoice,
+  canVoid,
+  isVoid,
   MATCH_STATUS_LABEL,
+  type GoodsReceiptRow,
   type MatchRow,
   type MatchStatus,
   type PoInvoiceRow,
@@ -32,17 +43,33 @@ export default function InvoiceMatch({ poId }: { poId: string }) {
   const role = useAuth((s) => s.role)
   const [match, setMatch] = useState<MatchRow[] | null>(null)
   const [invoices, setInvoices] = useState<PoInvoiceRow[]>([])
+  const [receipts, setReceipts] = useState<GoodsReceiptRow[]>([])
+  const [names, setNames] = useState<Map<string, string>>(new Map())
   const [entering, setEntering] = useState(false)
+  const [voidingInvoice, setVoidingInvoice] = useState<PoInvoiceRow | null>(null)
+  const [voidingGrn, setVoidingGrn] = useState<GoodsReceiptRow | null>(null)
+
+  const mayVoidInvoice = canVoid(role, 'po_invoices')
+  const mayVoidGrn = canVoid(role, 'goods_receipts')
 
   const reload = useCallback(async () => {
     try {
-      const [m, inv] = await Promise.all([fetchMatch(poId), fetchInvoices(poId)])
+      const [m, inv, grn] = await Promise.all([
+        fetchMatch(poId),
+        fetchInvoices(poId),
+        fetchGoodsReceipts(poId),
+      ])
       setMatch(m)
       setInvoices(inv)
+      setReceipts(grn)
+      setNames(
+        await fetchUserNames([
+          ...inv.map((i) => i.voided_by),
+          ...grn.map((g) => g.voided_by),
+        ]),
+      )
     } catch (err) {
-      toast.error('Could not load match', {
-        description: err instanceof Error ? err.message : undefined,
-      })
+      toast.error('Could not load match', { description: errText(err) })
       setMatch([])
     }
   }, [poId])
@@ -68,7 +95,8 @@ export default function InvoiceMatch({ poId }: { poId: string }) {
     return <p className="text-sm text-muted-foreground">Loading match…</p>
   }
 
-  const unpostedInvoice = invoices.find((i) => !i.approved)
+  // A voided invoice is neither posted nor pending — it's out of the picture.
+  const unpostedInvoice = invoices.find((i) => !i.approved && !isVoid(i))
   const hasVariance = match.some(
     (m) => m.match_status !== 'ok' && m.match_status !== 'pending',
   )
@@ -121,36 +149,167 @@ export default function InvoiceMatch({ poId }: { poId: string }) {
         ))}
       </ul>
 
+      {/* Goods receipts — the only place a delivery gets reversed, because
+          voiding the GRN is what reverses the stock it created. */}
+      {receipts.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+            Deliveries received
+          </p>
+          {receipts.map((g) => {
+            const voided = isVoid(g)
+            return (
+              <div
+                key={g.id}
+                className="rounded-lg border border-border px-3 py-2 text-sm"
+              >
+                <div
+                  className={cn(
+                    'flex items-center justify-between gap-3',
+                    voidRowClass(voided),
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-2 truncate">
+                    <span className="truncate">
+                      {g.received_date} · {g.line_count}{' '}
+                      {g.line_count === 1 ? 'line' : 'lines'}
+                    </span>
+                    {voided && <VoidBadge className="no-underline" />}
+                  </span>
+                  {!voided && mayVoidGrn && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setVoidingGrn(g)}
+                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Void
+                    </Button>
+                  )}
+                </div>
+                {voided && (
+                  <VoidNote
+                    reason={g.void_reason}
+                    by={g.voided_by ? names.get(g.voided_by) : null}
+                    at={g.voided_at}
+                  />
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {invoices.length > 0 && (
         <div className="space-y-2">
-          {invoices.map((i) => (
-            <div
-              key={i.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm"
-            >
-              <span className="min-w-0 truncate">
-                Invoice {i.invoice_no ?? '—'} · {i.invoice_date}
-              </span>
-              {i.approved ? (
-                <span className="shrink-0 text-xs text-[var(--positive)]">
-                  Posted
-                </span>
-              ) : canPostInvoice(role) ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => void post(i.id)}
+          {invoices.map((i) => {
+            const voided = isVoid(i)
+            return (
+              <div
+                key={i.id}
+                className="rounded-lg border border-border px-3 py-2 text-sm"
+              >
+                <div
+                  className={cn(
+                    'flex items-center justify-between gap-3',
+                    voidRowClass(voided),
+                  )}
                 >
-                  Post to Open Book
-                </Button>
-              ) : (
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  Awaiting posting
-                </span>
-              )}
-            </div>
-          ))}
+                  <span className="flex min-w-0 items-center gap-2 truncate">
+                    <span className="truncate">
+                      Invoice {i.invoice_no ?? '—'} · {i.invoice_date}
+                    </span>
+                    {voided && <VoidBadge className="no-underline" />}
+                  </span>
+
+                  {voided ? null : i.approved ? (
+                    <span className="flex shrink-0 items-center gap-2">
+                      <span className="text-xs text-[var(--positive)]">
+                        Posted
+                      </span>
+                      {mayVoidInvoice && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setVoidingInvoice(i)}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          Void
+                        </Button>
+                      )}
+                    </span>
+                  ) : canPostInvoice(role) ? (
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => void post(i.id)}
+                      >
+                        Post to Open Book
+                      </Button>
+                      {mayVoidInvoice && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setVoidingInvoice(i)}
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          Void
+                        </Button>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      Awaiting posting
+                    </span>
+                  )}
+                </div>
+
+                {voided && (
+                  <VoidNote
+                    reason={i.void_reason}
+                    by={i.voided_by ? names.get(i.voided_by) : null}
+                    at={i.voided_at}
+                  />
+                )}
+              </div>
+            )
+          })}
         </div>
+      )}
+
+      {voidingInvoice && (
+        <VoidDialog
+          table="po_invoices"
+          id={voidingInvoice.id}
+          summary={`Invoice ${voidingInvoice.invoice_no ?? '—'} · ${voidingInvoice.invoice_date}`}
+          consequence={
+            voidingInvoice.approved
+              ? 'The invoice drops out of the 3-way match, and the expense it posted to Open Book is voided with it.'
+              : 'The invoice drops out of the 3-way match. Nothing was posted to Open Book yet.'
+          }
+          onDone={async () => {
+            setVoidingInvoice(null)
+            await reload()
+          }}
+          onCancel={() => setVoidingInvoice(null)}
+        />
+      )}
+
+      {voidingGrn && (
+        <VoidDialog
+          table="goods_receipts"
+          id={voidingGrn.id}
+          summary={`Delivery received ${voidingGrn.received_date} · ${voidingGrn.line_count} ${
+            voidingGrn.line_count === 1 ? 'line' : 'lines'
+          }`}
+          consequence="Every stock movement this receipt created is voided too, and the order goes back to the status the remaining deliveries justify. Blocked if an invoice is already posted, or if reversing would take stock below zero."
+          onDone={async () => {
+            setVoidingGrn(null)
+            await reload()
+          }}
+          onCancel={() => setVoidingGrn(null)}
+        />
       )}
 
       {hasVariance && unpostedInvoice && canPostInvoice(role) && (

@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { DeleteButton } from '@/components/DeleteAction'
 import { signedDocumentUrl } from '@/lib/storage'
 import { type DocumentRow, PO_STATUS_LABEL, type PoStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/store/auth'
 
 const PO_STATUS_TONE: Partial<Record<PoStatus, string>> = {
   requested: 'bg-[color-mix(in_oklab,var(--warning)_16%,transparent)] text-[var(--warning)]',
@@ -32,17 +34,31 @@ function prettyDate(iso: string): string {
   }).format(new Date(iso))
 }
 
-export function DocumentList({ docs }: { docs: DocumentRow[] }) {
+export function DocumentList({
+  docs,
+  onChanged,
+}: {
+  docs: DocumentRow[]
+  /** omit to hide the delete action (e.g. read-only embeds) */
+  onChanged?: () => void | Promise<void>
+}) {
   return (
     <ul className="divide-y divide-border rounded-xl border border-border">
       {docs.map((d) => (
-        <DocumentItem key={d.id} doc={d} />
+        <DocumentItem key={d.id} doc={d} onChanged={onChanged} />
       ))}
     </ul>
   )
 }
 
-function DocumentItem({ doc }: { doc: DocumentRow }) {
+function DocumentItem({
+  doc,
+  onChanged,
+}: {
+  doc: DocumentRow
+  onChanged?: () => void | Promise<void>
+}) {
+  const role = useAuth((s) => s.role)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -99,6 +115,21 @@ function DocumentItem({ doc }: { doc: DocumentRow }) {
           </span>
         </div>
       </button>
+
+      {/* Outside the button — nesting a button inside a button is invalid and
+          the click would fall through to "open the file". */}
+      {onChanged && (
+        <div className="px-4 pb-2">
+          <DeleteButton
+            table="documents"
+            id={doc.id}
+            name={doc.title}
+            role={role}
+            onDeleted={onChanged}
+            className="-ml-2"
+          />
+        </div>
+      )}
     </li>
   )
 }

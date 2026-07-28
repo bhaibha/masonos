@@ -30,8 +30,16 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 - **001–016 ALL APPLIED** (confirmed live 2026-07-23; 016 verified via revised-contract-value working).
   **017 + 018 APPLIED** (confirmed 2026-07-25: 017 via the unregistered-vendor flow working end to
   end; 018 via audit_log showing INSERT rows on `vendors`, which only the 018 trigger writes).
-  So: **001–018 ALL APPLIED.** **019 PENDING** (adds `profiles.designation` + audit trigger on
-  `profiles` + `profiles_admin_delete`). Next migration = 020.
+  So: **001–020 ALL APPLIED** (020 confirmed 2026-07-27 — the verify SELECT returned both
+  `fn_void_record` and `fn_stock_on_hand`, and they sit near the end of the script, so everything
+  above them ran too).
+  **021 + 022 PENDING** — 021 = cancel/reject on PO + VO (`fn_cancel_document`,
+  `fn_reject_variation`) + supervisor self-void of own stock entries;
+  022 = hard delete (`fn_delete_record`). Run 021 before 022. Next migration = 023.
+- **Enum lesson (021):** `alter type … add value` commits the label, but the new label CANNOT be
+  used elsewhere in the same transaction — and the Supabase SQL editor runs a script as one. Write
+  every comparison against a newly added label as `status::text = 'x'`, never the enum literal.
+  Inside plpgsql bodies it's safe (resolved at call time), but outside it isn't.
 - Re-run lessons baked into APPLY_pending.sql: drop dependent views with CASCADE (v_project_spend →
   v_portfolio_summary); cast enum assignments explicitly (`::po_status`).
 - **NEVER use `create or replace view` when redefining an existing view.** It cannot add a column
@@ -109,6 +117,36 @@ Aesthetic: restrained luxury — architect's studio, not consumer app. Refined, 
 
 ## What is BUILT (do not rebuild)
 Dashboard + Project Detail · Open Book (expenses/budgets/receipts) · Petty Cash · Tasks + rollover + Daily Site Log · Materials (inward/issue/stock) · Document Vault · Vendors (data only, screen pending) · Roles/RLS (tested) · Audit log · Storage security (migrations 001–006 applied) · Safety (A2) · Procurement PR→PO→GRN→3-way match (A3) · Variation Orders (A5) · **Admin (founder-only): create projects, create users with job titles + access roles, assign project membership.**
+
+## Record removal — the rule (don't add hard delete to money or stock)
+Three different mechanisms, chosen by what the record affects:
+1. **Hard delete** — only for records with no downstream effect: tasks, site logs, safety
+   checklists, incidents, documents, **draft (still `requested`) PRs**, unreferenced
+   vendors/materials, budget lines. Founder/PM (budgets: founder/accounts), confirm dialog, and
+   **blocked with a message naming what's in the way** if anything references it. The only path is
+   `fn_delete_record(p_table, p_id)`; no DELETE policies exist on these tables, so RLS default-deny
+   means the RPC cannot be bypassed. *(migration 022)*
+   **Projects and users are NOT deletable** — a project cascades to every record hanging off it,
+   and a person's name is stamped on what they raised. Archive the project (status) and deactivate
+   the user instead; both are already on the Admin screen.
+2. **Void/reverse** — for anything financial or stock-bearing. The row stays, marked VOID, and is
+   excluded from every total by the **server-side view/RPC**, never by a client filter. Reason is
+   mandatory (a CHECK constraint enforces it). Money = founder/accounts, stock = founder/pm —
+   **plus a supervisor voiding an inward/issue they created themselves** (021: they log the stock,
+   so they make the typos). The ONLY path is `fn_void_record(p_table, p_id, p_reason)`; there is
+   deliberately no UPDATE policy on `voided_at`, so the client cannot flip it directly.
+   *(migrations 020, 021)*
+3. **Cancel/reject status** — for workflow documents (PO, VO, and SI/RFI when A6/A7 ship). Excluded
+   from active lists and from value/match calculations. Cancelling a PO that still has a live GRN or
+   invoice is blocked — void those first. PO = founder/pm, VO = founder (mirrors who approves).
+   The only path is `fn_cancel_document(p_table, p_id, p_reason)`, and a CHECK constraint requiring
+   `cancelled_at`+`cancelled_by`+reason is what stops a direct client UPDATE reaching `cancelled`
+   (purchase_orders has a writable UPDATE policy, so the RPC alone wasn't enough). *(migration 021)*
+
+Voiding cascades, and the cascade is why the back-links exist: a GRN void reverses the
+`material_inward` rows it created (`grn_line_id`), a petty-cash void reverses the mirrored expense
+(`pc_entry_id`), an invoice void reverses the expense it posted (`po_invoices.expense_id`). Guards
+refuse a void that would push stock below zero or strand a posted invoice.
 
 ## Admin module — how roles work (don't redesign this)
 `profiles.designation` is a **display-only job title** (Site Engineer, Billing Engineer, Planning

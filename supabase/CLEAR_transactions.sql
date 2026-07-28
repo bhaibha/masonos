@@ -25,9 +25,21 @@
 
 BEGIN;
 
+-- ORDER UPDATED BY MIGRATION 020, which added two back-links:
+--   material_inward.grn_line_id -> grn_lines   (inward BEFORE grn_lines)
+--   expenses.pc_entry_id        -> petty_cash_entries (expenses BEFORE pc entries)
+-- The old order deleted grn_lines and petty_cash_entries first and would now
+-- fail on those FKs.
+
 -- ---------- PROCUREMENT (deepest children first) ----------
 DELETE FROM public.invoice_lines;
 DELETE FROM public.po_invoices;      -- must precede expenses (expense_id FK)
+
+-- ---------- MATERIAL MOVEMENTS (masters `materials` kept) ----------
+DELETE FROM public.material_issues;
+DELETE FROM public.material_inward;  -- must precede grn_lines (grn_line_id FK)
+
+-- ---------- PROCUREMENT, rest ----------
 DELETE FROM public.grn_lines;
 DELETE FROM public.goods_receipts;
 DELETE FROM public.po_lines;
@@ -41,14 +53,6 @@ DELETE FROM public.safety_checklist_items;
 DELETE FROM public.safety_checklists;
 DELETE FROM public.incidents;
 
--- ---------- MATERIAL MOVEMENTS (masters `materials` kept) ----------
-DELETE FROM public.material_issues;
-DELETE FROM public.material_inward;
-
--- ---------- PETTY CASH ----------
-DELETE FROM public.petty_cash_entries;
-DELETE FROM public.petty_cash_accounts;
-
 -- ---------- SITE / TASKS ----------
 DELETE FROM public.tasks;            -- self-FK (rolled_from) handled by full delete
 DELETE FROM public.site_logs;
@@ -57,8 +61,12 @@ DELETE FROM public.site_logs;
 DELETE FROM public.documents;
 
 -- ---------- MONEY ----------
-DELETE FROM public.expenses;
+DELETE FROM public.expenses;         -- must precede petty_cash_entries (pc_entry_id FK)
 DELETE FROM public.budgets;
+
+-- ---------- PETTY CASH ----------
+DELETE FROM public.petty_cash_entries;
+DELETE FROM public.petty_cash_accounts;
 
 -- ---------- AUDIT LOG (last: the deletes above wrote to it) ----------
 DELETE FROM public.audit_log;

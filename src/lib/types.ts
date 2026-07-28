@@ -196,6 +196,191 @@ export function canEditBudgets(role: UserRole | null): boolean {
   return role !== null && BUDGET_WRITE_ROLES.includes(role)
 }
 
+// ---------- Void / reverse (migration 020) ----------
+
+/**
+ * Tables fn_void_record accepts. Financial and stock rows are never deleted —
+ * they're voided, stay visible marked VOID, and drop out of every server-side
+ * total. The exclusion happens in Postgres (v_project_spend, v_stock,
+ * fn_expense_total, v_po_match …), never here.
+ */
+export type VoidableTable =
+  | 'expenses'
+  | 'petty_cash_entries'
+  | 'material_inward'
+  | 'material_issues'
+  | 'goods_receipts'
+  | 'po_invoices'
+
+/** Fields every voidable row carries. */
+export interface VoidFields {
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+}
+
+export function isVoid(row: { voided_at: string | null }): boolean {
+  return row.voided_at !== null
+}
+
+/** Money records: founder/accounts. Mirrors fn_void_record's own check. */
+export const VOID_MONEY_ROLES: UserRole[] = ['founder', 'accounts']
+
+/** Stock records: founder/pm — plus a supervisor's own entries, see below. */
+export const VOID_STOCK_ROLES: UserRole[] = ['founder', 'pm']
+
+function isStockTable(table: VoidableTable): boolean {
+  return (
+    table === 'material_inward' ||
+    table === 'material_issues' ||
+    table === 'goods_receipts'
+  )
+}
+
+/**
+ * Mirrors fn_void_record exactly. The database is the boundary — this only
+ * decides whether to render the button.
+ *
+ * Migration 021: a **supervisor may void a delivery or issue they created
+ * themselves**. They're the ones logging stock at site, so they're the ones who
+ * mistype it; before 021 the register stayed wrong until a PM acted. Goods
+ * receipts stay founder/pm — voiding one reverses a whole delivery.
+ *
+ * Pass `createdBy` (and the caller's own id) for the self-void case.
+ */
+export function canVoid(
+  role: UserRole | null,
+  table: VoidableTable,
+  opts?: { createdBy?: string | null; myId?: string | null },
+): boolean {
+  if (role === null) return false
+
+  if (!isStockTable(table)) return VOID_MONEY_ROLES.includes(role)
+  if (VOID_STOCK_ROLES.includes(role)) return true
+
+  // Supervisor self-void — inward and issues only, never goods receipts.
+  if (
+    role === 'supervisor' &&
+    (table === 'material_inward' || table === 'material_issues') &&
+    opts?.createdBy &&
+    opts.myId &&
+    opts.createdBy === opts.myId
+  ) {
+    return true
+  }
+
+  return false
+}
+
+// ---------- Cancel / reject (migration 021) ----------
+
+/** Workflow documents get cancelled, not voided. */
+export type CancellableTable = 'purchase_orders' | 'variation_orders'
+
+export const CANCELLABLE_LABEL: Record<CancellableTable, string> = {
+  purchase_orders: 'purchase order',
+  variation_orders: 'variation order',
+}
+
+export interface CancelFields {
+  cancelled_at: string | null
+  cancelled_by: string | null
+  cancel_reason: string | null
+}
+
+/** POs: founder/pm (same as po_update). VOs: founder only, like approval. */
+export function canCancel(
+  role: UserRole | null,
+  table: CancellableTable,
+): boolean {
+  if (role === null) return false
+  return table === 'purchase_orders'
+    ? role === 'founder' || role === 'pm'
+    : role === 'founder'
+}
+
+// ---------- Hard delete (migration 022) ----------
+
+/**
+ * Records with no downstream effect. Anything carrying money or stock is
+ * VOIDED, and workflow documents are CANCELLED — fn_delete_record refuses
+ * those outright and says which mechanism to use instead.
+ *
+ * Projects and users are absent on purpose: a project cascades to every record
+ * hanging off it, and a person's name is stamped on what they raised. Archive
+ * and deactivate respectively (both already on the Manage screen).
+ */
+export type DeletableTable =
+  | 'tasks'
+  | 'site_logs'
+  | 'safety_checklists'
+  | 'incidents'
+  | 'documents'
+  | 'purchase_orders'
+  | 'materials'
+  | 'vendors'
+  | 'budgets'
+
+export const DELETABLE_LABEL: Record<DeletableTable, string> = {
+  tasks: 'task',
+  site_logs: 'site log',
+  safety_checklists: 'safety checklist',
+  incidents: 'incident',
+  documents: 'document',
+  purchase_orders: 'request',
+  materials: 'material',
+  vendors: 'vendor',
+  budgets: 'budget line',
+}
+
+/** Mirrors fn_delete_record: budgets are founder/accounts, the rest founder/pm. */
+export function canDelete(
+  role: UserRole | null,
+  table: DeletableTable,
+): boolean {
+  if (role === null) return false
+  return table === 'budgets'
+    ? role === 'founder' || role === 'accounts'
+    : role === 'founder' || role === 'pm'
+}
+
+/** What each record type is called in confirm dialogs and toasts. */
+export const VOIDABLE_LABEL: Record<VoidableTable, string> = {
+  expenses: 'expense',
+  petty_cash_entries: 'petty cash entry',
+  material_inward: 'delivery',
+  material_issues: 'issue',
+  goods_receipts: 'goods receipt',
+  po_invoices: 'vendor invoice',
+}
+
+/** A stock movement row for the Movements list (inward and issues combined). */
+export interface MovementRow extends VoidFields {
+  id: string
+  kind: 'inward' | 'issue'
+  table: VoidableTable
+  material_id: string
+  material_name: string
+  material_unit: string
+  move_date: string
+  qty: number
+  /** vendor for inward, work area for issue */
+  party: string | null
+  note: string | null
+  /** inward rows created by a GRN can't be voided directly */
+  from_grn: boolean
+  /** who logged it — decides whether a supervisor may void it (021) */
+  created_by: string | null
+}
+
+export interface GoodsReceiptRow extends VoidFields {
+  id: string
+  po_id: string
+  received_date: string
+  note: string | null
+  line_count: number
+}
+
 // ---------- Tasks & site log ----------
 
 export type TaskStatus = 'pending' | 'done' | 'partial' | 'not_done'
@@ -404,7 +589,7 @@ export interface PoLine {
   material_unit?: string
 }
 
-export interface PurchaseOrder {
+export interface PurchaseOrder extends CancelFields {
   id: string
   po_number: string
   project_id: string
@@ -473,7 +658,7 @@ export interface InvoiceLineInput {
   rate_invoiced: number
 }
 
-export interface PoInvoiceRow {
+export interface PoInvoiceRow extends VoidFields {
   id: string
   invoice_no: string | null
   invoice_date: string
@@ -483,12 +668,13 @@ export interface PoInvoiceRow {
 
 // ---------- Variation Orders ----------
 
-export type VoStatus = 'submitted' | 'approved' | 'rejected'
+export type VoStatus = 'submitted' | 'approved' | 'rejected' | 'cancelled'
 
 export const VO_STATUS_LABEL: Record<VoStatus, string> = {
   submitted: 'Submitted',
   approved: 'Approved',
   rejected: 'Rejected',
+  cancelled: 'Cancelled',
 }
 
 /** vo_insert — PM or founder raise. */
@@ -501,7 +687,7 @@ export function canApproveVO(role: UserRole | null): boolean {
   return role === 'founder'
 }
 
-export interface VariationOrder {
+export interface VariationOrder extends CancelFields {
   id: string
   vo_number: string
   project_id: string
@@ -749,7 +935,7 @@ export function canManageVendors(role: UserRole | null): boolean {
   return role !== null && VENDOR_ROLES.includes(role)
 }
 
-export interface ExpenseRow {
+export interface ExpenseRow extends VoidFields {
   id: string
   expense_date: string
   amount: number

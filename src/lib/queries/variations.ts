@@ -6,7 +6,7 @@ import type {
 } from '@/lib/types'
 
 const COLUMNS =
-  'id, vo_number, project_id, title, description, cost_impact, status, raised_by, approved_by, created_at'
+  'id, vo_number, project_id, title, description, cost_impact, status, raised_by, approved_by, created_at, cancelled_at, cancelled_by, cancel_reason'
 
 export async function fetchVariations(
   projectId: string,
@@ -31,6 +31,9 @@ export async function fetchVariations(
       raised_by: row.raised_by as string,
       approved_by: (row.approved_by as string | null) ?? null,
       created_at: row.created_at as string,
+      cancelled_at: (row.cancelled_at as string | null) ?? null,
+      cancelled_by: (row.cancelled_by as string | null) ?? null,
+      cancel_reason: (row.cancel_reason as string | null) ?? null,
     }
   })
 }

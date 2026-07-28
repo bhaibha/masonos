@@ -28,7 +28,7 @@ export async function fetchExpenses(
   let q = supabase
     .from('expenses')
     .select(
-      'id, expense_date, amount, gst_amount, source, invoice_no, description, receipt_path, category_id, vendor_id, vendor_name, expense_categories(name), vendors(name)',
+      'id, expense_date, amount, gst_amount, source, invoice_no, description, receipt_path, category_id, vendor_id, vendor_name, voided_at, voided_by, void_reason, pc_entry_id, expense_categories(name), vendors(name)',
     )
     .eq('project_id', projectId)
     .order('expense_date', { ascending: false })
@@ -69,6 +69,9 @@ export async function fetchExpenses(
       // Registered vendor name if linked, else the free-text name.
       vendor_display: row.vendor_id ? registeredName : (row.vendor_name ?? null),
       vendor_registered: row.vendor_id !== null,
+      voided_at: row.voided_at ?? null,
+      voided_by: row.voided_by ?? null,
+      void_reason: row.void_reason ?? null,
     }
   })
 }
