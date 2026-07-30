@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Link, useSearchParams } from 'react-router-dom'
 import { DocumentList } from '@/components/DocumentList'
+import { RevealItem, Stagger } from '@/components/Reveal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
 import { fetchDocuments, fetchFolderCounts } from '@/lib/queries/documents'
 import { DOC_FOLDERS, type DocumentRow } from '@/lib/types'
+import { cn } from '@/lib/utils'
 import { useProjects } from '@/store/project'
 
 export default function Folders() {
@@ -98,6 +100,8 @@ export default function Folders() {
           </div>
 
           {results && results.length > 0 && <DocumentList docs={results} />}
+          {/* A search returning nothing is a non-match, not an empty state —
+              plain text, no icon, no call to action. */}
           {results && results.length === 0 && (
             <p className="py-10 text-center text-sm text-muted-foreground">
               Nothing matched that title.
@@ -105,22 +109,29 @@ export default function Folders() {
           )}
         </>
       ) : (
-        <ul className="grid grid-cols-2 gap-3">
-          {DOC_FOLDERS.map((f) => (
-            <li key={f.value}>
-              <Link
-                to={`/docs/${f.value}`}
-                className="flex h-24 flex-col justify-between rounded-xl border border-border p-4 transition-colors hover:bg-muted/50"
-              >
-                <span className="text-sm font-medium">{f.label}</span>
-                <span className="text-xs text-muted-foreground tabular-nums">
-                  {counts[f.value] ?? 0}{' '}
-                  {(counts[f.value] ?? 0) === 1 ? 'file' : 'files'}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <Stagger className="grid grid-cols-2 gap-3">
+          {DOC_FOLDERS.map((f) => {
+            const n = counts[f.value] ?? 0
+            return (
+              <RevealItem key={f.value} className="h-full">
+                <Link
+                  to={`/docs/${f.value}`}
+                  className="paper flex h-24 flex-col justify-between p-4 transition-shadow hover:paper-lift focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+                >
+                  <span className="text-sm font-medium">{f.label}</span>
+                  <span
+                    className={cn(
+                      'text-xs tabular-nums',
+                      n > 0 ? 'text-muted-foreground' : 'text-muted-foreground/60',
+                    )}
+                  >
+                    {n} {n === 1 ? 'file' : 'files'}
+                  </span>
+                </Link>
+              </RevealItem>
+            )
+          })}
+        </Stagger>
       )}
     </div>
   )

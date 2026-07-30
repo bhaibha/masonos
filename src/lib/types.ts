@@ -275,9 +275,13 @@ export function canVoid(
 // ---------- Cancel / reject (migration 021) ----------
 
 /** Workflow documents get cancelled, not voided. */
-export type CancellableTable = 'purchase_orders' | 'variation_orders'
+export type CancellableTable =
+  | 'purchase_orders'
+  | 'variation_orders'
+  | 'site_instructions'
 
 export const CANCELLABLE_LABEL: Record<CancellableTable, string> = {
+  site_instructions: 'site instruction',
   purchase_orders: 'purchase order',
   variation_orders: 'variation order',
 }
@@ -288,15 +292,19 @@ export interface CancelFields {
   cancel_reason: string | null
 }
 
-/** POs: founder/pm (same as po_update). VOs: founder only, like approval. */
+/**
+ * Who may cancel each document type — mirrors fn_cancel_document exactly.
+ * POs and SIs: founder/pm (same roles that raise them).
+ * VOs: founder only, because only the founder approves them.
+ */
 export function canCancel(
   role: UserRole | null,
   table: CancellableTable,
 ): boolean {
   if (role === null) return false
-  return table === 'purchase_orders'
-    ? role === 'founder' || role === 'pm'
-    : role === 'founder'
+  return table === 'variation_orders'
+    ? role === 'founder'
+    : role === 'founder' || role === 'pm'
 }
 
 // ---------- Hard delete (migration 022) ----------
@@ -713,6 +721,73 @@ export interface ProjectContract {
   variations_value: number
   pending_value: number
   revised_contract_value: number
+}
+
+// ---------- Site Instructions (A6, migration 023) ----------
+
+export type SiStatus = 'issued' | 'acknowledged' | 'complete' | 'cancelled'
+
+export const SI_STATUS_LABEL: Record<SiStatus, string> = {
+  issued: 'Issued',
+  acknowledged: 'Acknowledged',
+  complete: 'Complete',
+  cancelled: 'Cancelled',
+}
+
+/** Founder/PM issue and progress instructions. Supervisors read only. */
+export function canIssueSI(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/**
+ * A site instruction. Deliberately carries NO money — cost is a boolean plus an
+ * optional link to the variation order that holds the figure. That's what lets
+ * supervisors read the whole table (they're the ones acting on the instruction)
+ * without breaching the money-hiding rule.
+ */
+export interface SiRow extends CancelFields {
+  id: string
+  si_number: string
+  project_id: string
+  issued_date: string
+  vendor_id: string | null
+  /** registered vendor name if linked, else the free-text name */
+  addressed_display: string | null
+  addressed_registered: boolean
+  work_area: string | null
+  instruction: string
+  attachments: string[]
+  has_cost_implication: boolean
+  variation_id: string | null
+  /** VO number, resolved only for money-roles; null for supervisors */
+  variation_number: string | null
+  required_by: string | null
+  status: SiStatus
+  issued_by: string
+  issued_by_name: string | null
+  acknowledged_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export interface NewSiInput {
+  project_id: string
+  issued_date: string
+  vendor_id: string | null
+  addressed_to: string
+  work_area: string
+  instruction: string
+  attachments: string[]
+  has_cost_implication: boolean
+  variation_id: string | null
+  required_by: string | null
+}
+
+/** Overdue = past its required-by date and not yet complete or cancelled. */
+export function siIsOverdue(si: SiRow, today: string): boolean {
+  if (!si.required_by) return false
+  if (si.status === 'complete' || si.status === 'cancelled') return false
+  return si.required_by < today
 }
 
 // ---------- Safety ----------

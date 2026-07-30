@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { ListSkeleton } from '@/components/Skeleton'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -160,9 +161,7 @@ export default function SiteLog() {
     setStatus(null)
   }
 
-  if (loading) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-  }
+  if (loading) return <ListSkeleton rows={5} />
 
   if (!canWrite) {
     return (
@@ -173,7 +172,7 @@ export default function SiteLog() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 pb-6" noValidate>
+    <form onSubmit={onSubmit} className="paper mb-6 space-y-5 p-5" noValidate>
       <p className="text-sm text-muted-foreground">
         {existingId ? 'Editing your log for ' : 'New log for '}
         {formatDayLabel(date)}

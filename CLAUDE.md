@@ -33,9 +33,12 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   So: **001–020 ALL APPLIED** (020 confirmed 2026-07-27 — the verify SELECT returned both
   `fn_void_record` and `fn_stock_on_hand`, and they sit near the end of the script, so everything
   above them ran too).
-  **021 + 022 PENDING** — 021 = cancel/reject on PO + VO (`fn_cancel_document`,
-  `fn_reject_variation`) + supervisor self-void of own stock entries;
-  022 = hard delete (`fn_delete_record`). Run 021 before 022. Next migration = 023.
+  **021 + 022 APPLIED** (confirmed 2026-07-28). 021 = cancel/reject on PO + VO
+  (`fn_cancel_document`, `fn_reject_variation`) + supervisor self-void of own stock entries;
+  022 = hard delete (`fn_delete_record`).
+  **023 APPLIED** (confirmed 2026-07-28) — A6 Site Instructions (`site_instructions`, `si_status`,
+  `fn_set_si_status`, plus a site_instructions branch added to `fn_cancel_document`).
+  So: **001–023 ALL APPLIED.** Next migration = 024.
 - **Enum lesson (021):** `alter type … add value` commits the label, but the new label CANNOT be
   used elsewhere in the same transaction — and the Supabase SQL editor runs a script as one. Write
   every comparison against a newly added label as `status::text = 'x'`, never the enum literal.
@@ -68,6 +71,11 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 7. Resolve the selected project from the Zustand project store (`useProjects(s => s.selectedId)`) — NOT useOutletContext (it crashed once between RequireRole and the provider).
 8. Mobile-first. Primary device = phone on a construction site. Min 48px touch targets, camera-first inputs, minimal typing.
 9. Queries in `src/lib/queries/` — one file per module. Keep components small.
+10. **TYPECHECK WITH `npx tsc -b --force`, NEVER `npx tsc --noEmit`.** The root `tsconfig.json` has
+    `"files": []` and only project references, so `--noEmit` compiles nothing and **always exits 0**
+    — it will happily report "clean" on a file with broken JSX. `package.json`'s build script uses
+    `tsc -b` correctly. Anything else is a false pass. (Found 2026-07-28 after a bad codemod left
+    13 files with mangled JSX and `--noEmit` reported success.)
 
 ## Roles → access matrix (RLS enforces; verify on EVERY new module)
 | Role | Sees | Cannot |

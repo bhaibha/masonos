@@ -103,7 +103,7 @@ export default function IssueForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 pb-6" noValidate>
+    <form onSubmit={onSubmit} className="paper mb-6 space-y-5 p-5" noValidate>
       <FieldRow
         label="Material"
         htmlFor="material"

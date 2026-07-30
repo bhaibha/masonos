@@ -590,3 +590,145 @@ incidents, materials, vendors: none could be removed at all.
       bucket. Worth a cleanup pass or a storage delete in the same call.
 
 **Run migration 021 then 022 before testing** — `APPLY_pending.sql` contains both, in order.
+
+---
+
+## Session — Design-system sweep, second pass (2026-07-28)
+
+Migrations confirmed at session start: **001–022 ALL APPLIED**, next = 023. This session touched
+**no queries, RLS or money math** — visual/interaction layer only.
+
+**Important: the 2026-07-25 rollout had already done most of this.** Audited first rather than
+redoing it. What was actually still on old patterns was a smaller, specific set — mostly the forms,
+plus components added after that rollout.
+
+**Fixed**
+
+- [x] **Inline error banners → toasts.** Two survivors: `VendorForm` (kept a banner *and* a toast —
+      duplicate messaging, and its validation path only set the banner) and `DocumentList`
+      ("Could not open this file"). VendorForm's catch also used `err instanceof Error`, which is
+      false for Supabase errors, so the real message was being swallowed — now `errText`.
+      `Login.tsx` deliberately keeps its inline banner: it sits outside the app shell and a sign-in
+      failure should stay visible next to the field, not fade.
+- [x] **"Loading…" → skeletons** on BudgetEditor, SiteLog, ReceiveForm. (Button busy labels and
+      input placeholders left alone — those aren't loading states.)
+- [x] **Empty states with a primary action** added to BudgetVsActual, StockRegister, FolderView —
+      all three were bare centred text with an underlined link. Each now carries an icon, a real
+      sentence and a button, plus `OtherProjectsHint`. Search-with-no-match stays plain text: a
+      non-match isn't an empty state.
+- [x] **Old card pattern `rounded-xl border border-border` → `.paper`**, now zero occurrences
+      outside `Toaster` (intentional there). Covered Folders' folder tiles (which also gained
+      hover-lift + focus ring to match Dashboard cards), MaterialMaster's add form, DocumentList's
+      container, UploadForm's confidential box (flattened to `bg-secondary/50` — it had become a
+      card inside a card).
+- [x] **Forms onto `.paper`**: ExpenseForm, TaskForm, SiteLog, InwardForm, IssueForm, UploadForm,
+      MaterialMaster's add form. They were bare `space-y-5` on the page background.
+- [x] **Staggered fade-up** added to BudgetVsActual, StockRegister, MaterialMaster, Folders,
+      DocumentList. Required converting `<li>` → `<div>`/`<RevealItem>` in those lists, since the
+      wrapper isn't a `<ul>` any more.
+- [x] **Touch targets fixed at the token, not per-button.** shadcn's defaults were h-8/h-7/h-9
+      (32/28/36px) against CLAUDE.md's 48px minimum; 15 buttons rendered at 28px. Raised in
+      `button.tsx`: default and sm → h-11, lg → h-12, icon/icon-lg → size-11, with padding nudged
+      to match. Text sizes untouched, so nothing looks heavier — just tappable with gloves.
+
+**Two things went wrong, both worth recording**
+
+1. **A regex codemod mangled 13 files.** Matching `<Button ...>` with `[^>]*?>` stopped at the `>`
+   inside `() =>`, producing `onClick={() = className="h-11"> setFoo()}`. Repaired, and the
+   approach abandoned in favour of the one-line token change above — which is what should have been
+   done first.
+2. **`npx tsc --noEmit` NEVER CHECKED ANYTHING.** The root `tsconfig.json` has `"files": []` and
+   only project references, so it compiles nothing and always exits 0. It reported "clean" on all
+   13 mangled files. Every typecheck claimed in earlier sessions using that command was worthless.
+   **The correct command is `npx tsc -b --force`**, which is what `package.json`'s build uses.
+   Recorded as rule 10 in CLAUDE.md. Final state verified green under the real command.
+
+**Not done / notes**
+
+- oxlint and vite build can't run in the Linux sandbox (both ship Windows-only native bindings),
+  so `npm run build` still needs running on the machine before deploy.
+- Everything remains uncommitted — the live site is behind localhost.
+
+---
+
+## Session — A6 Site Instructions (Module 56), migration 023
+
+Confirmed at start: **001–022 ALL APPLIED**, next = 023.
+
+**Built**
+
+- [x] **Migration 023** `023_site_instructions.sql` — `site_instructions` table, `si_status` enum
+      (issued / acknowledged / complete / cancelled), `si_number_seq` → `SI-0001`.
+      - Addressed-to uses the **flexible vendor pattern from 017**: optional `vendor_id` plus
+        free-text `addressed_to`. A labour contractor usually isn't in the vendor master and
+        forcing registration before issuing an instruction is friction nobody on a site accepts.
+        A CHECK requires one of the two — an instruction with no recipient is meaningless.
+      - Attachments are storage paths in the **site-photos** bucket, so every path starts
+        `${projectId}/` and the existing storage RLS applies unchanged.
+- [x] **The SI holds NO money, deliberately.** Cost is a boolean plus an optional FK to
+      `variation_orders`. That's what lets `si_read` be plain `is_member(project_id)` with no role
+      check — supervisors read every instruction on their project, because they're the ones acting
+      on it, and there is no figure to hide. The rupee value stays on the VO, which is already
+      money-gated. A supervisor sees "Carries a cost implication" and, because the VO fetch returns
+      nothing for them, never the VO number or amount. **No column-level revoke needed.**
+- [x] **Cancellation reuses 021's machinery** rather than inventing a fourth pattern:
+      `fn_cancel_document` gains a `site_instructions` branch, so PO, VO and SI cancel through one
+      function; a CHECK constraint makes the reason a database rule. Extra guard: an instruction
+      already marked **complete cannot be cancelled** — the work was done, and cancelling would
+      misrepresent the record.
+      ROADMAP's note that A6 must ship with `cancelled` + reason from day one is satisfied.
+- [x] **`fn_set_si_status`** for issued/acknowledged/complete — stamps `acknowledged_by/at` and
+      `completed_at` in the same statement as the status, so the two can't drift the way two
+      separate client updates would. Refuses to touch a cancelled instruction ("reissue instead").
+- [x] **Not hard-deletable, by omission.** `site_instructions` has no DELETE policy and no branch
+      in `fn_delete_record`, so RLS default-deny makes deletion impossible. Recorded in the
+      migration so the absence reads as intent rather than oversight.
+- [x] **`siPdf.ts`** — letterhead identical to the PO/VO templates (same margins, type scale, brass
+      rule, signature block). Three-column meta strip (To / Work area / Required by), the
+      instruction body, and a cost note that names the linked VO **without stating an amount**.
+      A cancelled instruction prints a rotated **CANCELLED watermark at 14% opacity** — light enough
+      that the document underneath stays legible, because a cancelled instruction is still a record
+      of what was once instructed — plus the reason at full opacity above the signature block.
+- [x] **Tasks → Instructions screen**: list with status pill, overdue flag against required-by,
+      attachment thumbnails, acknowledge/complete actions, Download / File to Docs, and cancel via
+      the shared dialog. Issue form with vendor typeahead, camera-first attachments (compressed),
+      cost toggle that reveals a VO picker. Design system throughout — skeleton, empty state with
+      primary action, `OtherProjectsHint`, staggered reveal, toasts on every action.
+      Filed PDFs are **not** confidential, so supervisors can open them.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar (pglast/libpg_query): outer SQL clean, both
+  function bodies clean. No `create or replace view`.
+- `si_status` is a brand-new type, so 021's "unsafe use of new value of enum type" trap does not
+  apply — that only affects `ALTER TYPE … ADD VALUE`. Comparisons still use `::text` for consistency.
+- **`npx tsc -b --force` clean** — the correct command per CLAUDE.md rule 10. It caught two real
+  errors during this build (PostgREST's inferred type breaking on the embedded `vendors(name)` join,
+  and `VendorValue`'s fields being `vendorId`/`vendorName` rather than `id`/`name`). The old
+  `--noEmit` would have reported both as clean.
+
+**Open question for you**
+
+- **Who marks an instruction acknowledged?** Right now founder/PM do, because the spec said
+  supervisors view only. In practice the site supervisor is the one who'd hear the contractor
+  acknowledge it. If you want supervisors to be able to tick acknowledge (but nothing else), that's
+  a small change to `fn_set_si_status` and `si_update`.
+
+**Migration 023 APPLIED** — confirmed 2026-07-28.
+
+**Follow-up, same day (no migration):**
+
+- [x] **Open instructions now surface on the Tasks list.** An SI has no planned date and doesn't
+      roll over, so it can't be merged into the day's tasks — but leaving it on its own tab meant a
+      supervisor working through their day would never see it. `OpenInstructions` renders a strip
+      above the day's work listing every instruction that is `issued` or `acknowledged`, on **every
+      date**, because an open instruction is outstanding regardless of which day you're viewing. It
+      disappears the moment the instruction is marked complete (or cancelled), and renders nothing
+      at all when there are none. Overdue ones are counted in the header and flagged in red.
+      Backed by `fetchOpenSis` — a lean query with no vendor join, issuer lookup or VO resolution,
+      since this feeds a summary strip rather than the full screen. A failure there returns an empty
+      list rather than throwing, so a problem with instructions can never take down the task list.
+- [x] **`OtherProjectsHint` added to Variations and Incidents** — both were still showing a bare
+      "nothing here" when the founder was simply on a different project than the PM. Third time this
+      confusion has surfaced; these were the screens the earlier pass missed. Vendors is deliberately
+      excluded (the vendor master is global, not project-scoped).

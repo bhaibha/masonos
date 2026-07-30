@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
@@ -78,9 +79,7 @@ export default function ReceiveForm({
     }
   }
 
-  if (!loaded) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>
-  }
+  if (!loaded) return <ListSkeleton rows={3} />
 
   const allDone = lines.every((l) => (remaining.get(l.id) ?? 0) <= 0)
 

@@ -133,7 +133,7 @@ export default function ExpenseForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 pb-6" noValidate>
+    <form onSubmit={onSubmit} className="paper mb-6 space-y-5 p-5" noValidate>
       <FieldRow label="Date" htmlFor="expense_date">
         <Input
           id="expense_date"

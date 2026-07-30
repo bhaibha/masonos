@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { DeleteButton } from '@/components/DeleteAction'
 import { EmptyState } from '@/components/EmptyState'
+import { RevealItem, Stagger } from '@/components/Reveal'
 import { FieldRow, Select } from '@/components/Field'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
@@ -142,7 +143,7 @@ export default function MaterialMaster() {
       {canEdit && adding && (
         <form
           onSubmit={onSubmit}
-          className="space-y-4 rounded-xl border border-border p-4"
+          className="paper space-y-4 p-5"
           noValidate
         >
           <FieldRow label="Name" htmlFor="name">
@@ -244,9 +245,9 @@ export default function MaterialMaster() {
       )}
 
       {materials && materials.length > 0 && (
-        <ul className="paper divide-y divide-border overflow-hidden">
+        <Stagger className="paper divide-y divide-border overflow-hidden">
           {materials.map((m) => (
-            <li key={m.id} className="px-4 py-3">
+            <RevealItem key={m.id} className="px-4 py-3">
               <div className="flex items-baseline justify-between gap-3">
                 <p
                   className={cn(
@@ -288,9 +289,9 @@ export default function MaterialMaster() {
                   />
                 </div>
               )}
-            </li>
+            </RevealItem>
           ))}
-        </ul>
+        </Stagger>
       )}
 
       <p className="text-xs text-muted-foreground">

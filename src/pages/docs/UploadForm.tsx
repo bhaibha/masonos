@@ -89,7 +89,7 @@ export default function UploadForm() {
   const isImage = file?.type.startsWith('image/') ?? false
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5 pb-6" noValidate>
+    <form onSubmit={onSubmit} className="paper mb-6 space-y-5 p-5" noValidate>
       <FieldRow
         label="File"
         htmlFor="file"
@@ -163,7 +163,7 @@ export default function UploadForm() {
       {canSeeConfidentialDocs(role) && (
         <label
           htmlFor="confidential"
-          className="flex items-start gap-3 rounded-xl border border-border p-4"
+          className="flex items-start gap-3 rounded-lg bg-secondary/50 p-4"
         >
           <input
             id="confidential"

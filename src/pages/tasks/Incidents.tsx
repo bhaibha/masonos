@@ -3,6 +3,7 @@ import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { DeleteButton } from '@/components/DeleteAction'
 import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -97,13 +98,16 @@ export default function Incidents() {
       {rows === null && <ListSkeleton rows={3} />}
 
       {rows !== null && rows.length === 0 && (
-        <EmptyState
-          icon={ShieldAlert}
-          title="No incidents recorded"
-          body="A clean record. Log any near-miss, first-aid case, injury or property damage here so it's tracked to closure."
-          actionLabel={canWrite ? 'Raise an incident' : undefined}
-          onAction={canWrite ? () => setRaising(true) : undefined}
-        />
+        <>
+          <EmptyState
+            icon={ShieldAlert}
+            title="No incidents recorded"
+            body="A clean record. Log any near-miss, first-aid case, injury or property damage here so it's tracked to closure."
+            actionLabel={canWrite ? 'Raise an incident' : undefined}
+            onAction={canWrite ? () => setRaising(true) : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {rows && rows.length > 0 && (
@@ -202,8 +206,7 @@ function IncidentCard({
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={onToggle}
-          >
+            onClick={onToggle} className="h-11">
             {inc.status === 'open' ? 'Mark closed' : 'Reopen'}
           </Button>
         )}

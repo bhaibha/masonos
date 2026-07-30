@@ -1,7 +1,11 @@
+import { PiggyBank } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ListSkeleton } from '@/components/Skeleton'
-import { Link, useOutletContext } from 'react-router-dom'
+import { useOutletContext } from 'react-router-dom'
+import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
+import { RevealItem, Stagger } from '@/components/Reveal'
 import { formatInr, spendRatio } from '@/lib/format'
 import { errText } from '@/lib/errText'
 import { fetchBudgetVsActual } from '@/lib/queries/expenses'
@@ -39,28 +43,27 @@ export default function BudgetVsActual() {
       {rows === null && <ListSkeleton rows={5} />}
 
       {rows?.length === 0 && (
-        <div className="py-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            No budgets set and nothing spent yet.
-          </p>
-          {canEditBudgets(role) && (
-            <Link
-              to="/money/budget/edit"
-              className="mt-2 inline-block text-sm font-medium underline underline-offset-4"
-            >
-              Set budgets
-            </Link>
-          )}
-        </div>
+        <>
+          <EmptyState
+            icon={PiggyBank}
+            title="No budgets set yet"
+            body="Set a budget per category and every expense you record will count against it here."
+            actionLabel={canEditBudgets(role) ? 'Set budgets' : undefined}
+            actionTo={canEditBudgets(role) ? '/money/budget/edit' : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {rows && rows.length > 0 && (
         <>
-          <ul className="paper divide-y divide-border overflow-hidden">
+          <Stagger className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
-              <CategoryRow key={r.category} row={r} />
+              <RevealItem key={r.category}>
+                <CategoryRow row={r} />
+              </RevealItem>
             ))}
-          </ul>
+          </Stagger>
           <p className="text-xs text-muted-foreground">
             Budget, actual and remaining all come from{' '}
             <code className="text-[11px]">v_budget_vs_actual</code>. Categories
@@ -81,7 +84,7 @@ function CategoryRow({ row }: { row: Row }) {
   // technically over. Flag it as unbudgeted and show the spend plainly.
   if (!row.has_budget) {
     return (
-      <li className="space-y-1 px-4 py-3">
+      <div className="space-y-1 px-4 py-3">
         <div className="flex items-baseline justify-between gap-3">
           <p className="truncate text-sm font-medium">{row.category}</p>
           <p className="shrink-0 font-heading text-base font-semibold tabular-nums">
@@ -94,12 +97,12 @@ function CategoryRow({ row }: { row: Row }) {
           </span>
           <span className="text-xs text-muted-foreground">No budget set</span>
         </div>
-      </li>
+      </div>
     )
   }
 
   return (
-    <li className="space-y-2 px-4 py-3">
+    <div className="space-y-2 px-4 py-3">
       <div className="flex items-baseline justify-between gap-3">
         <p className="truncate text-sm font-medium">{row.category}</p>
         <p
@@ -135,6 +138,6 @@ function CategoryRow({ row }: { row: Row }) {
         <span>Actual {formatInr(row.actual)}</span>
         <span>Budget {formatInr(row.budget)}</span>
       </div>
-    </li>
+    </div>
   )
 }

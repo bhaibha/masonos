@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { DeleteButton } from '@/components/DeleteAction'
+import { RevealItem, Stagger } from '@/components/Reveal'
 import { signedDocumentUrl } from '@/lib/storage'
 import { type DocumentRow, PO_STATUS_LABEL, type PoStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -43,11 +45,13 @@ export function DocumentList({
   onChanged?: () => void | Promise<void>
 }) {
   return (
-    <ul className="divide-y divide-border rounded-xl border border-border">
+    <Stagger className="paper divide-y divide-border overflow-hidden">
       {docs.map((d) => (
-        <DocumentItem key={d.id} doc={d} onChanged={onChanged} />
+        <RevealItem key={d.id}>
+          <DocumentItem doc={d} onChanged={onChanged} />
+        </RevealItem>
       ))}
-    </ul>
+    </Stagger>
   )
 }
 
@@ -60,22 +64,22 @@ function DocumentItem({
 }) {
   const role = useAuth((s) => s.role)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   async function open() {
     setBusy(true)
-    setError(null)
     const url = await signedDocumentUrl(doc.file_path)
     setBusy(false)
     if (!url) {
-      setError('Could not open this file.')
+      toast.error('Could not open this file', {
+        description: 'The signed link could not be created — try again shortly.',
+      })
       return
     }
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
   return (
-    <li>
+    <div>
       <button
         type="button"
         onClick={() => void open()}
@@ -101,7 +105,6 @@ function DocumentItem({
             {prettyType(doc.file_type)} · {prettyDate(doc.created_at)}
             {doc.uploaded_by_name && ` · ${doc.uploaded_by_name}`}
           </p>
-          {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -130,6 +133,6 @@ function DocumentItem({
           />
         </div>
       )}
-    </li>
+    </div>
   )
 }

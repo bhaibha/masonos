@@ -45,9 +45,12 @@ Order within group:
 - [x] A5. M26 Variation Orders — register (raise/approve/reject, +/- cost impact, status), revised
        contract value on Project Detail, VO PDF on letterhead + file to Docs. Migration 016. PM raises,
        founder approves. Money-gated (supervisors excluded).
-- [ ] A6. M56 Site Instruction (SI) — issue instruction to contractor/labour, status, PDF
-      **Ship with `cancelled` + cancel_reason in the status enum from day one** (migration 020's
-      removal/reversal pass covered PO and VO; SI didn't exist yet).
+- [x] **A6. M56 Site Instruction (SI) — DONE** (migration 023). SI number series, addressed-to
+      (linked vendor or free text), work area, instruction, photo attachments, cost-implication
+      flag + optional VO link, required-by date, issued/acknowledged/complete/cancelled with a
+      mandatory reason. Letterhead PDF matching PO/VO with a CANCELLED watermark. Founder/PM issue;
+      supervisors read their project (the table holds no figures, so no role gate on read).
+      Shipped with `cancelled` + reason from day one as required.
 - [ ] A7. M57 RFI Management — raise to design consultant, categories, response tracking, status
       **Ship with `cancelled`/`rejected` + reason in the status enum from day one** — same reason.
 - [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)

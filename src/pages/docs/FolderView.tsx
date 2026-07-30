@@ -1,7 +1,10 @@
+import { FolderOpen } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { DocumentList } from '@/components/DocumentList'
+import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { ListSkeleton } from '@/components/Skeleton'
 import { errText } from '@/lib/errText'
 import { fetchDocuments } from '@/lib/queries/documents'
@@ -59,17 +62,16 @@ export default function FolderView() {
       {docs === null && <ListSkeleton rows={4} />}
 
       {docs?.length === 0 && (
-        <div className="py-10 text-center">
-          <p className="text-sm text-muted-foreground">Nothing filed here yet.</p>
-          {canUploadDocs(role) && (
-            <Link
-              to="/docs/upload"
-              className="mt-2 inline-block text-sm font-medium underline underline-offset-4"
-            >
-              Upload a document
-            </Link>
-          )}
-        </div>
+        <>
+          <EmptyState
+            icon={FolderOpen}
+            title="Nothing filed here yet"
+            body="Drawings, permits, certificates and contracts filed to this folder appear here."
+            actionLabel={canUploadDocs(role) ? 'Upload a document' : undefined}
+            actionTo={canUploadDocs(role) ? '/docs/upload' : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {docs && docs.length > 0 && <DocumentList docs={docs} onChanged={reload} />}

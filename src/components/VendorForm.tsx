@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { FieldRow } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { errText } from '@/lib/errText'
 import { createVendor, updateVendor } from '@/lib/queries/vendors'
 import type { NewVendor, Vendor } from '@/lib/types'
 
@@ -30,13 +31,10 @@ export function VendorForm({
   const [category, setCategory] = useState(vendor?.category ?? '')
 
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   async function save() {
-    setError(null)
-
     if (name.trim() === '') {
-      setError('Vendor name is required.')
+      toast.error('Vendor name is required')
       return
     }
 
@@ -56,9 +54,9 @@ export function VendorForm({
       // inline-on-expense-form context). Here we only surface failures.
       onSaved(saved)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not save the vendor.'
-      setError(msg)
-      toast.error('Could not save the vendor', { description: msg })
+      // errText, not `instanceof Error` — Supabase errors aren't Error
+      // instances, so the old check swallowed the real message.
+      toast.error('Could not save the vendor', { description: errText(err) })
       setBusy(false)
     }
   }
@@ -113,15 +111,6 @@ export function VendorForm({
           autoComplete="off"
         />
       </FieldRow>
-
-      {error && (
-        <p
-          role="alert"
-          className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Button

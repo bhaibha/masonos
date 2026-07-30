@@ -2,6 +2,7 @@ import { FileDiff } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { FieldRow, Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -93,13 +94,16 @@ export default function Variations() {
       {rows === null && <ListSkeleton rows={3} />}
 
       {rows !== null && rows.length === 0 && (
-        <EmptyState
-          icon={FileDiff}
-          title="No variations yet"
-          body="Log any change to the agreed scope — extra work or omissions — with its cost impact. Approved variations adjust the contract value."
-          actionLabel={canRaiseVO(role) ? 'Raise a variation' : undefined}
-          onAction={canRaiseVO(role) ? () => setRaising(true) : undefined}
-        />
+        <>
+          <EmptyState
+            icon={FileDiff}
+            title="No variations yet"
+            body="Log any change to the agreed scope — extra work or omissions — with its cost impact. Approved variations adjust the contract value."
+            actionLabel={canRaiseVO(role) ? 'Raise a variation' : undefined}
+            onAction={canRaiseVO(role) ? () => setRaising(true) : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {rows && rows.length > 0 && (

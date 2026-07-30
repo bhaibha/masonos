@@ -1,7 +1,10 @@
+import { PackageOpen } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ListSkeleton } from '@/components/Skeleton'
-import { Link } from 'react-router-dom'
+import { EmptyState } from '@/components/EmptyState'
+import { OtherProjectsHint } from '@/components/ProjectPicker'
+import { RevealItem, Stagger } from '@/components/Reveal'
 import { errText } from '@/lib/errText'
 import { fetchStock } from '@/lib/queries/materials'
 import { canLogMaterials, type StockRow } from '@/lib/types'
@@ -45,19 +48,16 @@ export default function StockRegister() {
       {rows === null && <ListSkeleton rows={5} />}
 
       {rows?.length === 0 && (
-        <div className="py-10 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nothing received or issued on this project yet.
-          </p>
-          {canLogMaterials(role) && (
-            <Link
-              to="/materials/inward"
-              className="mt-2 inline-block text-sm font-medium underline underline-offset-4"
-            >
-              Log a delivery
-            </Link>
-          )}
-        </div>
+        <>
+          <EmptyState
+            icon={PackageOpen}
+            title="No stock movement yet"
+            body="Once a delivery is logged, running stock per material shows here — with a flag when anything drops to its low-stock level."
+            actionLabel={canLogMaterials(role) ? 'Log a delivery' : undefined}
+            actionTo={canLogMaterials(role) ? '/materials/inward' : undefined}
+          />
+          <OtherProjectsHint />
+        </>
       )}
 
       {rows && rows.length > 0 && (
@@ -69,9 +69,9 @@ export default function StockRegister() {
             </p>
           )}
 
-          <ul className="paper divide-y divide-border overflow-hidden">
+          <Stagger className="paper divide-y divide-border overflow-hidden">
             {rows.map((r) => (
-              <li key={r.material_id} className="px-4 py-3">
+              <RevealItem key={r.material_id} className="px-4 py-3">
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{r.name}</p>
@@ -98,9 +98,9 @@ export default function StockRegister() {
                     )}
                   </div>
                 </div>
-              </li>
+              </RevealItem>
             ))}
-          </ul>
+          </Stagger>
 
           <p className="text-xs text-muted-foreground">
             Quantities come from <code className="text-[11px]">v_stock</code>.

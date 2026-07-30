@@ -33,6 +33,7 @@ export default function TasksLayout() {
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },
+    { to: '/tasks/instructions', label: 'Instructions' },
   ]
 
   return (

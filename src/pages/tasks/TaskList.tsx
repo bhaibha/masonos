@@ -6,6 +6,7 @@ import { DeleteButton } from '@/components/DeleteAction'
 import { Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { EmptyState } from '@/components/EmptyState'
+import { OpenInstructions } from '@/components/OpenInstructions'
 import { OtherProjectsHint } from '@/components/ProjectPicker'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
@@ -80,6 +81,12 @@ export default function TaskList() {
 
   return (
     <div className="space-y-4 pb-6">
+      {/* Outstanding instructions sit above the day's work and stay there until
+          they're marked complete — they have no planned date, so they'd
+          otherwise only be visible on their own tab. Renders nothing when
+          there are none. */}
+      <OpenInstructions projectId={projectId} />
+
       {tasks === null && <ListSkeleton rows={4} />}
 
       {tasks?.length === 0 && (

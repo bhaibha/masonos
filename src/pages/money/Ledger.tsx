@@ -186,7 +186,7 @@ export default function Ledger() {
           </div>
 
           {filtered && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-11">
               Clear filters
             </Button>
           )}

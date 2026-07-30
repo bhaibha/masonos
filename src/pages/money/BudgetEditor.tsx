@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { ListSkeleton } from '@/components/Skeleton'
 import { useOutletContext } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { errText } from '@/lib/errText'
@@ -83,9 +84,7 @@ export default function BudgetEditor() {
     setSavingId(null)
   }
 
-  if (loading) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
-  }
+  if (loading) return <ListSkeleton rows={6} />
 
   return (
     <div className="space-y-4 pb-6">
