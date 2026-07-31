@@ -14,6 +14,7 @@ import AdminTeam from '@/pages/admin/AdminTeam'
 import BudgetEditor from '@/pages/money/BudgetEditor'
 import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
+import Invoices from '@/pages/money/Invoices'
 import Ledger from '@/pages/money/Ledger'
 import MoneyLayout from '@/pages/money/MoneyLayout'
 import Variations from '@/pages/money/Variations'
@@ -88,6 +89,9 @@ export default function App() {
                 <Route path="vendors" element={<Vendors />} />
                 <Route path="orders" element={<Orders />} />
                 <Route path="variations" element={<Variations />} />
+                {/* A4 Invoices. RLS restricts the table to founder/accounts,
+                    so the parent MONEY_ROLES guard is the outer layer only. */}
+                <Route path="invoices" element={<Invoices />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

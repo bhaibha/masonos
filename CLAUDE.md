@@ -38,7 +38,13 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   022 = hard delete (`fn_delete_record`).
   **023 APPLIED** (confirmed 2026-07-28) — A6 Site Instructions (`site_instructions`, `si_status`,
   `fn_set_si_status`, plus a site_instructions branch added to `fn_cancel_document`).
-  So: **001–023 ALL APPLIED.** Next migration = 024.
+  **024 APPLIED** (confirmed 2026-07-28) — A4 Invoices (`invoices`, `invoice_items`,
+  `invoice_type`/`invoice_status`, `fn_issue_invoice`, plus an invoices branch on
+  `fn_cancel_document`).
+  **025 APPLIED** (confirmed 2026-07-28) — progress-bill running-account fix
+  (`invoices.less_previously_billed`, `total` regenerated as
+  subtotal + gst − less_previously_billed, corrected `fn_issue_invoice`).
+  So: **001–025 ALL APPLIED.** Next migration = 026.
 - **Enum lesson (021):** `alter type … add value` commits the label, but the new label CANNOT be
   used elsewhere in the same transaction — and the Supabase SQL editor runs a script as one. Write
   every comparison against a newly added label as `status::text = 'x'`, never the enum literal.

@@ -279,8 +279,10 @@ export type CancellableTable =
   | 'purchase_orders'
   | 'variation_orders'
   | 'site_instructions'
+  | 'invoices'
 
 export const CANCELLABLE_LABEL: Record<CancellableTable, string> = {
+  invoices: 'invoice',
   site_instructions: 'site instruction',
   purchase_orders: 'purchase order',
   variation_orders: 'variation order',
@@ -297,14 +299,24 @@ export interface CancelFields {
  * POs and SIs: founder/pm (same roles that raise them).
  * VOs: founder only, because only the founder approves them.
  */
+/**
+ * Spelled out per table rather than "X else everything-else", because the
+ * catch-all silently gave `invoices` founder/pm — which is wrong, they're
+ * founder/accounts — and hid the Cancel button from the exact role that
+ * should have it. An explicit map can't drift from fn_cancel_document.
+ */
+const CANCEL_ROLES: Record<CancellableTable, UserRole[]> = {
+  purchase_orders: ['founder', 'pm'],
+  site_instructions: ['founder', 'pm'],
+  variation_orders: ['founder'], // only the founder approves them
+  invoices: ['founder', 'accounts'], // same roles that issue them
+}
+
 export function canCancel(
   role: UserRole | null,
   table: CancellableTable,
 ): boolean {
-  if (role === null) return false
-  return table === 'variation_orders'
-    ? role === 'founder'
-    : role === 'founder' || role === 'pm'
+  return role !== null && CANCEL_ROLES[table].includes(role)
 }
 
 // ---------- Hard delete (migration 022) ----------
@@ -721,6 +733,81 @@ export interface ProjectContract {
   variations_value: number
   pending_value: number
   revised_contract_value: number
+}
+
+// ---------- Invoices (A4, migration 024) ----------
+
+export type InvoiceType = 'progress' | 'management_fee' | 'vendor_voucher'
+export type InvoiceStatus = 'issued' | 'cancelled'
+
+export const INVOICE_TYPE_LABEL: Record<InvoiceType, string> = {
+  progress: 'Progress bill',
+  management_fee: 'Management fee invoice',
+  vendor_voucher: 'Vendor payment voucher',
+}
+
+/** What each type is addressed to — shown on the card and printed on the PDF. */
+export const INVOICE_TYPE_PARTY: Record<InvoiceType, string> = {
+  progress: 'Client',
+  management_fee: 'Client',
+  vendor_voucher: 'Vendor',
+}
+
+/** Issuing and cancelling are both founder/accounts. Mirrors the RPCs. */
+export function canIssueInvoice(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+export interface InvoiceItem {
+  id: string
+  sort: number
+  description: string
+  qty: number
+  unit: string | null
+  rate: number
+  amount: number
+}
+
+/**
+ * An issued invoice. Every figure is a SNAPSHOT written by fn_issue_invoice at
+ * issue time — deliberately not recomputed on read, because a bill sent to a
+ * client must not change when later expenses land.
+ */
+export interface InvoiceRow extends CancelFields {
+  id: string
+  invoice_number: string
+  project_id: string
+  inv_type: InvoiceType
+  status: InvoiceStatus
+  invoice_date: string
+  period_from: string | null
+  period_to: string | null
+  vendor_id: string | null
+  vendor_name: string | null
+  subtotal: number
+  gst_pct: number
+  gst_amount: number
+  /**
+   * Gross already billed on earlier live progress invoices. Deducted AFTER
+   * tax, because it is itself a gross figure — putting it inside `subtotal`
+   * made the GST line indefensible against the taxable value shown (fixed in
+   * migration 025). Zero for every other invoice type.
+   */
+  less_previously_billed: number
+  total: number
+  notes: string | null
+  created_at: string
+  items: InvoiceItem[]
+}
+
+export interface NewInvoiceInput {
+  project_id: string
+  inv_type: InvoiceType
+  period_from: string
+  period_to: string
+  vendor_id: string | null
+  gst_pct: number
+  notes: string
 }
 
 // ---------- Site Instructions (A6, migration 023) ----------

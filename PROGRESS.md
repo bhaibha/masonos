@@ -732,3 +732,122 @@ Confirmed at start: **001–022 ALL APPLIED**, next = 023.
       "nothing here" when the founder was simply on a different project than the PM. Third time this
       confusion has surfaced; these were the screens the earlier pass missed. Vendors is deliberately
       excluded (the vendor master is global, not project-scoped).
+
+---
+
+## Session — A4 Invoice Generator (Module 15), migration 024
+
+Confirmed at start: **001–023 ALL APPLIED**, next = 024. A4 had been skipped — A5 and A6 were built
+out of roadmap order — so this closes the gap.
+
+**Built**
+
+- [x] **Migration 024** `024_invoices.sql` — `invoices` + `invoice_items`, `invoice_type`
+      (progress / management_fee / vendor_voucher), `invoice_status`, three number sequences
+      (INV-P / INV-M / INV-V, a separate series per type as required).
+- [x] **`fn_issue_invoice` derives every figure; nothing is retyped.**
+      - *Progress bill* — cost-plus running account: reimbursable cost for the period (gross spend
+        from `fn_expense_total`, which already excludes voided expenses), plus the management fee at
+        the project's own percentage, **less everything already billed on earlier live progress
+        invoices**. That deduction is why a cancelled bill matters: it stops counting immediately.
+      - *Management fee* — fee % × certified net spend for the period. Refuses outright if the
+        project has no fee percentage set, naming the screen to go fix it.
+      - *Vendor voucher* — one line per posted, un-voided vendor invoice in the period, pulled from
+        `po_invoices` + `purchase_orders`. If there are none it deletes the shell and errors rather
+        than burning a number on an empty voucher.
+- [x] **Amounts are a SNAPSHOT, not a live view.** This is the one place the app deliberately breaks
+      its own "always compute live" rule: every other figure comes from a view because it should
+      track current data, but a bill sent to a client must never change as later expenses land. So
+      the RPC computes once, at issue time, and writes the numbers down. The browser still computes
+      nothing — it prints what Postgres stored, and the header subtotal is summed from the stored
+      line amounts so the two can never disagree.
+- [x] **No write policy on `invoices` or `invoice_items`.** Read is founder/accounts; insert and
+      update happen only inside SECURITY DEFINER RPCs. RLS default-deny means a client cannot forge
+      an invoice or edit an issued one's figures.
+- [x] **Cancellation joins the shared path** — `fn_cancel_document` gains an `invoices` branch, so
+      PO, VO, SI and invoices now all cancel through one function with one CHECK-enforced reason.
+- [x] **`amountInWords.ts`** — Indian lakh/crore grouping, paise only when non-zero, "Minus" prefix
+      for negatives. **Unit-tested: 12 cases pass**, including ₹5,24,00,000 → "Five Crore Twenty
+      Four Lakh" and paise handling. Western thousand/million grouping would be immediately wrong on
+      an Indian invoice, so this was worth testing rather than eyeballing.
+- [x] **`invoicePdf.ts`** — letterhead identical to PO/VO/SI, billed-to + project block, line items,
+      GST breakup, total, amount in words, VOID watermark at 14% opacity when cancelled with the
+      reason at full opacity. Filed to Docs → Invoices marked **confidential**, so supervisors never
+      see it.
+- [x] **Money → Invoices screen** — expandable cards showing the stored lines and totals, Download /
+      File to Docs / Cancel, raise form with type, period, vendor picker (voucher only) and GST rate.
+      Tab hidden for a PM so they don't hit an empty screen. Full design system.
+
+**Flagged for you — this one is not a technical decision**
+
+The progress bill is modelled as cost-plus: reimbursable cost billed **gross** with no further GST
+(the tax was already borne on those purchases), and GST applied to the **management fee only**. That
+avoids charging tax on tax and is a common structure, but it is a **tax position**. Have your CA
+confirm it before the first real client bill. Changing it later means a new migration, not a code
+edit, because issued invoices are immutable by design.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean, both function bodies clean.
+- `amountInWords` unit-tested via compiled JS — 12/12.
+- `npx tsc -b --force` clean (the correct command per rule 10).
+
+**Not tested** — no invoice has been raised on real data yet. Untested: all three types, the PDF,
+the words line, the VOID watermark, and the previously-billed deduction on a second progress bill.
+
+**Migration 024 APPLIED** — confirmed 2026-07-28. A4 tested working end to end.
+
+**Bug found and fixed while reviewing a delete request (no migration):**
+
+- [x] **`canCancel` gave invoices the wrong roles.** It was written as "variation_orders → founder,
+      everything else → founder/pm", so `invoices` inherited founder/**pm** — but
+      `fn_cancel_document` requires founder/**accounts**. Net effect: an **accounts user could not
+      see the Cancel button on an invoice they were entitled to cancel**, and a PM saw one the RPC
+      would have rejected. Replaced the catch-all with an explicit per-table map that mirrors the
+      four RPC branches one-to-one, so it can't drift again.
+
+**Deliberately NOT added: a delete button on invoices.** An invoice carries a GST number from a
+statutory series; deleting one leaves a gap in that series, which is itself a finding in an audit.
+Cancel is the correct mechanism and already exists — the row stays, the number stays, the PDF prints
+VOID, and a cancelled progress bill immediately stops counting as "previously billed" on the next
+one. Recorded here so the decision isn't re-litigated later.
+
+
+---
+
+## Fix — progress-bill running-account structure (migration 025, APPLIED)
+
+Caught by the user on a real second progress bill. Worth recording precisely, because the instinct
+("it's double-charging GST") was right that something was wrong but wrong about what.
+
+**What was NOT wrong.** No double taxation. Bill 2's GST minus bill 1's GST equalled exactly 18% of
+the incremental fee, and the ₹8,23,900 payable was correct — verified by recomputing both ways.
+
+**What WAS wrong.** 024 put "Less: previously billed" in with the LINE ITEMS, so a gross figure
+(previous total, tax included) was deducted from the pre-tax `subtotal`. The printed invoice then
+read:
+
+    Subtotal      2,63,110
+    GST @ 18%     5,60,790
+
+18% of 2,63,110 is 47,360. Those two lines sit on top of each other and don't reconcile — and on a
+GST invoice that is exactly what an assessing officer reads. Indefensible as printed.
+
+**Fixed in 025.** `less_previously_billed` moved to a header column; `total` regenerated as
+`subtotal + gst_amount - less_previously_billed`. The bill now states the cumulative position, taxes
+it, then deducts:
+
+    Reimbursable cost to date · Management fee to date
+    Subtotal (cumulative taxable) · GST on the fee · Cumulative gross
+    Less: previously billed (gross against gross) · Net payable
+
+Same payable, every line defensible on its own.
+
+**Second bug found while fixing it.** The user's bill 2 used an overlapping period (Jul 1 – Aug 30)
+and worked by luck. Had they picked *August only*, the cost would have been one month's while the
+deduction was the whole project's — a large negative bill. Progress bills now always compute
+cumulatively to the chosen date, ignore any start date, store `period_from` as NULL to say so, and
+a guard refuses to issue a negative bill.
+
+Verified: migration parses clean, payable recomputed identical (₹8,23,900), GST is 18% of the fee
+line on both bills, `tsc -b --force` clean. **Confirmed working by the user 2026-07-28.**

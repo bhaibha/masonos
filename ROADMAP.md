@@ -4,7 +4,11 @@ Rule: build top-to-bottom, ONE module per Cowork session. Each module = schema m
 test on real data → commit → tick here + update PROGRESS.md. Apply the CLAUDE.md design system to every module.
 Verify the supervisor RLS test after any module that shows money.
 
-Legend: [x] done · [ ] pending · [~] partial
+Legend: [x] built AND tested end-to-end on real data · [~] partial or built-but-untested · [ ] pending
+
+**A tick means you have used it and confirmed it works.** "Compiles" and "migration applied" are not
+the same as tested — anything built but not yet exercised end-to-end stays [~] with a note saying
+what's unverified. Audited honestly on 2026-07-28.
 
 ---
 
@@ -15,17 +19,28 @@ Legend: [x] done · [ ] pending · [~] partial
 - [x] Commercial-figure privacy closed at the DB level (migration 010) — no UI-only money gaps remain
 - [ ] Re-run supervisor incognito RLS test on the LIVE Project Detail (do after 010 is applied)
 
-## ALREADY BUILT (migrations 001–010)
+## ALREADY BUILT (migrations 001–023)
 - [x] M01 Command Dashboard + Project Detail
-- [x] M06 Financial / Open Book (expenses, budgets, receipts)
-- [x] M21 Petty Cash
+- [x] M06 Financial / Open Book (expenses, budgets, receipts) — void tested via the ledger
+- [~] **M21 Petty Cash — BACKEND ONLY, NO SCREEN.** `petty_cash_accounts` / `petty_cash_entries`,
+      the spend→expense mirror trigger, `v_petty_cash_balance` and the void path all exist and are
+      correct. **There is no UI anywhere** — no page, no route, no query file. Nothing in the app
+      can reach it. Was ticked in error. Decide: build the screen, or drop the module.
 - [x] M03 Site Management / Daily Log
-- [x] M16 Material Usage Tracker (inward/issue/stock)
+- [x] M16 Material Usage Tracker (inward/issue/stock) + Movements history
 - [x] M09 Document Vault
-- [x] Roles & Permissions (RLS, tested)
+- [~] Roles & Permissions — RLS is correct by construction and was tested on 2026-07-25, but that
+      predates A3 procurement, A5 variations, A6 instructions and the admin module. **The supervisor
+      incognito pass has not been re-run since.**
 - [x] Audit / Evidence log
-- [~] M08 Vendors — data + RLS done, SCREEN pending (first item Group A)
-- [~] M02 Tasks — list + rollover done; EVM/AI-schedule pending (Group B)
+- [x] M08 Vendors — superseded by A1 below (screen built and in use)
+- [~] M02 Tasks — list + rollover done and in use; EVM/AI-schedule pending (Group B)
+- [~] **Admin module (founder-only)** — projects create/edit tested; **creating a user through the
+      `admin-create-user` Edge Function has never been run successfully end to end.**
+- [~] **Record removal (migrations 020–022)** — void tested (stock movements show VOID with reasons)
+      and hard-delete refusal tested (materials blocked with a reference count). **Cancel on a PO or
+      an approved VO has not been exercised**, so the revised-contract-corrects-itself path is
+      unverified.
 
 ---
 
@@ -34,23 +49,37 @@ Order within group:
 - [x] A1. M08 Vendor Management screen — list + search, add/edit/deactivate, inline "add new vendor"
        on the expense form. Full design system (brass primary, toasts, ListSkeleton, EmptyState,
        staggered reveal).
-- [x] A2. M04 Safety — daily checklist per site (PPE/scaffolding/edge/electrical/housekeeping/excavation,
-       Pass/Fail/NA + remark + photo, one per site per day), incident & near-miss reports (type, people,
-       action, photos, open/close), safety summary on Project Detail (days incident-free, checklist %).
-       Migration 011 (tables + RLS + audit + fn_safety_summary). Full design system.
+- [~] A2. M04 Safety — **built, never tested.** Daily checklist per site
+       (PPE/scaffolding/edge/electrical/housekeeping/excavation, Pass/Fail/NA + remark + photo, one
+       per site per day), incident & near-miss reports, safety summary on Project Detail.
+       Migration 011 applied. No checklist or incident has ever been filed on real data.
 - [x] A3. M22 Procurement — full PR → PO → GRN → 3-way match. Backend migrations 012/013/015;
        raise/approve, PO PDF (full + delivery copy) auto-filed to Docs, GRN receipt (feeds stock),
        vendor invoice + 3-way match with variance flags, post-to-Open-Book. Rate privacy throughout.
-- [ ] A4. M15 Invoice Generator (client-side PDF: progress bill, management-fee invoice, vendor payment voucher)
+- [x] **A4. M15 Invoice Generator — built and TESTED** (migrations 024 + 025 applied).
+      Three types with separate number series: progress bill (INV-P), management-fee invoice
+      (INV-M), vendor payment voucher (INV-V). Every figure computed by `fn_issue_invoice` from
+      expenses / project fee % / posted vendor invoices and stored as an immutable snapshot —
+      nothing retyped, nothing recomputed on read. Letterhead PDF matching PO/VO/SI, GST breakup,
+      total in words (Indian lakh/crore), VOID watermark when cancelled. Founder/accounts only.
+      Progress bills tested across two consecutive bills including the previously-billed deduction.
+      **GST treatment is a tax position — see the note in 024's header and confirm with your CA
+      before the first real client bill.**
+      *025 fixed the running-account structure: the deduction was landing inside the taxable
+      subtotal, so the printed GST line couldn't be reconciled against the subtotal above it. The
+      payable was always correct; the presentation wasn't.*
 - [x] A5. M26 Variation Orders — register (raise/approve/reject, +/- cost impact, status), revised
        contract value on Project Detail, VO PDF on letterhead + file to Docs. Migration 016. PM raises,
        founder approves. Money-gated (supervisors excluded).
-- [x] **A6. M56 Site Instruction (SI) — DONE** (migration 023). SI number series, addressed-to
-      (linked vendor or free text), work area, instruction, photo attachments, cost-implication
-      flag + optional VO link, required-by date, issued/acknowledged/complete/cancelled with a
-      mandatory reason. Letterhead PDF matching PO/VO with a CANCELLED watermark. Founder/PM issue;
-      supervisors read their project (the table holds no figures, so no role gate on read).
-      Shipped with `cancelled` + reason from day one as required.
+- [~] **A6. M56 Site Instruction (SI) — built, partially tested** (migration 023 applied). SI number
+      series, addressed-to (linked vendor or free text), work area, instruction, photo attachments,
+      cost-implication flag + optional VO link, required-by date,
+      issued/acknowledged/complete/cancelled with a mandatory reason. Founder/PM issue; supervisors
+      read their project (the table holds no figures, so no role gate on read). Open instructions
+      surface on the Tasks list until marked complete.
+      **Tested:** issuing, and the open-instructions strip appearing under Tasks.
+      **Not yet tested:** the letterhead PDF, the CANCELLED watermark, the cancel path, the
+      complete-cannot-be-cancelled guard, and the supervisor view.
 - [ ] A7. M57 RFI Management — raise to design consultant, categories, response tracking, status
       **Ship with `cancelled`/`rejected` + reason in the status enum from day one** — same reason.
 - [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)
@@ -89,6 +118,15 @@ Order within group:
 - Orphaned-storage cleanup job (removing a photo leaves the object in the bucket)
 - pg_cron nightly auto-rollover wrapper (needs owner-invoked function; current rollover is button-triggered)
 - Aadhaar e-sign, WhatsApp API — deferred paid integrations if ever needed
+
+## Design system — status
+Rolled out in two passes: 2026-07-25 across Money / Tasks / Materials / Docs, and 2026-07-28 for the
+gaps that pass missed plus the screens built after it.
+**Code-complete and verified by inspection**: zero `rounded-xl border border-border` remain outside
+the Toaster; the only inline error banner left is Login's, deliberately; every list has a skeleton,
+an empty state with a primary action, and a staggered reveal; touch targets fixed at the button
+token (28px → 44px on 15 buttons). `tsc -b --force` clean.
+**Not visually reviewed by you** — worth a pass on a phone before it matters.
 
 ## Global reminders per module
 1. New tables → numbered migration + RLS + audit trigger where financial/material.

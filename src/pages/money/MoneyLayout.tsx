@@ -4,7 +4,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
 import { ListSkeleton } from '@/components/Skeleton'
 import { ProjectPicker } from '@/components/ProjectPicker'
-import { canEditBudgets } from '@/lib/types'
+import { canEditBudgets, canIssueInvoice } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
@@ -34,6 +34,9 @@ export default function MoneyLayout() {
       : []),
     { to: '/money/orders', label: 'Orders' },
     { to: '/money/variations', label: 'Variations' },
+    // Founder/accounts only — the invoices table's RLS enforces it; the tab is
+    // hidden for a PM so they don't hit an empty screen.
+    ...(canIssueInvoice(role) ? [{ to: '/money/invoices', label: 'Invoices' }] : []),
     { to: '/money/vendors', label: 'Vendors' },
   ]
 
