@@ -851,3 +851,55 @@ a guard refuses to issue a negative bill.
 
 Verified: migration parses clean, payable recomputed identical (₹8,23,900), GST is 18% of the fee
 line on both bills, `tsc -b --force` clean. **Confirmed working by the user 2026-07-28.**
+
+---
+
+## Session — A7 RFI Management (Module 57), migration 026
+
+Confirmed at start: **001–025 ALL APPLIED**, next = 026.
+
+**Built**
+
+- [x] **Migration 026** `026_rfis.sql` — `rfis` table, `rfi_status` (open/answered/closed/cancelled)
+      and `rfi_category` (design/structural/MEP/finishes/other), `rfi_number_seq` → `RFI-0001`.
+- [x] **Shape deliberately mirrors A6.** Same addressed-to pattern (linked vendor or free text — an
+      architect is rarely in the vendor master, and blocking the question on registering one means
+      the question doesn't get asked), same site-photos attachments, same cancellation contract.
+      They're the same kind of object travelling opposite ways: an SI tells a contractor what to do,
+      an RFI asks a consultant what to do.
+- [x] **No money, so supervisors read it.** `rfi_read` is plain `is_member()` with no role check —
+      supervisors are usually the ones who hit the clash and need to know whether an answer has
+      landed before proceeding. If an answer turns out to carry cost, that goes on a VO and then an
+      SI; this table never holds an amount.
+- [x] **Three CHECK constraints doing real work**, not just documentation:
+      - cancel requires `cancelled_at` + `cancelled_by` + a non-blank reason (the 021 contract);
+      - an RFI must have someone to ask (linked vendor OR free text);
+      - **`answered`/`closed` require the response text AND date to actually be present** — the
+        status can never claim something the record doesn't contain.
+- [x] **`fn_answer_rfi`** writes response text, date, who logged it and the status move in ONE
+      statement, so those can't drift apart. **`fn_set_rfi_status`** handles close/reopen and
+      **refuses to close an unanswered RFI** — that would quietly lose the question, which is what
+      cancel is for. Cancelling a *closed* RFI is refused too (it was answered and acted on).
+- [x] **`rfiPdf.ts`** — letterhead matching SI/PO/VO/invoice. Two-part document: question, then
+      response. **An unanswered RFI prints ruled empty lines** rather than a blank gap, so the sheet
+      can be handed or emailed to the consultant to write into. CANCELLED watermark at 14% opacity
+      with the reason at full opacity, same as A6.
+- [x] **Tasks → RFIs screen** — a count strip at the top ("N awaiting an answer · M past the
+      required-by date"), because the clock is the entire point of the module. Inline
+      record-response form, close/reopen, Download / File to Docs (→ Drawings, not confidential),
+      cancel via the shared dialog. Full design system: skeleton, empty state with primary action,
+      `OtherProjectsHint`, staggered reveal, toasts throughout.
+- [x] `canCancel` map extended with `rfis: ['founder','pm']`, matching the new RPC branch. That map
+      is now the single place the five cancellable document types are declared.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean, all three function bodies
+  clean (`fn_answer_rfi`, `fn_set_rfi_status`, `fn_cancel_document`).
+- `npx tsc -b --force` clean.
+
+**Not tested** — no RFI has been raised on real data. Untested: raising, recording a response, the
+close guard on an unanswered RFI, the PDF in both answered and unanswered states, the CANCELLED
+watermark, and the supervisor view.
+
+**Migration 026 APPLIED** — confirmed 2026-07-28. Not yet exercised on real data.

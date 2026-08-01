@@ -31,6 +31,7 @@ import Movements from '@/pages/materials/Movements'
 import StockRegister from '@/pages/materials/StockRegister'
 import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
+import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
@@ -76,6 +77,9 @@ export default function App() {
               {/* A6 Site Instructions. Readable by every project member —
                   the table holds no figures, so no role guard here. */}
               <Route path="instructions" element={<SiteInstructions />} />
+              {/* A7 RFIs. Same reasoning as instructions — no figures on the
+                  table, so every project member reads it. */}
+              <Route path="rfis" element={<Rfis />} />
             </Route>
 
             {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

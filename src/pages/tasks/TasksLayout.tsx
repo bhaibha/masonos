@@ -34,6 +34,7 @@ export default function TasksLayout() {
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },
     { to: '/tasks/instructions', label: 'Instructions' },
+    { to: '/tasks/rfis', label: 'RFIs' },
   ]
 
   return (

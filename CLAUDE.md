@@ -44,7 +44,9 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   **025 APPLIED** (confirmed 2026-07-28) — progress-bill running-account fix
   (`invoices.less_previously_billed`, `total` regenerated as
   subtotal + gst − less_previously_billed, corrected `fn_issue_invoice`).
-  So: **001–025 ALL APPLIED.** Next migration = 026.
+  **026 APPLIED** (confirmed 2026-07-28) — A7 RFIs (`rfis`, `rfi_status`/`rfi_category`,
+  `fn_answer_rfi`, `fn_set_rfi_status`, plus an rfis branch on `fn_cancel_document`).
+  So: **001–026 ALL APPLIED.** Next migration = 027.
 - **Enum lesson (021):** `alter type … add value` commits the label, but the new label CANNOT be
   used elsewhere in the same transaction — and the Supabase SQL editor runs a script as one. Write
   every comparison against a newly added label as `status::text = 'x'`, never the enum literal.

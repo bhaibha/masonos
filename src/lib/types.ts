@@ -280,8 +280,10 @@ export type CancellableTable =
   | 'variation_orders'
   | 'site_instructions'
   | 'invoices'
+  | 'rfis'
 
 export const CANCELLABLE_LABEL: Record<CancellableTable, string> = {
+  rfis: 'RFI',
   invoices: 'invoice',
   site_instructions: 'site instruction',
   purchase_orders: 'purchase order',
@@ -310,6 +312,7 @@ const CANCEL_ROLES: Record<CancellableTable, UserRole[]> = {
   site_instructions: ['founder', 'pm'],
   variation_orders: ['founder'], // only the founder approves them
   invoices: ['founder', 'accounts'], // same roles that issue them
+  rfis: ['founder', 'pm'], // same roles that raise them
 }
 
 export function canCancel(
@@ -733,6 +736,90 @@ export interface ProjectContract {
   variations_value: number
   pending_value: number
   revised_contract_value: number
+}
+
+// ---------- RFIs (A7, migration 026) ----------
+
+export type RfiStatus = 'open' | 'answered' | 'closed' | 'cancelled'
+export type RfiCategory =
+  | 'design'
+  | 'structural'
+  | 'mep'
+  | 'finishes'
+  | 'other'
+
+export const RFI_STATUS_LABEL: Record<RfiStatus, string> = {
+  open: 'Awaiting answer',
+  answered: 'Answered',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+}
+
+export const RFI_CATEGORIES: { value: RfiCategory; label: string }[] = [
+  { value: 'design', label: 'Design' },
+  { value: 'structural', label: 'Structural' },
+  { value: 'mep', label: 'MEP' },
+  { value: 'finishes', label: 'Finishes' },
+  { value: 'other', label: 'Other' },
+]
+
+export const RFI_CATEGORY_LABEL = Object.fromEntries(
+  RFI_CATEGORIES.map((c) => [c.value, c.label]),
+) as Record<RfiCategory, string>
+
+/** Founder/PM raise and answer. Supervisors read their project. */
+export function canRaiseRFI(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/**
+ * A question to the design consultant that's blocking work. Carries no money —
+ * that's what lets supervisors read the whole table. If an answer turns out to
+ * have a cost, it goes on a VO and then an SI; this never holds an amount.
+ */
+export interface RfiRow extends CancelFields {
+  id: string
+  rfi_number: string
+  project_id: string
+  raised_date: string
+  vendor_id: string | null
+  /** registered vendor name if linked, else the free-text consultant */
+  addressed_display: string | null
+  addressed_registered: boolean
+  category: RfiCategory
+  question: string
+  attachments: string[]
+  required_by: string | null
+  response: string | null
+  response_date: string | null
+  responded_by: string | null
+  status: RfiStatus
+  raised_by: string
+  raised_by_name: string | null
+  closed_at: string | null
+  created_at: string
+}
+
+export interface NewRfiInput {
+  project_id: string
+  raised_date: string
+  vendor_id: string | null
+  addressed_to: string
+  category: RfiCategory
+  question: string
+  attachments: string[]
+  required_by: string | null
+}
+
+/**
+ * Overdue = past its required-by date with no answer yet.
+ * An answered-but-not-closed RFI is not overdue — the question was resolved,
+ * the housekeeping just hasn't been done.
+ */
+export function rfiIsOverdue(rfi: RfiRow, today: string): boolean {
+  if (!rfi.required_by) return false
+  if (rfi.status !== 'open') return false
+  return rfi.required_by < today
 }
 
 // ---------- Invoices (A4, migration 024) ----------

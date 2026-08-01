@@ -80,8 +80,14 @@ Order within group:
       **Tested:** issuing, and the open-instructions strip appearing under Tasks.
       **Not yet tested:** the letterhead PDF, the CANCELLED watermark, the cancel path, the
       complete-cannot-be-cancelled guard, and the supervisor view.
-- [ ] A7. M57 RFI Management — raise to design consultant, categories, response tracking, status
-      **Ship with `cancelled`/`rejected` + reason in the status enum from day one** — same reason.
+- [~] **A7. M57 RFI Management — built, migration 026 APPLIED, not yet exercised.**
+      RFI number series, addressed-to (linked vendor or free text), category
+      (design/structural/MEP/finishes/other), question, photo attachments, required-by date,
+      response text + date, open/answered/closed/cancelled with a mandatory cancel reason.
+      Letterhead PDF matching SI/PO/VO/invoice, with a ruled empty response block when unanswered
+      so the sheet can be handed to the consultant. Founder/PM raise and answer; supervisors read
+      their project (no figures on the table). Shipped with `cancelled` + reason from day one as
+      required.
 - [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)
 - [ ] A9. M31 Compliance / Statutory Calendar (dated reminders: TDS, GST, labour, permits; alert via pg_cron)
 - [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)
