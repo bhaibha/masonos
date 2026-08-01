@@ -14,6 +14,7 @@ import {
   fetchProjectCommercials,
   fetchProjects,
 } from '@/lib/queries/projects'
+import { fetchSnagSummary, setProjectDlp } from '@/lib/queries/snags'
 import {
   PROJECT_STATUS_LABEL,
   type NewProjectInput,
@@ -181,12 +182,23 @@ function ProjectForm({
   const [form, setForm] = useState<NewProjectInput>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [loadingCommercials, setLoadingCommercials] = useState(false)
+  // DLP lives on the project row (027) but is read through
+  // fn_project_snag_summary, which already returns the window.
+  const [dlpStart, setDlpStart] = useState('')
+  const [dlpEnd, setDlpEnd] = useState('')
 
   useEffect(() => {
     if (!project) {
       setForm(EMPTY)
+      setDlpStart('')
+      setDlpEnd('')
       return
     }
+
+    void fetchSnagSummary(project.id).then((s) => {
+      setDlpStart(s?.dlp_start ?? '')
+      setDlpEnd(s?.dlp_end ?? '')
+    })
 
     setForm({
       name: project.name,
@@ -223,13 +235,22 @@ function ProjectForm({
       return
     }
 
+    if (dlpStart !== '' && dlpEnd !== '' && dlpEnd < dlpStart) {
+      toast.error('The DLP cannot end before it starts')
+      return
+    }
+
     setSaving(true)
     try {
       if (project) {
         await updateProject(project.id, form)
+        await setProjectDlp(project.id, dlpStart || null, dlpEnd || null)
         toast.success(`${form.name.trim()} updated`)
       } else {
-        await createProject(form)
+        const created = await createProject(form)
+        if (dlpStart || dlpEnd) {
+          await setProjectDlp(created.id, dlpStart || null, dlpEnd || null)
+        }
         toast.success(`${form.name.trim()} created`, {
           description: 'Assign the team on the Team tab.',
         })
@@ -336,6 +357,34 @@ function ProjectForm({
         The fee amount is computed in Postgres from these two figures. Both are
         hidden from supervisors by the database, not by this screen.
       </p>
+
+      <div className="border-t border-border pt-5">
+        <div className="grid grid-cols-2 gap-4">
+          <FieldRow label="DLP starts" htmlFor="p-dlp-s">
+            <Input
+              id="p-dlp-s"
+              type="date"
+              value={dlpStart}
+              onChange={(e) => setDlpStart(e.target.value)}
+              className="h-12"
+            />
+          </FieldRow>
+          <FieldRow label="DLP ends" htmlFor="p-dlp-e">
+            <Input
+              id="p-dlp-e"
+              type="date"
+              value={dlpEnd}
+              onChange={(e) => setDlpEnd(e.target.value)}
+              className="h-12"
+            />
+          </FieldRow>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Defect liability period — usually handover date plus 12 months. Snags
+          raised inside this window are flagged, and the app warns as the end
+          date approaches.
+        </p>
+      </div>
 
       <div className="flex gap-3 pt-1">
         <Button type="submit" disabled={saving} className="h-12 flex-1 text-base">

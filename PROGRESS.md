@@ -903,3 +903,70 @@ close guard on an unanswered RFI, the PDF in both answered and unanswered states
 watermark, and the supervisor view.
 
 **Migration 026 APPLIED** — confirmed 2026-07-28. Not yet exercised on real data.
+
+---
+
+## Session — A8 Snags + Defect Liability Period (Module 19), migration 027
+
+Confirmed at start: **001–026 ALL APPLIED**, next = 027.
+
+**Built**
+
+- [x] **Migration 027** `027_snags_dlp.sql` — `snags` table, `snag_severity` (low/medium/high),
+      `snag_status` (open/in_progress/resolved/verified), `snag_number_seq` → `SNG-0001`.
+      `projects.dlp_start_date` / `dlp_end_date`, **plus the `grant select` on both** — 010 revoked
+      column-level SELECT on `projects`, so a new column is invisible to everyone until granted.
+      That grant is the single line this module would have silently failed without.
+- [x] **Evidence is enforced by the database, not the form.** `fn_resolve_snag` refuses a resolution
+      with neither a photo nor a note, and `snags_resolution_ck` backs it up — a snag closed with no
+      evidence is worth nothing, and a form check alone can be bypassed by any client.
+- [x] **Separation of fix and sign-off.** `fn_verify_snag` is founder/PM only: whoever fixed a defect
+      shouldn't be the one certifying it. That separation is the whole reason a snag list exists, so
+      it lives in the RPC rather than in `canVerifySnag`, which is only the UI's echo of it.
+- [x] **Reopening clears the old resolution.** `fn_set_snag_status(id,'open')` wipes the note, photos,
+      resolved_at/by. Evidence for a fix that didn't hold no longer stands, and leaving it would let
+      a snag show a fix photo while sitting open.
+- [x] **`raised_during_dlp` is frozen at insert** by the `fn_snag_dlp_flag` trigger, comparing the
+      raised date against the project's window at that moment. Deliberately *not* computed on read:
+      if the DLP dates are edited later, history must not silently rewrite itself — whether a defect
+      fell inside the liability period is a contractual fact about the day it was raised.
+- [x] **`fn_project_snag_summary`** returns every count plus the DLP position (`dlp_active`,
+      `dlp_days_left`) computed in Postgres. Nothing is tallied in the browser, including the
+      countdown.
+- [x] **Supervisors raise and resolve.** `snag_read`/`snag_insert` are plain `is_member()` — no
+      figures on this table, and supervisors are the ones walking the site finding defects. Verify is
+      the only gated action.
+- [x] **Tasks → Snags screen** — Outstanding / In DLP / All filters, summary strip with open counts
+      by severity and the DLP line, inline resolve form (camera-first, multiple photos, compressed
+      client-side), start / resolve / verify / reopen, defect and fix photos shown side by side via
+      signed URLs. Full design system: skeleton, empty state with primary action,
+      `OtherProjectsHint`, staggered reveal, toasts throughout.
+- [x] **Snag card on Project Detail** — open + in-progress, awaiting sign-off, severity chips, and
+      the DLP countdown, going danger-coloured inside 30 days (`DLP_WARN_DAYS`). That warning is the
+      one that costs money if it's missed: after the end date, defects stop being ours to fix under
+      the contract.
+- [x] **DLP dates on Manage → Projects**, written through `setProjectDlp` with an end-before-start
+      guard. Read back through `fn_project_snag_summary`, which already returns the window — no new
+      query, and no widening of `PROJECT_COLUMNS` (which would 400 for every screen if 027 hadn't
+      been run yet).
+- [x] **Hard delete, not cancel.** A snag has no downstream effect, so it belongs in mechanism 1;
+      `fn_delete_record` gains a `snags` branch that **refuses to delete a verified snag** — that row
+      is the record that a defect was fixed and signed off. Reopen it instead.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean, all four non-trigger
+  functions clean. `fn_snag_dlp_flag` fails the parser only because **pglast cannot parse any
+  `returns trigger` function** — proven against a trivial three-line case and against `fn_audit`
+  from 001, which has run in production since day one. Recorded in CLAUDE.md.
+- `npx tsc -b --force` clean.
+
+**Migration 027 APPLIED** — confirmed 2026-08-01.
+
+**Tested 2026-08-01** on the live app, founder + supervisor: DLP dates save and read back (the
+column grant landed), raising a snag with photos, the evidence-free resolve refusal, verify, the
+reopen-clears-resolution behaviour, and the verified-snag delete refusal. **A8 is done.**
+
+Still worth watching on real use: whether the 30-day DLP warning is early enough for a 12-month
+liability period, and whether supervisors want an "assigned to me" filter once more than a handful
+of snags are open at once.

@@ -35,6 +35,7 @@ import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
+import Snags from '@/pages/tasks/Snags'
 import TaskForm from '@/pages/tasks/TaskForm'
 import TaskList from '@/pages/tasks/TaskList'
 import TasksLayout from '@/pages/tasks/TasksLayout'
@@ -80,6 +81,9 @@ export default function App() {
               {/* A7 RFIs. Same reasoning as instructions — no figures on the
                   table, so every project member reads it. */}
               <Route path="rfis" element={<Rfis />} />
+              {/* A8 Snags. Supervisors raise and resolve defects on their own
+                  project; verification is founder/PM, enforced in the RPC. */}
+              <Route path="snags" element={<Snags />} />
             </Route>
 
             {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

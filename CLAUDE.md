@@ -46,7 +46,15 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   subtotal + gst − less_previously_billed, corrected `fn_issue_invoice`).
   **026 APPLIED** (confirmed 2026-07-28) — A7 RFIs (`rfis`, `rfi_status`/`rfi_category`,
   `fn_answer_rfi`, `fn_set_rfi_status`, plus an rfis branch on `fn_cancel_document`).
-  So: **001–026 ALL APPLIED.** Next migration = 027.
+  **027 APPLIED** (confirmed 2026-08-01) — A8 Snags + DLP (`snags`,
+  `snag_severity`/`snag_status`, `fn_resolve_snag`, `fn_verify_snag`, `fn_set_snag_status`,
+  `fn_project_snag_summary`, `projects.dlp_start_date`/`dlp_end_date` **+ the column grant**, plus a
+  snags branch on `fn_delete_record`).
+  So: **001–027 ALL APPLIED.** Next migration = 028.
+- **Column-grant lesson (027):** migration 010 revoked SELECT on `projects` and granted an explicit
+  column list. Any column added to `projects` afterwards is therefore invisible to every user until
+  it is named in a new `grant select (col) on public.projects to authenticated`. Same trap as 020's
+  grant on `material_inward`. Adding a column to a column-granted table is two statements, never one.
 - **Enum lesson (021):** `alter type … add value` commits the label, but the new label CANNOT be
   used elsewhere in the same transaction — and the Supabase SQL editor runs a script as one. Write
   every comparison against a newly added label as `status::text = 'x'`, never the enum literal.
@@ -58,6 +66,11 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   X to Y" or "cannot drop columns from view". ALWAYS `drop view if exists <name> cascade;` then
   `create view`. This has now bitten three times (013 v_po_match/v_po_totals, 018
   v_material_inward). Default to drop-then-create for every view redefinition, no exceptions.
+- **pglast/libpg_query CANNOT parse `returns trigger` functions** — it throws JSONDecodeError on
+  every one, including a three-line trivial case and `fn_audit` from 001, which has run in
+  production since day one. When pre-flighting a migration, a FAIL on a trigger function is the
+  tool, not the SQL. Non-trigger functions parse fine and are worth checking. (Confirmed 2026-07-28
+  by parsing a minimal trigger fn and an already-applied one.)
 - Views/functions that break silently if their migration is skipped (watch for "0 items"/blank totals):
   007 (`v_project_spend.remaining/pct_used`), 009 (`v_portfolio_summary`),
   013 (`v_po_totals`/`v_po_value`/`v_po_match`), 015 (`fn_receive_goods`).

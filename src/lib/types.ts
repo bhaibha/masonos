@@ -343,12 +343,14 @@ export type DeletableTable =
   | 'materials'
   | 'vendors'
   | 'budgets'
+  | 'snags'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
   tasks: 'task',
   site_logs: 'site log',
   safety_checklists: 'safety checklist',
   incidents: 'incident',
+  snags: 'snag',
   documents: 'document',
   purchase_orders: 'request',
   materials: 'material',
@@ -737,6 +739,101 @@ export interface ProjectContract {
   pending_value: number
   revised_contract_value: number
 }
+
+// ---------- Snags + DLP (A8, migration 027) ----------
+
+export type SnagSeverity = 'low' | 'medium' | 'high'
+export type SnagStatus = 'open' | 'in_progress' | 'resolved' | 'verified'
+
+export const SNAG_SEVERITIES: { value: SnagSeverity; label: string }[] = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
+
+export const SNAG_SEVERITY_LABEL = Object.fromEntries(
+  SNAG_SEVERITIES.map((s) => [s.value, s.label]),
+) as Record<SnagSeverity, string>
+
+export const SNAG_STATUS_LABEL: Record<SnagStatus, string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  resolved: 'Resolved',
+  verified: 'Verified',
+}
+
+/** Supervisors walk the site and find defects, so they raise and resolve. */
+export function canRaiseSnag(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
+/**
+ * Verification is founder/PM only. Whoever fixed a defect shouldn't be the one
+ * signing it off — that separation is the point of a snag list, and
+ * fn_verify_snag enforces it rather than trusting this.
+ */
+export function canVerifySnag(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+export interface SnagRow {
+  id: string
+  snag_number: string
+  project_id: string
+  raised_date: string
+  work_area: string
+  trade: string | null
+  description: string
+  severity: SnagSeverity
+  photos: string[]
+  assigned_vendor_id: string | null
+  /** registered vendor name if linked, else the free-text name */
+  assigned_display: string | null
+  assigned_registered: boolean
+  status: SnagStatus
+  resolution_note: string | null
+  resolution_photos: string[]
+  resolved_at: string | null
+  resolved_by: string | null
+  verified_at: string | null
+  verified_by: string | null
+  /** frozen at insert — whether it fell inside the liability window */
+  raised_during_dlp: boolean
+  raised_by: string
+  raised_by_name: string | null
+  created_at: string
+}
+
+export interface NewSnagInput {
+  project_id: string
+  raised_date: string
+  work_area: string
+  trade: string
+  description: string
+  severity: SnagSeverity
+  photos: string[]
+  assigned_vendor_id: string | null
+  assigned_to: string
+}
+
+/** Return shape of fn_project_snag_summary — every count computed in Postgres. */
+export interface SnagSummary {
+  open_count: number
+  in_progress_count: number
+  resolved_count: number
+  verified_count: number
+  open_low: number
+  open_medium: number
+  open_high: number
+  dlp_snag_count: number
+  dlp_start: string | null
+  dlp_end: string | null
+  dlp_active: boolean
+  dlp_days_left: number | null
+}
+
+/** DLP ending within this many days is worth warning about. */
+export const DLP_WARN_DAYS = 30
 
 // ---------- RFIs (A7, migration 026) ----------
 

@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ClipboardCheck,
   ClipboardList,
   FileText,
   Package,
@@ -20,6 +21,7 @@ import {
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
 import { fetchSafetySummary } from '@/lib/queries/safety'
+import { fetchSnagSummary } from '@/lib/queries/snags'
 import { fetchProjectContract } from '@/lib/queries/variations'
 import {
   fetchProject,
@@ -39,6 +41,9 @@ import {
   type ProjectSpend,
   type ProjectSummary,
   type SafetySummary,
+  DLP_WARN_DAYS,
+  SNAG_SEVERITY_LABEL,
+  type SnagSummary,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -57,6 +62,7 @@ export default function ProjectDetail() {
   const [spend, setSpend] = useState<ProjectSpend | null>(null)
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
   const [safety, setSafety] = useState<SafetySummary | null>(null)
+  const [snags, setSnags] = useState<SnagSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
 
   // Scope every tab to this project the moment the screen opens.
@@ -110,6 +116,14 @@ export default function ProjectDetail() {
     fetchSafetySummary(id)
       .then((s) => {
         if (!cancelled) setSafety(s)
+      })
+      .catch(() => {})
+
+    // Counts and DLP position both come from fn_project_snag_summary — no
+    // tallying here.
+    fetchSnagSummary(id)
+      .then((s) => {
+        if (!cancelled) setSnags(s)
       })
       .catch(() => {})
 
@@ -187,6 +201,10 @@ export default function ProjectDetail() {
 
         <RevealItem className="h-full">
           <SafetyCard safety={safety} onOpen={() => navigate('/tasks/safety')} />
+        </RevealItem>
+
+        <RevealItem className="h-full">
+          <SnagsCard snags={snags} onOpen={() => navigate('/tasks/snags')} />
         </RevealItem>
 
         <RevealItem className="h-full sm:col-span-2">
@@ -591,6 +609,93 @@ function SafetyCard({
             />
           )}
         </div>
+      )}
+    </SectionCard>
+  )
+}
+
+function SnagsCard({
+  snags: s,
+  onOpen,
+}: {
+  snags: SnagSummary | null
+  onOpen: () => void
+}) {
+  const dlpEnding =
+    s !== null &&
+    s.dlp_active &&
+    s.dlp_days_left !== null &&
+    s.dlp_days_left <= DLP_WARN_DAYS
+
+  return (
+    <SectionCard
+      icon={ClipboardCheck}
+      title="Snags"
+      action="View snags"
+      onAction={onOpen}
+    >
+      {s === null ? (
+        <Skeleton className="h-8 w-40" />
+      ) : (
+        <>
+          <div className="flex gap-8">
+            <Stat
+              label="Open"
+              value={String(s.open_count + s.in_progress_count)}
+              tone={s.open_high > 0 ? 'danger' : undefined}
+            />
+            <Stat
+              label="Awaiting sign-off"
+              value={String(s.resolved_count)}
+              tone={s.resolved_count > 0 ? 'warning' : undefined}
+            />
+          </div>
+
+          {(s.open_high > 0 || s.open_medium > 0 || s.open_low > 0) && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {(['high', 'medium', 'low'] as const).map((sev) => {
+                const n =
+                  sev === 'high'
+                    ? s.open_high
+                    : sev === 'medium'
+                      ? s.open_medium
+                      : s.open_low
+                if (n === 0) return null
+                return (
+                  <span
+                    key={sev}
+                    className={cn(
+                      'rounded-full px-2.5 py-1 text-[11px]',
+                      sev === 'high'
+                        ? 'bg-destructive/10 text-destructive'
+                        : 'bg-secondary text-muted-foreground',
+                    )}
+                  >
+                    {SNAG_SEVERITY_LABEL[sev]} · {n}
+                  </span>
+                )
+              })}
+            </div>
+          )}
+
+          {/* The DLP line is the one that costs money if it's missed: after the
+              end date, defects stop being ours to fix under the contract. */}
+          {s.dlp_end && (
+            <p
+              className={cn(
+                'mt-4 text-[13px]',
+                dlpEnding ? 'text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {s.dlp_active
+                ? `DLP ends ${s.dlp_end}${s.dlp_days_left !== null ? ` · ${s.dlp_days_left} days left` : ''}`
+                : s.dlp_days_left !== null && s.dlp_days_left < 0
+                  ? `DLP ended ${s.dlp_end}`
+                  : `DLP starts ${s.dlp_start ?? '—'}`}
+              {s.dlp_snag_count > 0 && ` · ${s.dlp_snag_count} open in period`}
+            </p>
+          )}
+        </>
       )}
     </SectionCard>
   )

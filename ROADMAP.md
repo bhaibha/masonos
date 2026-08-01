@@ -88,7 +88,19 @@ Order within group:
       so the sheet can be handed to the consultant. Founder/PM raise and answer; supervisors read
       their project (no figures on the table). Shipped with `cancelled` + reason from day one as
       required.
-- [ ] A8. M19 Snags + DLP (snag list per area, assign, resolve, defect-liability-period tracking)
+- [x] **A8. M19 Snags + DLP — built, migration 027 APPLIED, exercised on real data 2026-08-01.**
+      Snag number series (SNG-0001), work area + trade, severity (low/medium/high), defect photos,
+      assign to a linked vendor or free text, status open → in progress → resolved → verified.
+      Resolution needs evidence — a photo or a note — enforced by `fn_resolve_snag` and a CHECK
+      constraint, not the form. Verification is founder/PM only (whoever fixed it doesn't sign it
+      off). Reopening clears the old resolution. DLP start/end per project on Manage → Projects;
+      `raised_during_dlp` is frozen at insert by a trigger, so moving the dates later never rewrites
+      history. Snag card on Project Detail (open by severity, awaiting sign-off, DLP countdown),
+      warning inside 30 days of expiry. Supervisors raise and resolve on their own project. Hard
+      delete via `fn_delete_record`, refused once verified.
+      **Tested 2026-08-01** by the founder on the live app: DLP dates save and read back (so the
+      column grant landed), raising with photos, the evidence-free resolve refusal, verify, the
+      reopen-clears-resolution behaviour, and the verified-snag delete refusal.
 - [ ] A9. M31 Compliance / Statutory Calendar (dated reminders: TDS, GST, labour, permits; alert via pg_cron)
 - [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)
 - [ ] A11. M33 Bill Certification / RA Bills (measurement → certify → running-account bill)
