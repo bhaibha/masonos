@@ -50,7 +50,17 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `snag_severity`/`snag_status`, `fn_resolve_snag`, `fn_verify_snag`, `fn_set_snag_status`,
   `fn_project_snag_summary`, `projects.dlp_start_date`/`dlp_end_date` **+ the column grant**, plus a
   snags branch on `fn_delete_record`).
-  So: **001–027 ALL APPLIED.** Next migration = 028.
+  **028 APPLIED** (confirmed 2026-08-01) — A9 Compliance calendar
+  (`compliance_items`, `compliance_category`/`compliance_recurrence`/`compliance_status`,
+  `v_compliance_calendar`, `fn_file_compliance`, `fn_unfile_compliance`, `fn_compliance_alert`,
+  `fn_compliance_sweep` + a nightly pg_cron job, the `compliance` storage bucket, plus a
+  compliance_items branch on `fn_delete_record`).
+  So: **001–028 ALL APPLIED.** Next migration = 029.
+- **Background-job lesson (028):** the nightly sweep writes `status = 'overdue'`, but nothing in the
+  UI reads that column — `v_compliance_calendar` derives overdue/due-soon from `due_date` in
+  Asia/Kolkata at query time. pg_cron is not guaranteed to be enabled, and a deadline screen whose
+  correctness depends on a background job having run is a screen you cannot trust. Any future
+  scheduled job should follow the same split: the job is bookkeeping, the view is truth.
 - **Column-grant lesson (027):** migration 010 revoked SELECT on `projects` and granted an explicit
   column list. Any column added to `projects` afterwards is therefore invisible to every user until
   it is named in a new `grant select (col) on public.projects to authenticated`. Same trap as 020's

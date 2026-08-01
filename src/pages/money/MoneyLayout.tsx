@@ -38,6 +38,8 @@ export default function MoneyLayout() {
     // hidden for a PM so they don't hit an empty screen.
     ...(canIssueInvoice(role) ? [{ to: '/money/invoices', label: 'Invoices' }] : []),
     { to: '/money/vendors', label: 'Vendors' },
+    // Company-wide as well as per-project, so it is not scoped by the picker.
+    { to: '/money/compliance', label: 'Compliance' },
   ]
 
   return (

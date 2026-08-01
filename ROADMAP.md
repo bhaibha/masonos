@@ -101,7 +101,20 @@ Order within group:
       **Tested 2026-08-01** by the founder on the live app: DLP dates save and read back (so the
       column grant landed), raising with photos, the evidence-free resolve refusal, verify, the
       reopen-clears-resolution behaviour, and the verified-snag delete refusal.
-- [ ] A9. M31 Compliance / Statutory Calendar (dated reminders: TDS, GST, labour, permits; alert via pg_cron)
+- [x] **A9. M31 Compliance / Statutory Calendar — built, migration 028 APPLIED, exercised 2026-08-01.**
+      `compliance_items` with category (GST/TDS/PF/ESI/labour licence/building permit/insurance/
+      other), company-wide **or** project-scoped (`project_id` nullable), due date, recurrence
+      (one-time/monthly/quarterly/annual), responsible person, notes, and proof of filing in a new
+      `compliance` storage bucket. Month-grouped calendar list under Money → Compliance, colour
+      coded green/amber/red off `display_status`, filters by category and by company/project.
+      Mark-as-filed uploads the proof and, for a recurring item, generates the next occurrence
+      server-side in the same function — counted from the DUE date, not the filing date, and
+      protected by a UNIQUE (series_id, due_date) index so a double click can't create two.
+      Nightly pg_cron sweep flips past-due items to `overdue`; the calendar does **not** depend on
+      it having run. Dashboard strip ("N overdue · N due this week") that renders only when
+      something is actually due. Founder/PM/accounts; supervisors cannot reach /money at all.
+      **Tested 2026-08-01** by the founder on the live app: adding a deadline, the filing flow with
+      proof upload, next-occurrence generation, reopen, and the dashboard strip.
 - [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)
 - [ ] A11. M33 Bill Certification / RA Bills (measurement → certify → running-account bill)
 - [ ] A12. M34 Retention & Bank Guarantee (retention held/released, BG expiry tracking)

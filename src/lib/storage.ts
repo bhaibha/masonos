@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 export const RECEIPTS_BUCKET = 'receipts'
 export const SITE_PHOTOS_BUCKET = 'site-photos'
 export const DOCUMENTS_BUCKET = 'documents'
+export const COMPLIANCE_BUCKET = 'compliance'
 
 /** CLAUDE.md rule 3: nothing over 300KB reaches Storage. */
 const MAX_SIZE_MB = 0.3
@@ -137,4 +138,42 @@ export async function signedDocumentUrl(
   expiresInSeconds = 300,
 ): Promise<string | null> {
   return signed(DOCUMENTS_BUCKET, path, expiresInSeconds)
+}
+
+/**
+ * Proof of a statutory filing (migration 028). A GST return belongs to the
+ * company, not to a villa, so a company-wide item has no project id to key the
+ * path off — those objects go under the literal `company/` prefix, which the
+ * bucket's policies accept alongside the usual project-id prefix.
+ *
+ * PDFs and challans are uploaded byte-for-byte; only images are compressed.
+ * A filing acknowledgement that has been re-encoded is not proof of anything.
+ */
+export async function uploadComplianceProof(
+  projectId: string | null,
+  file: File,
+): Promise<string> {
+  const isImage = file.type.startsWith('image/')
+  const payload = isImage ? await compressImage(file) : file
+  const ext = isImage ? '.jpg' : extensionOf(file.name)
+  const contentType = isImage
+    ? 'image/jpeg'
+    : file.type || 'application/octet-stream'
+
+  const prefix = projectId ?? 'company'
+  const path = `${prefix}/${crypto.randomUUID()}${ext}`
+
+  const { error } = await supabase.storage
+    .from(COMPLIANCE_BUCKET)
+    .upload(path, payload, { contentType, upsert: false })
+
+  if (error) throw error
+  return path
+}
+
+export async function signedComplianceUrl(
+  path: string,
+  expiresInSeconds = 300,
+): Promise<string | null> {
+  return signed(COMPLIANCE_BUCKET, path, expiresInSeconds)
 }

@@ -12,6 +12,7 @@ import AdminLayout from '@/pages/admin/AdminLayout'
 import AdminProjects from '@/pages/admin/AdminProjects'
 import AdminTeam from '@/pages/admin/AdminTeam'
 import BudgetEditor from '@/pages/money/BudgetEditor'
+import Compliance from '@/pages/money/Compliance'
 import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
 import Invoices from '@/pages/money/Invoices'
@@ -100,6 +101,10 @@ export default function App() {
                 {/* A4 Invoices. RLS restricts the table to founder/accounts,
                     so the parent MONEY_ROLES guard is the outer layer only. */}
                 <Route path="invoices" element={<Invoices />} />
+                {/* A9 Compliance calendar. Founder/PM/accounts — exactly the
+                    MONEY_ROLES the parent guard already enforces, and RLS on
+                    compliance_items repeats it. */}
+                <Route path="compliance" element={<Compliance />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

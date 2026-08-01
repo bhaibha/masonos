@@ -344,8 +344,10 @@ export type DeletableTable =
   | 'vendors'
   | 'budgets'
   | 'snags'
+  | 'compliance_items'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
+  compliance_items: 'compliance item',
   tasks: 'task',
   site_logs: 'site log',
   safety_checklists: 'safety checklist',
@@ -358,15 +360,19 @@ export const DELETABLE_LABEL: Record<DeletableTable, string> = {
   budgets: 'budget line',
 }
 
-/** Mirrors fn_delete_record: budgets are founder/accounts, the rest founder/pm. */
+/**
+ * Mirrors fn_delete_record's role gate: budgets are founder/accounts,
+ * compliance items are founder/pm/accounts (the three roles that own that
+ * module), everything else founder/pm.
+ */
 export function canDelete(
   role: UserRole | null,
   table: DeletableTable,
 ): boolean {
   if (role === null) return false
-  return table === 'budgets'
-    ? role === 'founder' || role === 'accounts'
-    : role === 'founder' || role === 'pm'
+  if (table === 'budgets') return role === 'founder' || role === 'accounts'
+  if (table === 'compliance_items') return canManageCompliance(role)
+  return role === 'founder' || role === 'pm'
 }
 
 /** What each record type is called in confirm dialogs and toasts. */
@@ -834,6 +840,137 @@ export interface SnagSummary {
 
 /** DLP ending within this many days is worth warning about. */
 export const DLP_WARN_DAYS = 30
+
+// ---------- Compliance calendar (A9, migration 028) ----------
+
+export type ComplianceCategory =
+  | 'gst'
+  | 'tds'
+  | 'pf'
+  | 'esi'
+  | 'labour_licence'
+  | 'building_permit'
+  | 'insurance_renewal'
+  | 'other'
+
+export type ComplianceRecurrence =
+  | 'one_time'
+  | 'monthly'
+  | 'quarterly'
+  | 'annual'
+
+export type ComplianceStatus = 'pending' | 'filed' | 'overdue'
+
+/**
+ * What the UI colours by. Derived in v_compliance_calendar from due_date at
+ * query time, NOT read off the status column — the nightly sweep is
+ * bookkeeping, and a deadline screen that needs a cron job to have run is a
+ * deadline screen you can't trust.
+ */
+export type ComplianceDisplayStatus =
+  | 'filed'
+  | 'overdue'
+  | 'due_soon'
+  | 'upcoming'
+
+export const COMPLIANCE_CATEGORIES: {
+  value: ComplianceCategory
+  label: string
+}[] = [
+  { value: 'gst', label: 'GST' },
+  { value: 'tds', label: 'TDS' },
+  { value: 'pf', label: 'PF' },
+  { value: 'esi', label: 'ESI' },
+  { value: 'labour_licence', label: 'Labour licence' },
+  { value: 'building_permit', label: 'Building permit' },
+  { value: 'insurance_renewal', label: 'Insurance renewal' },
+  { value: 'other', label: 'Other' },
+]
+
+export const COMPLIANCE_CATEGORY_LABEL = Object.fromEntries(
+  COMPLIANCE_CATEGORIES.map((c) => [c.value, c.label]),
+) as Record<ComplianceCategory, string>
+
+export const COMPLIANCE_RECURRENCES: {
+  value: ComplianceRecurrence
+  label: string
+}[] = [
+  { value: 'one_time', label: 'One-time' },
+  { value: 'monthly', label: 'Every month' },
+  { value: 'quarterly', label: 'Every quarter' },
+  { value: 'annual', label: 'Every year' },
+]
+
+export const COMPLIANCE_RECURRENCE_LABEL = Object.fromEntries(
+  COMPLIANCE_RECURRENCES.map((r) => [r.value, r.label]),
+) as Record<ComplianceRecurrence, string>
+
+export const COMPLIANCE_DISPLAY_LABEL: Record<ComplianceDisplayStatus, string> =
+  {
+    filed: 'Filed',
+    overdue: 'Overdue',
+    due_soon: 'Due soon',
+    upcoming: 'Upcoming',
+  }
+
+/**
+ * Founder, PM and accounts. Supervisors are absent from every policy on
+ * compliance_items, and the screen lives behind /money, which they cannot
+ * reach at all.
+ */
+export function canManageCompliance(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+/** Reopening a filing is founder/accounts — it unwinds a statutory record. */
+export function canUnfileCompliance(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+export interface ComplianceRow {
+  id: string
+  title: string
+  category: ComplianceCategory
+  /** null = company-wide, not tied to any one site */
+  project_id: string | null
+  project_name: string | null
+  due_date: string
+  recurrence: ComplianceRecurrence
+  responsible: string | null
+  responsible_name: string | null
+  status: ComplianceStatus
+  notes: string | null
+  proof_path: string | null
+  filed_date: string | null
+  filed_by: string | null
+  filed_at: string | null
+  series_id: string | null
+  /** negative once the date has passed */
+  days_until: number
+  display_status: ComplianceDisplayStatus
+  created_at: string
+}
+
+export interface NewComplianceInput {
+  title: string
+  category: ComplianceCategory
+  project_id: string | null
+  due_date: string
+  recurrence: ComplianceRecurrence
+  responsible: string | null
+  notes: string
+}
+
+/** fn_compliance_alert — the dashboard strip. Zeroes for a supervisor. */
+export interface ComplianceAlert {
+  overdue_count: number
+  due_week_count: number
+  next_due_date: string | null
+  next_title: string | null
+}
+
+/** Anything due within this many days reads as "due soon" (matches the view). */
+export const COMPLIANCE_SOON_DAYS = 7
 
 // ---------- RFIs (A7, migration 026) ----------
 

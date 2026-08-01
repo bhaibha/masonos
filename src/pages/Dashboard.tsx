@@ -1,4 +1,4 @@
-import { Building2, ChevronRight, Settings2 } from 'lucide-react'
+import { Building2, CalendarClock, ChevronRight, Settings2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -11,10 +11,13 @@ import {
   fetchPortfolioSummary,
   fetchProjectPulse,
 } from '@/lib/queries/dashboard'
+import { fetchComplianceAlert } from '@/lib/queries/compliance'
 import { fetchProjectSpend } from '@/lib/queries/projects'
 import {
   canAdminister,
+  canManageCompliance,
   canSeeMoney,
+  type ComplianceAlert,
   type PortfolioSummary,
   type ProjectPulse,
   type ProjectSpend,
@@ -30,6 +33,7 @@ export default function Dashboard() {
   const [rows, setRows] = useState<ProjectSpend[] | null>(null)
   const [pulse, setPulse] = useState<Map<string, ProjectPulse>>(new Map())
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
+  const [compliance, setCompliance] = useState<ComplianceAlert | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -61,10 +65,21 @@ export default function Dashboard() {
       })
       .catch(() => {})
 
+    // Compliance counts. RLS gives a supervisor zeroes rather than an error,
+    // and the query returns null before migration 028 — either way the strip
+    // just doesn't render.
+    if (canManageCompliance(role)) {
+      fetchComplianceAlert()
+        .then((c) => {
+          if (!cancelled) setCompliance(c)
+        })
+        .catch(() => {})
+    }
+
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [role])
 
   const totalAlerts = [...pulse.values()].reduce(
     (n, p) => n + p.low_stock_count,
@@ -101,6 +116,8 @@ export default function Dashboard() {
             actionTo={!failed && isAdmin ? '/admin' : undefined}
           />
         )}
+
+        {compliance !== null && <ComplianceStrip alert={compliance} />}
 
         {rows && rows.length > 0 && (
           <>
@@ -146,6 +163,48 @@ export default function Dashboard() {
         )}
       </div>
     </>
+  )
+}
+
+/* ---------------- Compliance ---------------- */
+
+/**
+ * One line, and only when something is actually due. A dashboard banner that is
+ * always there stops being read — this renders nothing when the calendar is
+ * clear.
+ */
+function ComplianceStrip({ alert }: { alert: ComplianceAlert }) {
+  const { overdue_count: overdue, due_week_count: soon } = alert
+  if (overdue === 0 && soon === 0) return null
+
+  const parts: string[] = []
+  if (overdue > 0) parts.push(`${overdue} overdue`)
+  if (soon > 0) parts.push(`${soon} due this week`)
+
+  return (
+    <FadeUp>
+      <Link
+        to="/money/compliance"
+        className={cn(
+          'mb-5 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors',
+          overdue > 0
+            ? 'bg-destructive/10 text-destructive hover:bg-destructive/15'
+            : 'bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]',
+        )}
+      >
+        <CalendarClock className="size-4 shrink-0" aria-hidden="true" />
+        <span className="text-sm font-medium">
+          Compliance — {parts.join(' · ')}
+        </span>
+        {alert.next_title && (
+          <span className="ml-auto hidden truncate text-[13px] opacity-80 sm:block">
+            Next: {alert.next_title}
+            {alert.next_due_date && ` · ${alert.next_due_date}`}
+          </span>
+        )}
+        <ChevronRight className="size-4 shrink-0 sm:ml-0" aria-hidden="true" />
+      </Link>
+    </FadeUp>
   )
 }
 

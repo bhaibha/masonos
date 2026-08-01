@@ -970,3 +970,70 @@ reopen-clears-resolution behaviour, and the verified-snag delete refusal. **A8 i
 Still worth watching on real use: whether the 30-day DLP warning is early enough for a 12-month
 liability period, and whether supervisors want an "assigned to me" filter once more than a handful
 of snags are open at once.
+
+---
+
+## Session — A9 Compliance / Statutory Calendar (Module 31), migration 028
+
+Confirmed at start: **001–027 ALL APPLIED**, next = 028.
+
+**Built**
+
+- [x] **Migration 028** `028_compliance_calendar.sql` — `compliance_items`, three enums
+      (`compliance_category`, `compliance_recurrence`, `compliance_status`),
+      `v_compliance_calendar`, `fn_file_compliance`, `fn_unfile_compliance`,
+      `fn_compliance_alert`, `fn_compliance_sweep`, a nightly pg_cron job, and the `compliance`
+      storage bucket with its own policies.
+- [x] **The cron job is bookkeeping, not truth.** `fn_compliance_sweep` writes
+      `status = 'overdue'` nightly, but nothing in the UI reads that column — the screen reads
+      `display_status` from `v_compliance_calendar`, which derives overdue / due-soon from
+      `due_date` in Asia/Kolkata **at query time**. pg_cron isn't guaranteed to be enabled, and a
+      deadline module whose correctness depends on a background job having run is exactly the
+      module you can't trust. Every pg_cron statement is wrapped in an exception handler for the
+      same reason: the migration cannot fail because an extension is unavailable.
+- [x] **`project_id` is nullable and that's the feature.** A GST return is filed by the company, a
+      building permit belongs to one site. RLS has two arms — company-wide rows are visible to any
+      founder/pm/accounts user, project rows additionally require `is_member()`.
+- [x] **Recurrence is generated server-side, inside the filing function**, so the two can never
+      diverge. Next due date is computed from the **due** date, not the filing date — a return filed
+      three days late must not push next month's deadline three days later. A UNIQUE
+      `(series_id, due_date)` index plus `on conflict do nothing` makes a double click or a retry
+      incapable of creating a duplicate; that guard is in the database, not in the form.
+- [x] **A filed item must carry evidence of when.** `compliance_filed_ck` requires `filed_date` and
+      `filed_by` whenever status is `filed`, so a client cannot claim a filing the row can't
+      support. Reopening (founder/accounts only) clears the proof along with the status — a document
+      proving a filing that's no longer claimed is worse than none.
+- [x] **New `compliance` storage bucket.** Migration 006's policies key access off a leading
+      `<project_id>/` path segment, which a company-wide item can't have. Company objects live under
+      the literal `company/` prefix; project ones keep the project-id prefix and are membership-
+      checked. PDFs upload byte-for-byte — a re-encoded acknowledgement isn't proof of anything.
+- [x] **Money → Compliance screen** — month-grouped list (reads as a calendar, not a queue), a
+      coloured rail per row, Outstanding / Filed / All, filters by category and by
+      company/this-project. Inline mark-as-filed with date, proof upload and notes; edit; reopen;
+      delete. Full design system: skeleton, empty state with primary action, staggered reveal,
+      toasts throughout.
+- [x] **Dashboard strip** — "Compliance — N overdue · N due this week", linking straight to the
+      screen, and **rendering nothing when the calendar is clear**. A banner that's always there
+      stops being read.
+- [x] **Delete follows the existing rule.** An unfiled item has no downstream effect, so it's
+      mechanism 1 via `fn_delete_record`; a **filed** one is refused, because it holds the proof of
+      a statutory filing. `canDelete` extended so accounts (not just founder/pm) can delete these.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean; `fn_file_compliance`,
+  `fn_unfile_compliance`, `fn_compliance_sweep` and `fn_delete_record` all clean.
+  `fn_compliance_series` fails the parser only because it is a `returns trigger` function — the
+  known pglast limitation recorded in CLAUDE.md.
+- `npx tsc -b --force` clean (exit 0). One real error caught and fixed on the way: PostgREST widens
+  an unknown view to `GenericStringError`, so `fetchCompliance` asserts through `unknown` once, the
+  same pattern the other query files use.
+
+**Migration 028 APPLIED** — confirmed 2026-08-01.
+
+**Tested 2026-08-01** on the live app: adding a deadline, the filing flow with proof upload,
+next-occurrence generation, reopen, and the dashboard strip. **A9 is done.**
+
+Open question for real use: nothing yet reads `compliance_items.responsible` other than the card —
+no "assigned to me" view and no per-person nudge. If deadlines start slipping, that's the gap to
+close, not more colour on the calendar.
