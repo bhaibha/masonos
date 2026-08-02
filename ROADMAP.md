@@ -127,7 +127,24 @@ Order within group:
       **Tested 2026-08-01** by the founder on the live app: adding a deadline, the filing flow with
       proof upload, next-occurrence generation, reopen, and the dashboard strip. pg_cron confirmed
       enabled and the sweep scheduled and active (`mason-compliance-sweep`, `30 22 * * *`).
-- [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)
+- [~] **A10. M32 Design / Drawing Management — built, migration 029 APPLIED, not yet exercised.**
+      Two tables: `drawings` is the identity (number unique per project, title, discipline —
+      arch/structural/MEP/interior/landscape/other), `drawing_revisions` is what gets issued
+      (revision, WIP/IFC/superseded, issued date, sheet file, what-changed notes).
+      **A partial unique index — `unique (drawing_id) where status = 'ifc'` — makes two live
+      revisions of one drawing impossible**, and `fn_issue_revision` supersedes the previous sheet
+      and issues the new one in a single transaction, demoting before promoting. A CHECK refuses an
+      IFC revision with no file or no date.
+      Supervisors see IFC revisions **only** — enforced twice: RLS hides WIP and superseded rows,
+      and the new `drawings` storage bucket asks `fn_drawing_file_is_current()` before serving a
+      file to anyone below founder/pm/accounts, so a stale sheet cannot be opened even with the URL.
+      Register under Docs → Drawings, current sheet given top billing, full revision history behind
+      a toggle, superseded rows dimmed and struck. Sheets upload byte-for-byte, images included.
+      Founder/PM manage. Delete refuses an issued or superseded revision, and any drawing that has
+      revisions.
+      **Not yet tested:** adding a drawing, the duplicate-number refusal, upload-and-issue, the
+      supersede swap, withdraw, the delete refusals, and the supervisor view (IFC only, and a
+      superseded sheet's URL must not open).
 - [ ] A11. M33 Bill Certification / RA Bills (measurement → certify → running-account bill)
 - [ ] A12. M34 Retention & Bank Guarantee (retention held/released, BG expiry tracking)
 - [ ] A13. M30 Insurance Management (CAR/WC/PI policies, expiry alerts)

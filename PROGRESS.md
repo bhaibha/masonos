@@ -1070,3 +1070,131 @@ What was checked, and why each one mattered:
 
 Roles & Permissions is now ticked in ROADMAP with this coverage recorded. Re-run this pass after any
 future module that shows a figure.
+
+---
+
+## Session — A10 Design / Drawing Management (Module 32), migration 029
+
+Confirmed at start: **001–028 ALL APPLIED**, next = 029.
+
+**Built**
+
+- [x] **Migration 029** `029_drawing_register.sql` — `drawings` + `drawing_revisions`,
+      `drawing_discipline` / `drawing_status`, `v_drawing_register`, `fn_issue_revision`,
+      `fn_withdraw_revision`, `fn_drawing_file_is_current`, the `drawings` storage bucket, and two
+      new branches on `fn_delete_record`.
+- [x] **Two tables, because a revision is not a drawing.** `drawings` holds identity (number unique
+      per project — two villas both having an SD-101 is normal), `drawing_revisions` holds what is
+      actually issued. Folding them together would make "the current sheet" a client-side max() over
+      rows, which is right until the day it isn't.
+- [x] **The module is one index.** `create unique index drawing_rev_one_ifc_uk on
+      drawing_revisions (drawing_id) where status = 'ifc'` makes two live revisions of a drawing
+      impossible rather than merely unlikely. `fn_issue_revision` does the swap in one transaction
+      and **demotes the old row before promoting the new one** — the other order violates the index
+      mid-flight. A CHECK separately refuses an IFC revision with no file or no issued date:
+      "issued for construction" with nothing to build from is a lie the row would otherwise tell.
+- [x] **Supervisors are fenced twice, because the risk is physical.** `drawing_rev_read` hides WIP
+      and superseded rows outright, so the wrong sheet doesn't exist for them; and the `drawings`
+      bucket's read policy calls `fn_drawing_file_is_current()`, so a stale sheet can't be opened
+      even with a copied URL. A uuid path is effectively unguessable, but "they can't guess it" is
+      not an access rule. `fn_drawing_file_is_current` is SECURITY DEFINER for the same reason
+      `fn_doc_is_confidential` is — run as the caller, RLS would hide the WIP row, the EXISTS would
+      return false, and the policy would draw the opposite conclusion.
+- [x] **A separate bucket rather than extending `documents`.** 006's vault policies are
+      load-bearing across every existing file; teaching them about revision status would put every
+      document behind a more complicated predicate. New bucket, blast radius zero.
+- [x] **`v_drawing_register`** — one row per drawing carrying its IFC sheet, security_invoker so a
+      supervisor's row policy applies inside it, and a final WHERE that hides never-issued drawings
+      from them: a bare drawing number with nothing behind it is noise on a phone at site.
+- [x] **Docs → Drawings screen** — current sheet given top billing in its own panel ("Build from
+      this sheet"), history behind a toggle, superseded rows dimmed and struck through, discipline
+      filter, WIP/superseded counts for founder/PM only, and a warning strip counting drawings with
+      nothing issued. Upload-and-issue in one action, or save as WIP. Revision numbers auto-suggest
+      (R0 → R1, A → B). Full design system: skeleton, empty state with primary action,
+      `OtherProjectsHint`, staggered reveal, toasts throughout.
+- [x] **Delete follows the rule.** A WIP revision that was never issued can go; an issued or
+      superseded one is refused because it is the record of what site was told to build. A drawing
+      with any revisions is refused too.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean; `fn_issue_revision`,
+  `fn_withdraw_revision` and `fn_delete_record` all clean. `fn_drawing_rev_project` fails the parser
+  only because it is a `returns trigger` function — the known pglast limitation.
+- `npx tsc -b --force` clean (exit 0).
+
+**Not tested** — no drawing has been entered. Untested: adding a drawing, the duplicate-number
+refusal, uploading and issuing, the supersede swap, withdraw, the delete refusals, and — most
+importantly — **the supervisor view: they must see only the IFC revision, and a superseded sheet's
+URL must not open for them.**
+
+**Migration 029 APPLIED** — confirmed 2026-08-01 by the `drawing_rev_one_ifc_uk` verify query
+returning the index. That query is the last statement in the file, so the whole script ran,
+including the storage bucket in §8 and `fn_delete_record` in §9. Not yet exercised on real data.
+
+**Two fixes during first use (same session):**
+
+1. **The form leaked the data model.** "Add drawing" created only the identity, so the first sheet
+   needed a second, non-obvious step — a user added a drawing, saw History (0), and reasonably
+   concluded the upload had failed. Worse, they typed the revision into the drawing-number field.
+   The New Drawing form now takes the sheet in the same submit: number, title, discipline, then
+   revision (pre-filled R0), file, date and "issue now", chained create → upload → issue. Two tables
+   underneath is right; making the user feel them was not.
+2. **Migration 030 — delete was too strict.** 029 refused to delete a drawing with any revisions,
+   which made a mistyped drawing number permanent the moment a sheet was attached. A founder can now
+   delete a drawing (revisions cascade) or any single revision; a PM stays limited to revision-free
+   drawings and WIP revisions. The delete still writes to audit_log with the actor, which is what
+   makes relaxing it safe — the record moves to the log rather than vanishing. The Delete button is
+   now always rendered and the RPC explains any refusal, instead of the button silently not existing.
+
+3. **Route collision — the register was mounted at `/docs/drawings`.** The document vault has a
+   folder whose value is literally `drawings`, and its cards link to `/docs/${folder}`. A static
+   route segment outranks `:folder` in React Router, so clicking the Drawings folder (5 files)
+   rendered the empty register instead of the folder — the files were never gone, just unreachable.
+   Register moved to **`/docs/register`**. Lesson worth keeping: adding a static child route under a
+   path that also has a `:param` sibling silently steals every value that matches it.
+
+4. **Restructured into three levels, at the user's request.** The single flat list didn't match how
+   they navigate: Docs → **Drawings** now shows a folder per discipline (Architectural, Structural,
+   MEP, Interior, Landscape, Other) → tap one for the drawings filed under it → tap a drawing for
+   its own page listing every revision, which is where issuing, withdrawing, re-issuing and delete
+   live. `Drawings.tsx` replaced by `DrawingFolders.tsx` / `DrawingList.tsx` / `DrawingDetail.tsx`
+   at `/docs/register`, `/docs/register/:discipline`, `/docs/register/:discipline/:drawingId`.
+   Added `fetchDrawing(id)` for the detail page.
+5. **Upload tab removed from Docs.** Uploading now happens inside the folder you're filing into —
+   a button on the folder screen, and the empty-state action, both linking to
+   `/docs/upload?folder=<folder>` which prefills the folder. The capability stayed; only the
+   redundant top-level tab went, since a top-level Upload made you pick the folder again after
+   you'd already navigated to it.
+
+---
+
+## Session — document sub-folders (migration 031)
+
+Founder can now create one level of sub-folder inside any of the eight vault folders
+("Permits → BBMP", "Contracts → Subcontractors").
+
+- [x] **A table, not a text column.** `doc_subfolders` (project, parent folder, name) with a
+      case-insensitive unique index — "BBMP" and "bbmp" in one folder is a filing mistake, not two
+      folders. A `subfolder text` column on documents would mean a folder only exists while a file
+      sits in it: create it, upload nothing, refresh, gone. The founder creates these ahead of the
+      files, so they need somewhere to live.
+- [x] **`documents.subfolder_id` is nullable and ON DELETE SET NULL.** Null means the file sits at
+      the folder root, which is where every existing row stays — no backfill. Deleting a sub-folder
+      returns its files to the parent folder rather than taking them with it; a cascade here would
+      destroy documents to remove a container.
+- [x] **Founder-only writes** (`subfolder_insert`/`update` check `is_founder()`); everyone who can
+      read the vault sees the structure, and anyone who can upload can file into one. Sub-folders
+      carry no access rules of their own — confidentiality still lives on the document row where
+      `docs_read` enforces it.
+- [x] **Folder screen** shows sub-folder cards with file counts at the folder root, drills in via
+      `?sub=<id>` (a query param, not a route segment — static-vs-param ranking has already bitten
+      this file once), and each document gains a small "move to sub-folder" picker so existing files
+      can be filed after the fact.
+- [x] Upload carries `?folder=&sub=` through and prefills both; changing the folder clears the
+      sub-folder, since it belonged to the old one.
+
+`npx tsc -b --force` clean. Migration parses clean.
+
+**Migrations 030 + 031 APPLIED** — confirmed 2026-08-01, and sub-folders exercised on the live app
+the same day.

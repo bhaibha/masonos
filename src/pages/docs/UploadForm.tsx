@@ -1,17 +1,18 @@
-import { type FormEvent, useRef, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { FieldRow, Select } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
-import { createDocument } from '@/lib/queries/documents'
+import { createDocument, fetchSubfolders } from '@/lib/queries/documents'
 import { uploadDocument } from '@/lib/storage'
 import {
   canSeeConfidentialDocs,
   canUploadDocs,
   DOC_FOLDERS,
   type DocFolder,
+  type DocSubfolder,
 } from '@/lib/types'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
@@ -21,14 +22,42 @@ export default function UploadForm() {
   const role = useAuth((s) => s.role)
   const navigate = useNavigate()
 
+  // Arriving from a folder ("Upload here") prefills that folder, so the file
+  // lands where the person was already looking.
+  const [params] = useSearchParams()
+  const fromFolder = params.get('folder') as DocFolder | null
+  const initialFolder: DocFolder =
+    fromFolder && DOC_FOLDERS.some((f) => f.value === fromFolder)
+      ? fromFolder
+      : 'other'
+
   const [title, setTitle] = useState('')
-  const [folder, setFolder] = useState<DocFolder>('other')
+  const [folder, setFolder] = useState<DocFolder>(initialFolder)
+  const [subfolder, setSubfolder] = useState(params.get('sub') ?? '')
+  const [subs, setSubs] = useState<DocSubfolder[]>([])
   const [confidential, setConfidential] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+
+  // Sub-folders of whichever folder is selected. Changing folder clears the
+  // sub-folder, since it belongs to the old one.
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    fetchSubfolders(projectId, folder)
+      .then((s) => {
+        if (!cancelled) setSubs(s)
+      })
+      .catch(() => {
+        if (!cancelled) setSubs([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, folder])
 
   if (!canUploadDocs(role)) {
     return (
@@ -75,9 +104,10 @@ export default function UploadForm() {
         file_path: path,
         file_type: fileType,
         is_confidential: confidential,
+        subfolder_id: subfolder || null,
       })
 
-      navigate(`/docs/${folder}`)
+      navigate(subfolder ? `/docs/${folder}?sub=${subfolder}` : `/docs/${folder}`)
     } catch (err) {
       toast.error('Could not upload the document.', { description: errText(err) })
       setBusy(false)
@@ -150,7 +180,11 @@ export default function UploadForm() {
         <Select
           id="folder"
           value={folder}
-          onChange={(e) => setFolder(e.target.value as DocFolder)}
+          onChange={(e) => {
+            setFolder(e.target.value as DocFolder)
+            // The old sub-folder belongs to the old folder.
+            setSubfolder('')
+          }}
         >
           {DOC_FOLDERS.map((f) => (
             <option key={f.value} value={f.value}>
@@ -159,6 +193,23 @@ export default function UploadForm() {
           ))}
         </Select>
       </FieldRow>
+
+      {subs.length > 0 && (
+        <FieldRow label="Sub-folder" htmlFor="subfolder">
+          <Select
+            id="subfolder"
+            value={subfolder}
+            onChange={(e) => setSubfolder(e.target.value)}
+          >
+            <option value="">None — file at the folder root</option>
+            {subs.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </FieldRow>
+      )}
 
       {canSeeConfidentialDocs(role) && (
         <label

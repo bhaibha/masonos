@@ -1,9 +1,18 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { DeleteButton } from '@/components/DeleteAction'
+import { Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
+import { errText } from '@/lib/errText'
+import { setDocumentSubfolder } from '@/lib/queries/documents'
 import { signedDocumentUrl } from '@/lib/storage'
-import { type DocumentRow, PO_STATUS_LABEL, type PoStatus } from '@/lib/types'
+import {
+  canUploadDocs,
+  type DocSubfolder,
+  type DocumentRow,
+  PO_STATUS_LABEL,
+  type PoStatus,
+} from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 
@@ -39,16 +48,27 @@ function prettyDate(iso: string): string {
 export function DocumentList({
   docs,
   onChanged,
+  subfolders = [],
+  currentSubfolder = null,
 }: {
   docs: DocumentRow[]
   /** omit to hide the delete action (e.g. read-only embeds) */
   onChanged?: () => void | Promise<void>
+  /** sub-folders of this document's folder, for the move action (031) */
+  subfolders?: DocSubfolder[]
+  /** the sub-folder currently open, or null at the folder root */
+  currentSubfolder?: string | null
 }) {
   return (
     <Stagger className="paper divide-y divide-border overflow-hidden">
       {docs.map((d) => (
         <RevealItem key={d.id}>
-          <DocumentItem doc={d} onChanged={onChanged} />
+          <DocumentItem
+            doc={d}
+            onChanged={onChanged}
+            subfolders={subfolders}
+            currentSubfolder={currentSubfolder}
+          />
         </RevealItem>
       ))}
     </Stagger>
@@ -58,12 +78,17 @@ export function DocumentList({
 function DocumentItem({
   doc,
   onChanged,
+  subfolders,
+  currentSubfolder,
 }: {
   doc: DocumentRow
   onChanged?: () => void | Promise<void>
+  subfolders: DocSubfolder[]
+  currentSubfolder: string | null
 }) {
   const role = useAuth((s) => s.role)
   const [busy, setBusy] = useState(false)
+  const [moving, setMoving] = useState(false)
 
   async function open() {
     setBusy(true)
@@ -122,7 +147,7 @@ function DocumentItem({
       {/* Outside the button — nesting a button inside a button is invalid and
           the click would fall through to "open the file". */}
       {onChanged && (
-        <div className="px-4 pb-2">
+        <div className="flex flex-wrap items-center gap-2 px-4 pb-2">
           <DeleteButton
             table="documents"
             id={doc.id}
@@ -131,6 +156,44 @@ function DocumentItem({
             onDeleted={onChanged}
             className="-ml-2"
           />
+
+          {/* Filing a document into a sub-folder after the fact. Only offered
+              when there is somewhere else for it to go. */}
+          {canUploadDocs(role) &&
+            (subfolders.length > 0 || currentSubfolder !== null) && (
+              <Select
+                value={doc.subfolder_id ?? ''}
+                disabled={moving}
+                aria-label={`Move ${doc.title}`}
+                className="h-9 w-auto max-w-[60%] text-xs"
+                onChange={async (e) => {
+                  const next = e.target.value || null
+                  if (next === (doc.subfolder_id ?? null)) return
+                  setMoving(true)
+                  try {
+                    await setDocumentSubfolder(doc.id, next)
+                    toast.success(
+                      next
+                        ? `Moved to ${subfolders.find((s) => s.id === next)?.name ?? 'sub-folder'}`
+                        : 'Moved to the folder root',
+                    )
+                    await onChanged()
+                  } catch (err) {
+                    toast.error('Could not move the document', {
+                      description: errText(err),
+                    })
+                  }
+                  setMoving(false)
+                }}
+              >
+                <option value="">Folder root</option>
+                {subfolders.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </Select>
+            )}
         </div>
       )}
     </div>

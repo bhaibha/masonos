@@ -345,9 +345,15 @@ export type DeletableTable =
   | 'budgets'
   | 'snags'
   | 'compliance_items'
+  | 'drawings'
+  | 'drawing_revisions'
+  | 'doc_subfolders'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
   compliance_items: 'compliance item',
+  drawings: 'drawing',
+  drawing_revisions: 'revision',
+  doc_subfolders: 'sub-folder',
   tasks: 'task',
   site_logs: 'site log',
   safety_checklists: 'safety checklist',
@@ -372,6 +378,7 @@ export function canDelete(
   if (role === null) return false
   if (table === 'budgets') return role === 'founder' || role === 'accounts'
   if (table === 'compliance_items') return canManageCompliance(role)
+  if (table === 'doc_subfolders') return role === 'founder'
   return role === 'founder' || role === 'pm'
 }
 
@@ -560,6 +567,27 @@ export interface DocumentRow {
   po_id: string | null
   /** live PO status, resolved for documents in the Purchase Orders folder */
   po_status: PoStatus | null
+  /** null = filed at the top level of its folder (migration 031) */
+  subfolder_id: string | null
+}
+
+// ---------- Document sub-folders (migration 031) ----------
+
+/**
+ * One optional level under the eight fixed folders. A table rather than a text
+ * column so a founder can create "Permits → BBMP" before any file exists.
+ */
+export interface DocSubfolder {
+  id: string
+  project_id: string
+  folder: DocFolder
+  name: string
+  created_at: string
+}
+
+/** Founder only — `subfolder_insert` checks is_founder(). */
+export function canManageSubfolders(role: UserRole | null): boolean {
+  return role === 'founder'
 }
 
 export interface NewDocument {
@@ -570,6 +598,7 @@ export interface NewDocument {
   file_type: string | null
   is_confidential: boolean
   po_id?: string | null
+  subfolder_id?: string | null
 }
 
 // ---------- Procurement ----------
@@ -971,6 +1000,105 @@ export interface ComplianceAlert {
 
 /** Anything due within this many days reads as "due soon" (matches the view). */
 export const COMPLIANCE_SOON_DAYS = 7
+
+// ---------- Drawing register (A10, migration 029) ----------
+
+export type DrawingDiscipline =
+  | 'architectural'
+  | 'structural'
+  | 'mep'
+  | 'interior'
+  | 'landscape'
+  | 'other'
+
+/**
+ * wip        — being drawn or reviewed; invisible to supervisors (RLS).
+ * ifc        — Issued For Construction. At most one per drawing, enforced by a
+ *              partial unique index, not by the UI.
+ * superseded — was on site once, replaced. Kept forever.
+ */
+export type DrawingStatus = 'wip' | 'ifc' | 'superseded'
+
+export const DRAWING_DISCIPLINES: {
+  value: DrawingDiscipline
+  label: string
+}[] = [
+  { value: 'architectural', label: 'Architectural' },
+  { value: 'structural', label: 'Structural' },
+  { value: 'mep', label: 'MEP' },
+  { value: 'interior', label: 'Interior' },
+  { value: 'landscape', label: 'Landscape' },
+  { value: 'other', label: 'Other' },
+]
+
+export const DRAWING_DISCIPLINE_LABEL = Object.fromEntries(
+  DRAWING_DISCIPLINES.map((d) => [d.value, d.label]),
+) as Record<DrawingDiscipline, string>
+
+export const DRAWING_STATUS_LABEL: Record<DrawingStatus, string> = {
+  wip: 'WIP',
+  ifc: 'Issued for construction',
+  superseded: 'Superseded',
+}
+
+/** Founder/PM maintain the register. Supervisors read current sheets only. */
+export function canManageDrawings(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** A row of v_drawing_register — one per drawing, carrying its current sheet. */
+export interface DrawingRow {
+  id: string
+  project_id: string
+  drawing_no: string
+  title: string
+  discipline: DrawingDiscipline
+  created_at: string
+  current_revision_id: string | null
+  current_revision: string | null
+  current_issued_date: string | null
+  current_file_path: string | null
+  current_file_type: string | null
+  current_notes: string | null
+  /** newest revision of any status — founder/PM only see WIP here */
+  latest_revision: string | null
+  latest_status: DrawingStatus | null
+  wip_count: number
+  superseded_count: number
+  revision_count: number
+}
+
+export interface DrawingRevisionRow {
+  id: string
+  drawing_id: string
+  project_id: string
+  revision: string
+  status: DrawingStatus
+  issued_date: string | null
+  file_path: string | null
+  file_type: string | null
+  notes: string | null
+  issued_by: string | null
+  issued_at: string | null
+  superseded_at: string | null
+  created_at: string
+}
+
+export interface NewDrawingInput {
+  project_id: string
+  drawing_no: string
+  title: string
+  discipline: DrawingDiscipline
+}
+
+export interface NewRevisionInput {
+  drawing_id: string
+  revision: string
+  issued_date: string | null
+  file_path: string | null
+  file_type: string | null
+  notes: string
+}
 
 // ---------- RFIs (A7, migration 026) ----------
 

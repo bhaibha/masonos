@@ -1,13 +1,14 @@
 import { supabase } from '@/lib/supabase'
 import type {
   DocFolder,
+  DocSubfolder,
   DocumentRow,
   NewDocument,
   PoStatus,
 } from '@/lib/types'
 
 const COLUMNS =
-  'id, project_id, folder, title, file_path, file_type, is_confidential, uploaded_by, created_at, po_id, profiles(full_name)'
+  'id, project_id, folder, subfolder_id, title, file_path, file_type, is_confidential, uploaded_by, created_at, po_id, profiles(full_name)'
 
 type Joined = { profiles: { full_name: string } | { full_name: string }[] | null }
 
@@ -28,6 +29,7 @@ function mapRow(r: unknown): DocumentRow {
     created_at: row.created_at,
     po_id: (row.po_id as string | null) ?? null,
     po_status: null,
+    subfolder_id: (row.subfolder_id as string | null) ?? null,
   }
 }
 
@@ -116,6 +118,66 @@ export async function createDocument(input: NewDocument): Promise<void> {
     file_type: input.file_type,
     is_confidential: input.is_confidential,
     po_id: input.po_id ?? null,
+    subfolder_id: input.subfolder_id ?? null,
   })
+  if (error) throw error
+}
+
+/* ---------------- Sub-folders (migration 031) ---------------- */
+
+/** Sub-folders for a project, optionally just those under one parent folder. */
+export async function fetchSubfolders(
+  projectId: string,
+  folder?: DocFolder,
+): Promise<DocSubfolder[]> {
+  let q = supabase
+    .from('doc_subfolders')
+    .select('id, project_id, folder, name, created_at')
+    .eq('project_id', projectId)
+    .order('name')
+
+  if (folder) q = q.eq('folder', folder)
+
+  const { data, error } = await q
+  if (error) throw error
+
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+  return rows.map((r) => ({
+    id: r.id as string,
+    project_id: r.project_id as string,
+    folder: r.folder as DocFolder,
+    name: r.name as string,
+    created_at: r.created_at as string,
+  }))
+}
+
+/** Founder only — `subfolder_insert` checks is_founder(), not this. */
+export async function createSubfolder(
+  projectId: string,
+  folder: DocFolder,
+  name: string,
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('doc_subfolders')
+    .insert({ project_id: projectId, folder, name: name.trim() })
+    .select('id')
+    .single()
+
+  if (error) throw error
+  return data.id as string
+}
+
+/** Moves a document between sub-folders, or back to the folder root (null). */
+export async function setDocumentSubfolder(
+  documentId: string,
+  subfolderId: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from('documents')
+    .update({ subfolder_id: subfolderId })
+    .eq('id', documentId)
+    .select('id')
+    .single()
+
   if (error) throw error
 }

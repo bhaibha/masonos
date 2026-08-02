@@ -4,13 +4,10 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
 import { ListSkeleton } from '@/components/Skeleton'
 import { ProjectPicker } from '@/components/ProjectPicker'
-import { canUploadDocs } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
 
 export default function DocsLayout() {
-  const role = useAuth((s) => s.role)
   const load = useProjects((s) => s.load)
   const projects = useProjects((s) => s.projects)
   const selectedId = useProjects((s) => s.selectedId)
@@ -25,9 +22,14 @@ export default function DocsLayout() {
     if (error) toast.error('Could not load projects', { description: error })
   }, [error])
 
+  // No Upload tab: uploading belongs inside the folder you're filing into, so
+  // it lives on the folder screen where it can prefill that folder.
   const tabs = [
     { to: '/docs', label: 'Folders', end: true },
-    ...(canUploadDocs(role) ? [{ to: '/docs/upload', label: 'Upload' }] : []),
+    // Visible to every role: a supervisor needs the current sheet more than
+    // anyone. RLS limits them to Issued-For-Construction revisions.
+    // Path is /docs/register — /docs/drawings belongs to the vault folder.
+    { to: '/docs/register', label: 'Drawings' },
   ]
 
   return (

@@ -5,6 +5,7 @@ export const RECEIPTS_BUCKET = 'receipts'
 export const SITE_PHOTOS_BUCKET = 'site-photos'
 export const DOCUMENTS_BUCKET = 'documents'
 export const COMPLIANCE_BUCKET = 'compliance'
+export const DRAWINGS_BUCKET = 'drawings'
 
 /** CLAUDE.md rule 3: nothing over 300KB reaches Storage. */
 const MAX_SIZE_MB = 0.3
@@ -176,4 +177,36 @@ export async function signedComplianceUrl(
   expiresInSeconds = 300,
 ): Promise<string | null> {
   return signed(COMPLIANCE_BUCKET, path, expiresInSeconds)
+}
+
+/**
+ * A drawing sheet (migration 029). NEVER compressed, images included — a
+ * re-encoded drawing is a corrupted drawing, and a scanned sheet that has been
+ * through a JPEG quantiser is one you cannot read a dimension off.
+ *
+ * The `drawings` bucket's read policy asks fn_drawing_file_is_current(), so a
+ * supervisor can only ever fetch the sheet of a revision that is currently
+ * Issued For Construction.
+ */
+export async function uploadDrawing(
+  projectId: string,
+  file: File,
+): Promise<{ path: string; fileType: string }> {
+  const ext = extensionOf(file.name)
+  const contentType = file.type || 'application/octet-stream'
+  const path = objectPath(projectId, ext)
+
+  const { error } = await supabase.storage
+    .from(DRAWINGS_BUCKET)
+    .upload(path, file, { contentType, upsert: false })
+
+  if (error) throw error
+  return { path, fileType: contentType }
+}
+
+export async function signedDrawingUrl(
+  path: string,
+  expiresInSeconds = 300,
+): Promise<string | null> {
+  return signed(DRAWINGS_BUCKET, path, expiresInSeconds)
 }

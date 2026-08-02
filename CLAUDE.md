@@ -59,7 +59,28 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `mason-compliance-sweep | 30 22 * * * | active=true` — that call sits in §10, so §1–§10 all ran;
   §11 (the storage bucket) is confirmed separately by the proof upload working during testing.
   **pg_cron IS enabled on this project** — future scheduled jobs can rely on it existing.
-  So: **001–028 ALL APPLIED.** Next migration = 029.
+  **029 APPLIED** (confirmed 2026-08-01) — A10 Drawing register
+  (`drawings`, `drawing_revisions`, `drawing_discipline`/`drawing_status`, `v_drawing_register`,
+  `fn_issue_revision`, `fn_withdraw_revision`, `fn_drawing_file_is_current`, the `drawings` storage
+  bucket, plus drawings/drawing_revisions branches on `fn_delete_record`).
+  Verified 2026-08-01 by `select indexname … = 'drawing_rev_one_ifc_uk'` returning the index —
+  that query is the LAST statement in the file, so the whole script ran.
+  **030 + 031 APPLIED** (confirmed 2026-08-01). 030 = founder-level delete on the drawing register
+  (founder deletes a drawing with revisions cascading, or any single revision; a PM stays limited to
+  a revision-free drawing and WIP revisions). 031 = founder-created sub-folders in the document
+  vault (`doc_subfolders`, `documents.subfolder_id`, plus a doc_subfolders branch on
+  `fn_delete_record`).
+  So: **001–031 ALL APPLIED.** Next migration = 032.
+- **Container-delete lesson (031):** a sub-folder's FK from `documents` is **ON DELETE SET NULL**,
+  never cascade. Deleting a container must not take the contents with it — the files reappear at the
+  parent folder's root. Reach for SET NULL any time the child can meaningfully exist without the
+  parent.
+- **Partial-unique-index lesson (029):** "at most one current version" is expressible as
+  `create unique index … (parent_id) where status = 'x'`. That is a far stronger guarantee than an
+  RPC that remembers to demote the old row, and it costs one line. When a module has a "there can
+  only be one live X" rule, reach for this before writing procedural code to maintain it. The RPC
+  still does the swap — but it demotes the old row BEFORE promoting the new one, or the index
+  rejects it mid-transaction.
 - **Background-job lesson (028):** the nightly sweep writes `status = 'overdue'`, but nothing in the
   UI reads that column — `v_compliance_calendar` derives overdue/due-soon from `due_date` in
   Asia/Kolkata at query time. pg_cron is not guaranteed to be enabled, and a deadline screen whose

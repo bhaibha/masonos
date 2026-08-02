@@ -21,6 +21,9 @@ import MoneyLayout from '@/pages/money/MoneyLayout'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
 import DocsLayout from '@/pages/docs/DocsLayout'
+import DrawingDetail from '@/pages/docs/DrawingDetail'
+import DrawingFolders from '@/pages/docs/DrawingFolders'
+import DrawingList from '@/pages/docs/DrawingList'
 import FolderView from '@/pages/docs/FolderView'
 import Folders from '@/pages/docs/Folders'
 import UploadForm from '@/pages/docs/UploadForm'
@@ -126,6 +129,17 @@ export default function App() {
             <Route path="/docs" element={<DocsLayout />}>
               <Route index element={<Folders />} />
               <Route path="upload" element={<UploadForm />} />
+              {/* A10 drawing register, three levels: disciplines → drawings →
+                  one drawing's revisions (where issuing happens).
+                  Deliberately NOT /docs/drawings: the vault has a folder whose
+                  value is literally "drawings", and a static segment outranks
+                  `:folder`, so that route would swallow the folder. */}
+              <Route path="register" element={<DrawingFolders />} />
+              <Route path="register/:discipline" element={<DrawingList />} />
+              <Route
+                path="register/:discipline/:drawingId"
+                element={<DrawingDetail />}
+              />
               <Route path=":folder" element={<FolderView />} />
             </Route>
           </Route>
