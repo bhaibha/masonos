@@ -17,7 +17,8 @@ what's unverified. Audited honestly on 2026-07-28.
 - [x] GitHub Actions: daily Supabase keep-alive ping (green)
 - [x] GitHub Actions: weekly pg_dump backup → 90-day artifact (green)
 - [x] Commercial-figure privacy closed at the DB level (migration 010) — no UI-only money gaps remain
-- [ ] Re-run supervisor incognito RLS test on the LIVE Project Detail (do after 010 is applied)
+- [x] Re-run supervisor incognito RLS test on the LIVE Project Detail — done 2026-08-01, clean
+      (full checklist recorded under Roles & Permissions below)
 
 ## ALREADY BUILT (migrations 001–023)
 - [x] M01 Command Dashboard + Project Detail
@@ -29,9 +30,15 @@ what's unverified. Audited honestly on 2026-07-28.
 - [x] M03 Site Management / Daily Log
 - [x] M16 Material Usage Tracker (inward/issue/stock) + Movements history
 - [x] M09 Document Vault
-- [~] Roles & Permissions — RLS is correct by construction and was tested on 2026-07-25, but that
-      predates A3 procurement, A5 variations, A6 instructions and the admin module. **The supervisor
-      incognito pass has not been re-run since.**
+- [x] **Roles & Permissions — supervisor incognito pass re-run 2026-08-01 and CLEAN.** Covered:
+      every /money route by direct URL (ledger, add, budget, vendors, orders, variations, invoices,
+      compliance) plus /admin — all bounced; Dashboard and Project Detail showing "restricted" with
+      no contract value, fee, spend or budget; **Materials → Orders**, the sharpest edge, showing
+      status and quantities with no order value, rate or line total while raise-request and
+      goods-receipt still worked; stock, movements and material master rate-free; confidential
+      documents absent from the listing and unreachable by pasted URL; SI cost implication as a
+      bare Yes; snags without the Verify action; project scope limited to assigned projects, with
+      an unassigned project's detail URL refused.
 - [x] Audit / Evidence log
 - [x] M08 Vendors — superseded by A1 below (screen built and in use)
 - [~] M02 Tasks — list + rollover done and in use; EVM/AI-schedule pending (Group B)
@@ -56,13 +63,17 @@ Order within group:
 - [x] A3. M22 Procurement — full PR → PO → GRN → 3-way match. Backend migrations 012/013/015;
        raise/approve, PO PDF (full + delivery copy) auto-filed to Docs, GRN receipt (feeds stock),
        vendor invoice + 3-way match with variance flags, post-to-Open-Book. Rate privacy throughout.
-- [x] **A4. M15 Invoice Generator — built and TESTED** (migrations 024 + 025 applied).
+- [~] **A4. M15 Invoice Generator — built, PARTIALLY tested** (migrations 024 + 025 applied).
       Three types with separate number series: progress bill (INV-P), management-fee invoice
       (INV-M), vendor payment voucher (INV-V). Every figure computed by `fn_issue_invoice` from
       expenses / project fee % / posted vendor invoices and stored as an immutable snapshot —
       nothing retyped, nothing recomputed on read. Letterhead PDF matching PO/VO/SI, GST breakup,
       total in words (Indian lakh/crore), VOID watermark when cancelled. Founder/accounts only.
-      Progress bills tested across two consecutive bills including the previously-billed deduction.
+      **Tested:** progress bills (INV-P) across two consecutive bills including the
+      previously-billed deduction, which is where the 025 structural bug was found.
+      **Not yet tested: INV-M (management fee) and INV-V (vendor payment voucher) have never been
+      issued** — neither number series has produced a single document, so their figure derivation
+      and PDFs are unverified. Also untested: the cancel path and the VOID watermark.
       **GST treatment is a tax position — see the note in 024's header and confirm with your CA
       before the first real client bill.**
       *025 fixed the running-account structure: the deduction was landing inside the taxable
@@ -114,7 +125,8 @@ Order within group:
       it having run. Dashboard strip ("N overdue · N due this week") that renders only when
       something is actually due. Founder/PM/accounts; supervisors cannot reach /money at all.
       **Tested 2026-08-01** by the founder on the live app: adding a deadline, the filing flow with
-      proof upload, next-occurrence generation, reopen, and the dashboard strip.
+      proof upload, next-occurrence generation, reopen, and the dashboard strip. pg_cron confirmed
+      enabled and the sweep scheduled and active (`mason-compliance-sweep`, `30 22 * * *`).
 - [ ] A10. M32 Design Management (drawing register: rev control, GFC status, issued-for dates)
 - [ ] A11. M33 Bill Certification / RA Bills (measurement → certify → running-account bill)
 - [ ] A12. M34 Retention & Bank Guarantee (retention held/released, BG expiry tracking)

@@ -55,6 +55,10 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `v_compliance_calendar`, `fn_file_compliance`, `fn_unfile_compliance`, `fn_compliance_alert`,
   `fn_compliance_sweep` + a nightly pg_cron job, the `compliance` storage bucket, plus a
   compliance_items branch on `fn_delete_record`).
+  Verified 2026-08-01 by `select … from cron.job` returning
+  `mason-compliance-sweep | 30 22 * * * | active=true` — that call sits in §10, so §1–§10 all ran;
+  §11 (the storage bucket) is confirmed separately by the proof upload working during testing.
+  **pg_cron IS enabled on this project** — future scheduled jobs can rely on it existing.
   So: **001–028 ALL APPLIED.** Next migration = 029.
 - **Background-job lesson (028):** the nightly sweep writes `status = 'overdue'`, but nothing in the
   UI reads that column — `v_compliance_calendar` derives overdue/due-soon from `due_date` in

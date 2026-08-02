@@ -1037,3 +1037,36 @@ next-occurrence generation, reopen, and the dashboard strip. **A9 is done.**
 Open question for real use: nothing yet reads `compliance_items.responsible` other than the card —
 no "assigned to me" view and no per-person nudge. If deadlines start slipping, that's the gap to
 close, not more colour on the calendar.
+
+---
+
+## Supervisor RLS pass — re-run 2026-08-01, CLEAN
+
+The previous pass was 2026-07-25 and predated procurement, variations, instructions, RFIs, snags,
+compliance and the admin module. Re-run in an incognito window on the live app against a supervisor
+assigned to some but not all projects. **Nothing leaked.**
+
+What was checked, and why each one mattered:
+
+- **Every /money route entered by direct URL**, not by looking for a missing tab — a hidden tab
+  proves nothing. Ledger, add expense, budget, vendors, orders, variations, invoices, compliance,
+  plus /admin and /admin/team: all bounced.
+- **Dashboard and Project Detail** — portfolio and per-project cards read "restricted"; no contract
+  value, revised contract, management fee or spend; no compliance strip; recent activity carried no
+  expense amounts.
+- **Materials → Orders**, the sharpest edge in the app: supervisors legitimately raise purchase
+  requests and receive deliveries there, so the screen is reachable by design. It showed status,
+  item counts and need-by dates with **no order value, no rate, no line total**, while raise-request
+  and goods-receipt both still worked. That is migration 012's column revoke on `po_lines` plus
+  013's role-gated `v_po_value` doing exactly their job.
+- **Stock, movements, material master** — quantities and challans, no rates (006's column grants).
+- **Documents** — confidential files absent from the listing entirely, and a confidential URL copied
+  out of the founder session refused (006's `fn_doc_is_confidential`, which has to be SECURITY
+  DEFINER or it would invert).
+- **Site instructions** — cost implication renders as a bare "Yes" with no amount, which is the
+  whole reason 023 stored it as a boolean with the money on the linked VO.
+- **Snags** — raise and resolve available, Verify absent.
+- **Scope** — only assigned projects listed, and an unassigned project's detail URL refused.
+
+Roles & Permissions is now ticked in ROADMAP with this coverage recorded. Re-run this pass after any
+future module that shows a figure.
