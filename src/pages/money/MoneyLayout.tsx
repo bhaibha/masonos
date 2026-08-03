@@ -37,6 +37,7 @@ export default function MoneyLayout() {
     // Founder/accounts only — the invoices table's RLS enforces it; the tab is
     // hidden for a PM so they don't hit an empty screen.
     ...(canIssueInvoice(role) ? [{ to: '/money/invoices', label: 'Invoices' }] : []),
+    { to: '/money/bills', label: 'RA bills' },
     { to: '/money/vendors', label: 'Vendors' },
     // Company-wide as well as per-project, so it is not scoped by the picker.
     { to: '/money/compliance', label: 'Compliance' },

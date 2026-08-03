@@ -145,7 +145,28 @@ Order within group:
       **Not yet tested:** adding a drawing, the duplicate-number refusal, upload-and-issue, the
       supersede swap, withdraw, the delete refusals, and the supervisor view (IFC only, and a
       superseded sheet's URL must not open).
-- [ ] A11. M33 Bill Certification / RA Bills (measurement → certify → running-account bill)
+- [~] **A11. M33 Bill Certification / RA Bills — built, migration 032 APPLIED, not yet exercised.**
+      `ra_bills` + `ra_bill_lines` with `RA-0001` numbering, contractor as a linked vendor or free
+      text, period, their bill number, claimed amount, retention %, and
+      submitted → under review → certified / rejected / cancelled.
+      **Measurement lines carry quantity TO DATE, not this period** — that is how an RA bill is
+      written, and it makes the account self-correcting: a later bill restating the true cumulative
+      quantity fixes an earlier under-measurement on its own. `fn_certify_ra_bill` computes gross,
+      less-previously-certified (summed from earlier certified bills for the same contractor),
+      retention on **this bill's value only**, and net — then FREEZES all four on the row.
+      `v_ra_bill_totals` previews those figures while a bill is in review and defers to the stored
+      snapshot once certified, so editing a line later cannot restate a paid bill. CHECK constraints
+      make "certified" impossible without all four figures and a signatory, and rejection impossible
+      without a reason. Certification is founder/PM (accounts can prepare and record, not sign).
+      Certificate PDF on letterhead with the running account laid out as it reads on paper, net in
+      words, and a VOID watermark when rejected **or** cancelled. `v_ra_payables` rolls up certified
+      value, retention held and net payable per contractor. Supervisors excluded entirely.
+      **Deliberately not done:** certifying does not post to Open Book — vendor invoices already
+      post there via procurement, and a contractor appearing in both paths would be double-counted.
+      Retention **release** and bank guarantees are A12.
+      **Not yet tested:** recording a bill, measurements, certifying, the previously-certified
+      deduction across two consecutive bills, retention, rejection, cancel-after-certify, and the
+      certificate PDF.
 - [ ] A12. M34 Retention & Bank Guarantee (retention held/released, BG expiry tracking)
 - [ ] A13. M30 Insurance Management (CAR/WC/PI policies, expiry alerts)
 

@@ -281,8 +281,10 @@ export type CancellableTable =
   | 'site_instructions'
   | 'invoices'
   | 'rfis'
+  | 'ra_bills'
 
 export const CANCELLABLE_LABEL: Record<CancellableTable, string> = {
+  ra_bills: 'bill',
   rfis: 'RFI',
   invoices: 'invoice',
   site_instructions: 'site instruction',
@@ -313,6 +315,7 @@ const CANCEL_ROLES: Record<CancellableTable, UserRole[]> = {
   variation_orders: ['founder'], // only the founder approves them
   invoices: ['founder', 'accounts'], // same roles that issue them
   rfis: ['founder', 'pm'], // same roles that raise them
+  ra_bills: ['founder', 'pm'], // same roles that certify them
 }
 
 export function canCancel(
@@ -348,8 +351,10 @@ export type DeletableTable =
   | 'drawings'
   | 'drawing_revisions'
   | 'doc_subfolders'
+  | 'ra_bills'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
+  ra_bills: 'bill',
   compliance_items: 'compliance item',
   drawings: 'drawing',
   drawing_revisions: 'revision',
@@ -379,6 +384,7 @@ export function canDelete(
   if (table === 'budgets') return role === 'founder' || role === 'accounts'
   if (table === 'compliance_items') return canManageCompliance(role)
   if (table === 'doc_subfolders') return role === 'founder'
+  if (table === 'ra_bills') return canManageRaBills(role)
   return role === 'founder' || role === 'pm'
 }
 
@@ -1089,6 +1095,116 @@ export interface NewDrawingInput {
   drawing_no: string
   title: string
   discipline: DrawingDiscipline
+}
+
+// ---------- RA bills / certification (A11, migration 032) ----------
+
+export type RaStatus =
+  | 'submitted'
+  | 'under_review'
+  | 'certified'
+  | 'rejected'
+  | 'cancelled'
+
+export const RA_STATUS_LABEL: Record<RaStatus, string> = {
+  submitted: 'Submitted',
+  under_review: 'Under review',
+  certified: 'Certified',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
+}
+
+/** Founder/PM/accounts reach the module; RLS says the same. */
+export function canManageRaBills(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+/**
+ * Certification is founder/PM only. Accounts prepare and record a bill, but the
+ * signature that authorises payment isn't theirs — `fn_certify_ra_bill`
+ * enforces it, this only decides whether to render the button.
+ */
+export function canCertifyRaBill(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** A row of v_ra_bill_totals. Every figure computed in Postgres. */
+export interface RaBillRow {
+  id: string
+  bill_no: string
+  project_id: string
+  vendor_id: string | null
+  vendor_name: string | null
+  contractor_name: string | null
+  contractor_bill_no: string | null
+  period_from: string | null
+  period_to: string
+  claimed_amount: number | null
+  retention_pct: number
+  status: RaStatus
+  notes: string | null
+  line_count: number
+  /** cumulative value of work measured to date */
+  gross_work_value: number
+  less_previously_certified: number
+  value_this_bill: number
+  retention_amount: number
+  net_certified: number
+  /** true once the figures are the stored snapshot rather than a preview */
+  is_frozen: boolean
+  certified_at: string | null
+  certified_by: string | null
+  rejected_at: string | null
+  reject_reason: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  created_at: string
+}
+
+export interface RaBillLine {
+  id: string
+  bill_id: string
+  description: string
+  unit: string | null
+  /** CUMULATIVE quantity to date, not this period */
+  qty_to_date: number
+  rate: number
+  amount: number
+  category_id: number | null
+  sort: number
+}
+
+export interface NewRaBillInput {
+  project_id: string
+  vendor_id: string | null
+  contractor_name: string
+  contractor_bill_no: string
+  period_from: string | null
+  period_to: string
+  claimed_amount: number | null
+  retention_pct: number
+  notes: string
+}
+
+export interface NewRaLineInput {
+  bill_id: string
+  description: string
+  unit: string
+  qty_to_date: number
+  rate: number
+  sort: number
+}
+
+/** Per-contractor rollup from v_ra_payables. */
+export interface RaPayable {
+  project_id: string
+  vendor_id: string | null
+  contractor: string
+  certified_bills: number
+  gross_certified: number
+  retention_held: number
+  net_certified: number
+  last_certified_at: string | null
 }
 
 export interface NewRevisionInput {

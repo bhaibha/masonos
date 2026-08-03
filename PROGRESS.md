@@ -1198,3 +1198,67 @@ Founder can now create one level of sub-folder inside any of the eight vault fol
 
 **Migrations 030 + 031 APPLIED** — confirmed 2026-08-01, and sub-folders exercised on the live app
 the same day.
+
+---
+
+## Session — A11 Bill Certification / RA Bills (Module 33), migration 032
+
+Confirmed at start: **001–031 ALL APPLIED**, next = 032.
+
+**Built**
+
+- [x] **Migration 032** `032_ra_bills.sql` — `ra_bills` + `ra_bill_lines`, `ra_status`,
+      `v_ra_bill_totals`, `v_ra_payables`, `fn_certify_ra_bill`, `fn_reject_ra_bill`,
+      `fn_set_ra_status`, plus `ra_bills` branches on `fn_cancel_document` and `fn_delete_record`.
+- [x] **Lines carry quantity TO DATE, not this period.** That is how an RA bill is actually written
+      on site, and it is what makes the running account self-correcting: if bill 2 under-measured a
+      wall, bill 3 states the true cumulative quantity and the difference falls out by itself. The
+      alternative — per-period quantities — needs every past bill to be right forever.
+- [x] **The arithmetic, all in Postgres:** gross = Σ(qty × rate); less-previously-certified = Σ gross
+      of earlier *certified* bills for the same contractor on this project; value this bill = the
+      difference; retention = round(value × pct, 2) **on this bill's value only**, so the same work
+      is never held back twice; net = value − retention. Migration 025's lesson applied up front:
+      a deduction at the wrong level still yields the right payable but an unreconcilable statement.
+- [x] **Certified figures are FROZEN in columns.** `v_ra_bill_totals` previews the arithmetic while a
+      bill is in review, then `coalesce(stored, live)` makes the snapshot win. Without that, editing
+      a measurement months later would silently restate a bill that has already been paid.
+- [x] **Constraints, not form validation:** `certified` requires all four figures plus who and when;
+      `rejected` requires a reason; `cancelled` keeps the 021 contract. A client cannot fake any of
+      the three.
+- [x] **Certification is founder/PM**, and the refusal says why: accounts prepare and record a bill,
+      but the signature that authorises payment isn't theirs. `fn_certify_ra_bill` also refuses a
+      bill with no lines, and refuses one where work-to-date is *less* than what has already been
+      certified — a running account cannot go backwards.
+- [x] **Certificate PDF** on the letterhead, laid out as the account reads on paper (work to date →
+      less previously certified → value this bill → less retention → net certified), net in words,
+      claimed-vs-certified noted underneath. VOID watermark for **rejected as well as cancelled** —
+      both mean "do not pay against this sheet", and a rejected bill still circulates.
+- [x] **`v_ra_payables`** — certified value, retention held and net payable per contractor, shown as
+      a strip above the list.
+- [x] Cancel is the only way to undo a certified bill, and it self-heals: the next bill's
+      "less previously certified" drops automatically, because that figure is summed from certified
+      rows rather than stored as a manual number.
+
+**Deliberately not done**
+
+- **Certifying does not post to Open Book.** Vendor invoices already post there through procurement;
+  a contractor appearing in both paths would be double-counted. Posting can be added once there's a
+  rule for which path owns which spend.
+- **Retention release and bank guarantees are A12.** This module holds retention and reports it.
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean; `fn_certify_ra_bill`,
+  `fn_reject_ra_bill`, `fn_set_ra_status`, `fn_cancel_document` and `fn_delete_record` all clean.
+  `fn_ra_line_project` fails only as a `returns trigger` function — the known pglast limitation.
+- `npx tsc -b --force` clean. One real error caught on the way: `CancelDialog` takes
+  `summary`/`consequence`, not `name`.
+
+**Not tested** — no bill has been recorded. Untested: recording a bill, adding measurements,
+certifying, the previously-certified deduction across two consecutive bills, the retention figure,
+rejection with reason, cancel-after-certify and its effect on the next bill, the PDF in certified and
+rejected states, and the supervisor check (no /money access at all).
+
+**Migration 032 APPLIED** — confirmed 2026-08-01 by the views query returning both
+`v_ra_bill_totals` and `v_ra_payables`. That is the last statement in the file, so the whole script
+ran. Not yet exercised on real data.

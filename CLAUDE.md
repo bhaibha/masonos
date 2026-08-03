@@ -70,7 +70,18 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   a revision-free drawing and WIP revisions). 031 = founder-created sub-folders in the document
   vault (`doc_subfolders`, `documents.subfolder_id`, plus a doc_subfolders branch on
   `fn_delete_record`).
-  So: **001–031 ALL APPLIED.** Next migration = 032.
+  **032 APPLIED** (confirmed 2026-08-01) — A11 RA bills
+  (`ra_bills`, `ra_bill_lines`, `ra_status`, `v_ra_bill_totals`, `v_ra_payables`,
+  `fn_certify_ra_bill`, `fn_reject_ra_bill`, `fn_set_ra_status`, plus ra_bills branches on
+  `fn_cancel_document` and `fn_delete_record`).
+  Verified 2026-08-01 by the views query returning both `v_ra_bill_totals` and `v_ra_payables` —
+  that is the last statement in the file, so the whole script ran.
+  So: **001–032 ALL APPLIED.** Next migration = 033.
+- **Snapshot-vs-view lesson (032):** a figure that authorises a payment is FROZEN in columns when it
+  is approved, never recomputed from its lines on read. `v_ra_bill_totals` previews the arithmetic
+  while a bill is in review, then `coalesce(stored, live)` makes the stored snapshot win the moment
+  it exists — otherwise editing a measurement months later would silently restate a bill that has
+  already been paid. Same rule as `fn_issue_invoice` (024).
 - **Container-delete lesson (031):** a sub-folder's FK from `documents` is **ON DELETE SET NULL**,
   never cascade. Deleting a container must not take the contents with it — the files reappear at the
   parent folder's root. Reach for SET NULL any time the child can meaningfully exist without the

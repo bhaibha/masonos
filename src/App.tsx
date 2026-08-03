@@ -17,6 +17,7 @@ import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
 import Invoices from '@/pages/money/Invoices'
 import Ledger from '@/pages/money/Ledger'
+import RaBills from '@/pages/money/RaBills'
 import MoneyLayout from '@/pages/money/MoneyLayout'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
@@ -108,6 +109,9 @@ export default function App() {
                     MONEY_ROLES the parent guard already enforces, and RLS on
                     compliance_items repeats it. */}
                 <Route path="compliance" element={<Compliance />} />
+                {/* A11 RA bills. Founder/PM/accounts read; certification is
+                    founder/PM, enforced in fn_certify_ra_bill. */}
+                <Route path="bills" element={<RaBills />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>
