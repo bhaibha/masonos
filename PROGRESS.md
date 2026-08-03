@@ -1262,3 +1262,55 @@ rejected states, and the supervisor check (no /money access at all).
 **Migration 032 APPLIED** — confirmed 2026-08-01 by the views query returning both
 `v_ra_bill_totals` and `v_ra_payables`. That is the last statement in the file, so the whole script
 ran. Not yet exercised on real data.
+
+---
+
+## Session — A12 Retention & Bank Guarantees (Module 34), migration 033
+
+Confirmed at start: **001–032 ALL APPLIED**, next = 033.
+
+**Built**
+
+- [x] **Migration 033** `033_retention_and_bg.sql` — `retention_releases`, `bank_guarantees`, four
+      enums, `v_retention_ledger`, `v_bg_register`, `fn_release_retention`, `fn_set_bg_status`,
+      `fn_bg_alert`, `fn_bg_sweep` + the `mason-bg-sweep` cron job, and two more branches on
+      `fn_delete_record`.
+- [x] **Retention held has no input field anywhere.** It is summed from `retention_amount` on
+      CERTIFIED `ra_bills`, per contractor, inside the view. The instant that number becomes
+      editable it starts disagreeing with what was actually certified — and the disagreement is
+      invisible, because both figures look authoritative. Balance = held − released, computed on
+      read, so cancelling a bill corrects the balance at once rather than leaving a stale total.
+- [x] **The schedule and the release are one table.** "Half on completion, half after DLP" is two
+      `planned` rows; releasing one flips it to `released` with the actual amount, date and person.
+      A separate schedule table would have to be reconciled against the releases, and reconciliation
+      is where errors live.
+- [x] **`fn_release_retention` refuses to over-release** — it re-derives what is held from certified
+      bills and what has already gone out, and raises if the sum would exceed it. Founder/accounts
+      only, because releasing moves money out of the business; PM can plan but not pay.
+- [x] **BG register** with number unique per project, issue/expiry/**claim-period** dates (the claim
+      date matters: it, not expiry, is the last day a guarantee can actually be invoked), scanned
+      copy in the existing `compliance` bucket rather than a fourth bucket with the same three
+      policies rewritten.
+- [x] **Expiry derived at query time**, exactly as 028 does: `v_bg_register.display_status` computes
+      expiring/expired from `expiry_date` in Asia/Kolkata, and the nightly `mason-bg-sweep` job is
+      bookkeeping only. A guarantee that lapses silently because a cron job didn't run is precisely
+      the failure this module exists to prevent, so the screen cannot depend on it.
+- [x] **Dashboard strip** for guarantees, alongside compliance — and like that one, it renders
+      nothing when there is nothing to chase.
+- [x] Delete refuses a released tranche (money left the business against it) and a
+      released/returned guarantee (a fact about a real instrument).
+
+**Verification**
+
+- Migration parsed against the real PostgreSQL grammar: outer SQL clean; `fn_release_retention`,
+  `fn_set_bg_status`, `fn_bg_sweep` and `fn_delete_record` all clean. No trigger functions in this
+  one, so nothing hit the pglast limitation.
+- `npx tsc -b --force` clean.
+
+**Not tested** — nothing entered. Untested: the ledger appearing after a bill is certified, planning
+two tranches, releasing one, the over-release refusal, adding a guarantee with a scan, the 30-day
+amber and past-due red states, the dashboard strip, and the delete refusals.
+
+**Migration 033 APPLIED** — confirmed 2026-08-01 by `cron.job` returning both `mason-bg-sweep`
+(`40 22 * * *`, active) and `mason-compliance-sweep`. That is the last statement in the file, so the
+whole script ran. Not yet exercised on real data.

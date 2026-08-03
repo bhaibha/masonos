@@ -18,6 +18,7 @@ import ExpenseForm from '@/pages/money/ExpenseForm'
 import Invoices from '@/pages/money/Invoices'
 import Ledger from '@/pages/money/Ledger'
 import RaBills from '@/pages/money/RaBills'
+import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
@@ -112,6 +113,9 @@ export default function App() {
                 {/* A11 RA bills. Founder/PM/accounts read; certification is
                     founder/PM, enforced in fn_certify_ra_bill. */}
                 <Route path="bills" element={<RaBills />} />
+                {/* A12 retention ledger + bank guarantee register. Retention
+                    held is derived from certified bills, never entered. */}
+                <Route path="retention" element={<Retention />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

@@ -352,9 +352,13 @@ export type DeletableTable =
   | 'drawing_revisions'
   | 'doc_subfolders'
   | 'ra_bills'
+  | 'retention_releases'
+  | 'bank_guarantees'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
   ra_bills: 'bill',
+  retention_releases: 'retention tranche',
+  bank_guarantees: 'guarantee',
   compliance_items: 'compliance item',
   drawings: 'drawing',
   drawing_revisions: 'revision',
@@ -385,6 +389,8 @@ export function canDelete(
   if (table === 'compliance_items') return canManageCompliance(role)
   if (table === 'doc_subfolders') return role === 'founder'
   if (table === 'ra_bills') return canManageRaBills(role)
+  if (table === 'retention_releases' || table === 'bank_guarantees')
+    return canManageRetention(role)
   return role === 'founder' || role === 'pm'
 }
 
@@ -1205,6 +1211,163 @@ export interface RaPayable {
   retention_held: number
   net_certified: number
   last_certified_at: string | null
+}
+
+// ---------- Retention & bank guarantees (A12, migration 033) ----------
+
+export type RetentionMilestone =
+  | 'on_completion'
+  | 'after_dlp'
+  | 'interim'
+  | 'other'
+
+export type RetentionState = 'planned' | 'released' | 'cancelled'
+
+export const RETENTION_MILESTONES: {
+  value: RetentionMilestone
+  label: string
+}[] = [
+  { value: 'on_completion', label: 'On completion' },
+  { value: 'after_dlp', label: 'After DLP' },
+  { value: 'interim', label: 'Interim' },
+  { value: 'other', label: 'Other' },
+]
+
+export const RETENTION_MILESTONE_LABEL = Object.fromEntries(
+  RETENTION_MILESTONES.map((m) => [m.value, m.label]),
+) as Record<RetentionMilestone, string>
+
+export type BgType =
+  | 'advance'
+  | 'performance'
+  | 'retention'
+  | 'mobilisation'
+  | 'other'
+
+export type BgStatus = 'active' | 'expired' | 'released' | 'returned'
+
+/** Derived in v_bg_register from expiry_date, not read off the column. */
+export type BgDisplayStatus =
+  | 'active'
+  | 'expiring'
+  | 'expired'
+  | 'released'
+  | 'returned'
+
+export const BG_TYPES: { value: BgType; label: string }[] = [
+  { value: 'performance', label: 'Performance' },
+  { value: 'advance', label: 'Advance' },
+  { value: 'retention', label: 'Retention' },
+  { value: 'mobilisation', label: 'Mobilisation' },
+  { value: 'other', label: 'Other' },
+]
+
+export const BG_TYPE_LABEL = Object.fromEntries(
+  BG_TYPES.map((b) => [b.value, b.label]),
+) as Record<BgType, string>
+
+export const BG_DISPLAY_LABEL: Record<BgDisplayStatus, string> = {
+  active: 'Active',
+  expiring: 'Expiring',
+  expired: 'Expired',
+  released: 'Released',
+  returned: 'Returned',
+}
+
+/** A guarantee inside this many days of expiry needs chasing. */
+export const BG_WARN_DAYS = 30
+
+/** Founder/PM/accounts, same as every money module. */
+export function canManageRetention(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+/** Releasing retention moves money out — founder/accounts only, per the RPC. */
+export function canReleaseRetention(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+/** A row of v_retention_ledger. `retention_held` is summed from certified bills. */
+export interface RetentionLedgerRow {
+  project_id: string
+  party_key: string
+  vendor_id: string | null
+  contractor: string
+  certified_bills: number
+  retention_held: number
+  released: number
+  planned: number
+  balance_held: number
+  next_due: string | null
+}
+
+export interface RetentionTranche {
+  id: string
+  project_id: string
+  vendor_id: string | null
+  contractor_name: string | null
+  milestone: RetentionMilestone
+  status: RetentionState
+  amount: number
+  due_date: string | null
+  released_date: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface NewTrancheInput {
+  project_id: string
+  vendor_id: string | null
+  contractor_name: string
+  milestone: RetentionMilestone
+  amount: number
+  due_date: string | null
+  notes: string
+}
+
+export interface BgRow {
+  id: string
+  project_id: string
+  vendor_id: string | null
+  counterparty_name: string
+  bg_type: BgType
+  bg_number: string
+  issuing_bank: string
+  amount: number
+  issue_date: string | null
+  expiry_date: string
+  claim_expiry_date: string | null
+  status: BgStatus
+  file_path: string | null
+  notes: string | null
+  released_at: string | null
+  /** negative once expired */
+  days_to_expiry: number
+  display_status: BgDisplayStatus
+  created_at: string
+}
+
+export interface NewBgInput {
+  project_id: string
+  vendor_id: string | null
+  counterparty: string
+  bg_type: BgType
+  bg_number: string
+  issuing_bank: string
+  amount: number
+  issue_date: string | null
+  expiry_date: string
+  claim_expiry_date: string | null
+  file_path: string | null
+  notes: string
+}
+
+/** fn_bg_alert — the dashboard strip. Zeroes for a supervisor. */
+export interface BgAlert {
+  expiring_count: number
+  expired_count: number
+  next_expiry: string | null
+  next_bg_number: string | null
 }
 
 export interface NewRevisionInput {

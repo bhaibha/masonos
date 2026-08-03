@@ -1,4 +1,10 @@
-import { Building2, CalendarClock, ChevronRight, Settings2 } from 'lucide-react'
+import {
+  Building2,
+  CalendarClock,
+  ChevronRight,
+  Landmark,
+  Settings2,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -13,7 +19,9 @@ import {
 } from '@/lib/queries/dashboard'
 import { fetchComplianceAlert } from '@/lib/queries/compliance'
 import { fetchProjectSpend } from '@/lib/queries/projects'
+import { fetchBgAlert } from '@/lib/queries/retention'
 import {
+  type BgAlert,
   canAdminister,
   canManageCompliance,
   canSeeMoney,
@@ -34,6 +42,7 @@ export default function Dashboard() {
   const [pulse, setPulse] = useState<Map<string, ProjectPulse>>(new Map())
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
   const [compliance, setCompliance] = useState<ComplianceAlert | null>(null)
+  const [bg, setBg] = useState<BgAlert | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -72,6 +81,14 @@ export default function Dashboard() {
       fetchComplianceAlert()
         .then((c) => {
           if (!cancelled) setCompliance(c)
+        })
+        .catch(() => {})
+
+      // Same shape: RLS gives a supervisor zeroes, and the query returns null
+      // before migration 033, so the strip simply doesn't render.
+      fetchBgAlert()
+        .then((b) => {
+          if (!cancelled) setBg(b)
         })
         .catch(() => {})
     }
@@ -118,6 +135,7 @@ export default function Dashboard() {
         )}
 
         {compliance !== null && <ComplianceStrip alert={compliance} />}
+        {bg !== null && <BgStrip alert={bg} />}
 
         {rows && rows.length > 0 && (
           <>
@@ -203,6 +221,46 @@ function ComplianceStrip({ alert }: { alert: ComplianceAlert }) {
           </span>
         )}
         <ChevronRight className="size-4 shrink-0 sm:ml-0" aria-hidden="true" />
+      </Link>
+    </FadeUp>
+  )
+}
+
+/**
+ * Bank guarantees inside 30 days, or already lapsed. Same rule as the
+ * compliance strip: renders nothing when there is nothing to chase, because a
+ * banner that is always present stops being read.
+ */
+function BgStrip({ alert }: { alert: BgAlert }) {
+  const { expiring_count: soon, expired_count: gone } = alert
+  if (soon === 0 && gone === 0) return null
+
+  const parts: string[] = []
+  if (gone > 0) parts.push(`${gone} expired`)
+  if (soon > 0) parts.push(`${soon} expiring within 30 days`)
+
+  return (
+    <FadeUp>
+      <Link
+        to="/money/retention"
+        className={cn(
+          'mb-5 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors',
+          gone > 0
+            ? 'bg-destructive/10 text-destructive hover:bg-destructive/15'
+            : 'bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]',
+        )}
+      >
+        <Landmark className="size-4 shrink-0" aria-hidden="true" />
+        <span className="text-sm font-medium">
+          Bank guarantees — {parts.join(' · ')}
+        </span>
+        {alert.next_bg_number && (
+          <span className="ml-auto hidden truncate text-[13px] opacity-80 sm:block">
+            Next: {alert.next_bg_number}
+            {alert.next_expiry && ` · ${alert.next_expiry}`}
+          </span>
+        )}
+        <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
       </Link>
     </FadeUp>
   )

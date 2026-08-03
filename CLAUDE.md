@@ -76,7 +76,18 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_cancel_document` and `fn_delete_record`).
   Verified 2026-08-01 by the views query returning both `v_ra_bill_totals` and `v_ra_payables` —
   that is the last statement in the file, so the whole script ran.
-  So: **001–032 ALL APPLIED.** Next migration = 033.
+  **033 APPLIED** (confirmed 2026-08-01) — A12 Retention & bank guarantees (`retention_releases`, `bank_guarantees`, `retention_milestone`/`retention_state`/
+  `bg_type`/`bg_status`, `v_retention_ledger`, `v_bg_register`, `fn_release_retention`,
+  `fn_set_bg_status`, `fn_bg_alert`, `fn_bg_sweep` + a nightly pg_cron job, plus
+  retention_releases/bank_guarantees branches on `fn_delete_record`).
+  Verified 2026-08-01 by `select … from cron.job` returning **both** `mason-bg-sweep`
+  (`40 22 * * *`) and `mason-compliance-sweep` — that is the last statement in the file, so the
+  whole script ran.
+  So: **001–033 ALL APPLIED.** Next migration = 034.
+- **Derived-balance lesson (033):** retention *held* is never a stored number — it is summed from
+  certified `ra_bills` inside `v_retention_ledger`, and the balance is held − released, computed on
+  read. A stored balance drifts the first moment a bill is cancelled. The general rule: if a figure
+  is a consequence of other rows, do not give anyone a field to type it into.
 - **Snapshot-vs-view lesson (032):** a figure that authorises a payment is FROZEN in columns when it
   is approved, never recomputed from its lines on read. `v_ra_bill_totals` previews the arithmetic
   while a bill is in review, then `coalesce(stored, live)` makes the stored snapshot win the moment

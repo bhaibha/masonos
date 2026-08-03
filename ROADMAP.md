@@ -167,7 +167,23 @@ Order within group:
       **Not yet tested:** recording a bill, measurements, certifying, the previously-certified
       deduction across two consecutive bills, retention, rejection, cancel-after-certify, and the
       certificate PDF.
-- [ ] A12. M34 Retention & Bank Guarantee (retention held/released, BG expiry tracking)
+- [~] **A12. M34 Retention & Bank Guarantee — built, migration 033 APPLIED, not yet exercised.**
+      **Retention held is never typed in** — `v_retention_ledger` sums `retention_amount` from
+      CERTIFIED ra_bills per contractor, and the balance is held − released, computed on read, so a
+      cancelled bill corrects it immediately. `retention_releases` is both the schedule and the
+      record: "half on completion, half after DLP" is two PLANNED rows, and releasing one flips it
+      to `released` with the actual amount, date and signatory. `fn_release_retention` refuses to
+      release more than is held, and is founder/accounts only because it moves money out.
+      **BG register** — type (advance/performance/retention/mobilisation/other), number unique per
+      project, issuing bank, value, issue/expiry/claim-period dates, active → released/returned,
+      scanned copy in the existing `compliance` bucket (already founder/pm/accounts gated).
+      Expiry is derived in `v_bg_register` at query time — amber inside 30 days, red once past — so
+      the register is right whether or not the nightly `mason-bg-sweep` pg_cron job ran; the job is
+      bookkeeping, matching the 028 pattern. Dashboard strip that renders only when something is
+      expiring or expired. Founder/PM/accounts throughout; supervisors cannot reach /money.
+      **Not yet tested:** the ledger appearing after a bill is certified, planning and releasing a
+      tranche, the over-release refusal, adding a guarantee with a scan, the amber/red expiry
+      states, and the dashboard strip.
 - [ ] A13. M30 Insurance Management (CAR/WC/PI policies, expiry alerts)
 
 ## GROUP B — Complex logic (build second) ~3–4 weeks
