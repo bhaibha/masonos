@@ -1363,3 +1363,38 @@ statement in the file, so the whole script ran. Not yet exercised on real data.
 **Every Group A module is now built and every migration applied (001–034).** Nine of the thirteen
 have never been exercised on real data — that testing backlog, not Group B, is the largest
 outstanding risk in the project.
+
+---
+
+## Session — multi-file upload + project handover archive (no migration)
+
+**Multi-file upload in the vault.** The upload form took one file at a time. It now takes several,
+appends on a second pick rather than replacing, and lets you remove one without starting over. With
+one file the Title field behaves as before; with several it becomes an optional **prefix** and each
+document is titled from its own filename. Each file uploads and is recorded **independently**, so a
+failure on the third of five keeps the other four and names the one that failed — a single
+transaction would have thrown away work that had already landed.
+
+**Project handover archive** (`src/lib/projectArchive.ts`, founder-only card on Project Detail).
+One zip containing `data/*.csv` for every record type on the project, `files/` grouped by what they
+belong to (documents, drawings, site photos, snags, receipts, challans, compliance proofs,
+guarantees, insurance), and an `index.html` that reads offline.
+
+- **Browser-built, not an Edge Function.** A function would have to hold the whole archive in memory
+  inside a 150-second budget; the browser has neither limit, is already authenticated, and the bytes
+  end up on disk either way.
+- **RLS is the security, not the code.** Every query runs as the signed-in user, so an archive can
+  never contain more than that person can already see. The card is founder-only because an archive
+  contains every figure on the project.
+- Rate-bearing views (`v_material_inward_rates`, `v_po_lines_rated`) are used where the base tables
+  have column revokes, or the CSVs would silently omit rates.
+- A missing storage object is counted and reported, never fatal — one unreadable file shouldn't cost
+  you the other four hundred. CSVs carry a UTF-8 BOM so Excel doesn't mangle ₹ and accented names.
+- DEFLATE level 3 deliberately: the payload is mostly already-compressed JPEG and PDF, so a higher
+  level costs seconds and saves almost nothing.
+
+**New dependency: `jszip` ^3.10.1** (pure JS, MIT — same class as jspdf). It is installed in
+node_modules and listed in package.json; **run `npm install` once to update package-lock.json**
+before pushing, since Cloudflare builds from the lockfile.
+
+`npx tsc -b --force` clean.

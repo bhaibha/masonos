@@ -1,4 +1,5 @@
 import {
+  Archive,
   ArrowLeft,
   ClipboardCheck,
   ClipboardList,
@@ -17,6 +18,11 @@ import { Skeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { barGeometry, formatInr } from '@/lib/format'
 import {
+  type ArchiveProgress,
+  buildProjectArchive,
+  saveArchive,
+} from '@/lib/projectArchive'
+import {
   fetchProjectSummary,
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
@@ -31,6 +37,7 @@ import {
 } from '@/lib/queries/projects'
 import {
   type ActivityItem,
+  canAdminister,
   canLogMaterials,
   canSeeMoney,
   DOC_FOLDER_LABEL,
@@ -211,6 +218,11 @@ export default function ProjectDetail() {
           <ActivityCard items={activity} />
         </RevealItem>
       </Stagger>
+
+      {/* Founder only: an archive contains every figure on the project. */}
+      {canAdminister(role) && project !== null && (
+        <ArchiveCard projectId={project.id} projectName={project.name} />
+      )}
     </div>
   )
 }
@@ -611,6 +623,91 @@ function SafetyCard({
         </div>
       )}
     </SectionCard>
+  )
+}
+
+/**
+ * Handover archive. Everything about the project as CSV, plus every file, in
+ * one zip — the pack you hand over at completion, or keep when the project is
+ * archived.
+ */
+function ArchiveCard({
+  projectId,
+  projectName,
+}: {
+  projectId: string
+  projectName: string
+}) {
+  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<ArchiveProgress | null>(null)
+
+  async function run() {
+    setBusy(true)
+    try {
+      const { blob, fileCount, missing } = await buildProjectArchive(
+        projectId,
+        projectName,
+        setProgress,
+      )
+      saveArchive(blob, projectName)
+      toast.success('Archive downloaded', {
+        description:
+          `${fileCount} file${fileCount === 1 ? '' : 's'} and every record as CSV.` +
+          (missing > 0 ? ` ${missing} file(s) could not be read.` : ''),
+      })
+    } catch (err) {
+      toast.error('Could not build the archive', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+    setBusy(false)
+    setProgress(null)
+  }
+
+  return (
+    <FadeUp>
+      <section className="paper mt-4 p-6">
+        <div className="flex items-center gap-2.5">
+          <Archive className="size-4 text-muted-foreground" aria-hidden="true" />
+          <h2 className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+            Handover archive
+          </h2>
+        </div>
+
+        <p className="mt-4 text-sm text-muted-foreground">
+          One zip with every record as a CSV, every document, drawing, photo,
+          receipt and scan, and an index page to read it offline. Save it
+          wherever you keep project records — it needs nothing from this app to
+          open.
+        </p>
+
+        {progress && (
+          <div className="mt-4">
+            <p className="text-xs text-muted-foreground">{progress.label}</p>
+            <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-border">
+              <div
+                className="h-full rounded-full bg-primary transition-[width] duration-300"
+                style={{ width: `${progress.pct}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <Button
+          variant="outline"
+          className="mt-5 h-11 w-full"
+          disabled={busy}
+          onClick={() => void run()}
+        >
+          {busy ? 'Building…' : 'Export project archive'}
+        </Button>
+
+        <p className="mt-3 text-xs text-muted-foreground">
+          Large projects take a minute or two — keep this tab open while it
+          builds.
+        </p>
+      </section>
+    </FadeUp>
   )
 }
 

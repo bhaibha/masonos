@@ -225,6 +225,11 @@ Order within group:
 - ~~Add-Project + team-assignment admin screen (currently done via SQL)~~ — **BUILT.**
   Founder-only `/admin`: create/edit projects, create users with a job title mapped to an access
   role, assign project membership. Migration 019 + `admin-create-user` Edge Function.
+- ~~Project handover archive (zip of all data + files)~~ — **BUILT.** Founder-only card on Project
+  Detail: CSVs of every record type, every file grouped by what it belongs to, and an offline index
+  page. Downloads to the computer; put it in Drive or anywhere else from there. Direct-to-Drive was
+  deliberately skipped — it needs Google OAuth, which breaks the no-extra-services rule for what a
+  ten-second drag already does.
 - Orphaned-storage cleanup job (removing a photo leaves the object in the bucket)
 - pg_cron nightly auto-rollover wrapper (needs owner-invoked function; current rollover is button-triggered)
 - Aadhaar e-sign, WhatsApp API — deferred paid integrations if ever needed

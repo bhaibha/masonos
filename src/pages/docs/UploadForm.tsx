@@ -36,7 +36,7 @@ export default function UploadForm() {
   const [subfolder, setSubfolder] = useState(params.get('sub') ?? '')
   const [subs, setSubs] = useState<DocSubfolder[]>([])
   const [confidential, setConfidential] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [busy, setBusy] = useState(false)
@@ -67,12 +67,31 @@ export default function UploadForm() {
     )
   }
 
-  function pickFile(f: File | null) {
-    setFile(f)
-    if (f && title.trim() === '') {
-      // Sensible default: filename without extension.
-      setTitle(f.name.replace(/\.[^.]+$/, ''))
+  /** Filename without its extension — the default title for each file. */
+  function nameOf(f: File): string {
+    return f.name.replace(/\.[^.]+$/, '')
+  }
+
+  function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return
+    const picked = Array.from(list)
+
+    setFiles((prev) => {
+      // Re-picking the same file twice is a slip, not an intention.
+      const seen = new Set(prev.map((f) => `${f.name}:${f.size}`))
+      return [...prev, ...picked.filter((f) => !seen.has(`${f.name}:${f.size}`))]
+    })
+
+    // Only auto-fill the title for a lone file. With several, each keeps its
+    // own filename and the title box becomes an optional prefix.
+    if (picked.length === 1 && files.length === 0 && title.trim() === '') {
+      const first = picked[0]
+      if (first) setTitle(nameOf(first))
     }
+  }
+
+  function removeFile(i: number) {
+    setFiles((prev) => prev.filter((_, n) => n !== i))
   }
 
   async function onSubmit(e: FormEvent) {
@@ -82,61 +101,99 @@ export default function UploadForm() {
       toast.error('No project selected.')
       return
     }
-    if (!file) {
-      toast.error('Choose a file to upload.')
+    if (files.length === 0) {
+      toast.error('Choose at least one file to upload.')
       return
     }
-    if (title.trim() === '') {
+    if (files.length === 1 && title.trim() === '') {
       toast.error('Give the document a title.')
       return
     }
 
     setBusy(true)
-    try {
-      setStatus('Uploading file…')
-      const { path, fileType } = await uploadDocument(projectId, file)
 
-      setStatus('Saving details…')
-      await createDocument({
-        project_id: projectId,
-        folder,
-        title: title.trim(),
-        file_path: path,
-        file_type: fileType,
-        is_confidential: confidential,
-        subfolder_id: subfolder || null,
-      })
+    // Each file is uploaded and recorded independently, so one failure doesn't
+    // discard the ones that already landed — the toast reports exactly which
+    // failed rather than pretending the whole batch did.
+    const failed: string[] = []
+    let done = 0
 
-      navigate(subfolder ? `/docs/${folder}?sub=${subfolder}` : `/docs/${folder}`)
-    } catch (err) {
-      toast.error('Could not upload the document.', { description: errText(err) })
+    for (const [i, f] of files.entries()) {
+      setStatus(`Uploading ${i + 1} of ${files.length} — ${f.name}`)
+      try {
+        const { path, fileType } = await uploadDocument(projectId, f)
+
+        const docTitle =
+          files.length === 1
+            ? title.trim()
+            : title.trim() === ''
+              ? nameOf(f)
+              : `${title.trim()} — ${nameOf(f)}`
+
+        await createDocument({
+          project_id: projectId,
+          folder,
+          title: docTitle,
+          file_path: path,
+          file_type: fileType,
+          is_confidential: confidential,
+          subfolder_id: subfolder || null,
+        })
+        done += 1
+      } catch (err) {
+        failed.push(`${f.name}: ${errText(err)}`)
+      }
+    }
+
+    if (failed.length > 0) {
+      toast.error(
+        done > 0
+          ? `${done} uploaded, ${failed.length} failed`
+          : 'Could not upload',
+        { description: failed.join(' · ') },
+      )
       setBusy(false)
       setStatus(null)
+      if (done === 0) return
+    } else {
+      toast.success(
+        done === 1 ? 'Document uploaded' : `${done} documents uploaded`,
+      )
     }
+
+    navigate(subfolder ? `/docs/${folder}?sub=${subfolder}` : `/docs/${folder}`)
   }
 
-  const sizeKb = file ? Math.round(file.size / 1024) : null
-  const isImage = file?.type.startsWith('image/') ?? false
+  const totalKb = files.reduce((n, f) => n + f.size, 0) / 1024
+  const images = files.filter((f) => f.type.startsWith('image/')).length
 
   return (
     <form onSubmit={onSubmit} className="paper mb-6 space-y-5 p-5" noValidate>
       <FieldRow
-        label="File"
+        label={files.length > 1 ? `Files (${files.length})` : 'File'}
         htmlFor="file"
         hint={
-          file
-            ? isImage
-              ? `${sizeKb} KB image — will be compressed to under 300 KB.`
-              : `${sizeKb} KB — uploaded as-is, no compression.`
-            : 'PDF, image, Word, drawing — any file type.'
+          files.length === 0
+            ? 'PDF, image, Word, drawing — any file type. Pick several at once if you like.'
+            : `${Math.round(totalKb)} KB total${
+                images > 0
+                  ? ` · ${images} image${images === 1 ? '' : 's'} compressed to under 300 KB each`
+                  : ' · uploaded as-is, no compression'
+              }`
         }
       >
         <input
           ref={fileRef}
           id="file"
           type="file"
+          multiple
           className="sr-only"
-          onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            addFiles(e.target.files)
+            // Clear the input so picking the same file again still fires
+            // onChange after it has been removed from the list.
+            e.target.value = ''
+          }}
         />
         <div className="flex items-center gap-3">
           <Button
@@ -145,34 +202,63 @@ export default function UploadForm() {
             className="h-12 flex-1 text-base"
             onClick={() => fileRef.current?.click()}
           >
-            {file ? 'Choose another file' : 'Choose file'}
+            {files.length === 0 ? 'Choose files' : 'Add more files'}
           </Button>
-          {file && (
+          {files.length > 0 && (
             <Button
               type="button"
               variant="ghost"
               className="h-12"
-              onClick={() => pickFile(null)}
+              onClick={() => setFiles([])}
             >
-              Remove
+              Clear
             </Button>
           )}
         </div>
-        {file && (
-          <p className="mt-2 truncate rounded-lg bg-secondary px-3 py-2 text-sm">
-            {file.name}
-          </p>
+
+        {files.length > 0 && (
+          <ul className="mt-2 space-y-1.5">
+            {files.map((f, i) => (
+              <li
+                key={`${f.name}-${f.size}-${i}`}
+                className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm">{f.name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                  {Math.round(f.size / 1024)} KB
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  className="min-h-9 shrink-0 px-1 text-xs text-destructive"
+                  aria-label={`Remove ${f.name}`}
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </FieldRow>
 
-      <FieldRow label="Title" htmlFor="title">
+      <FieldRow
+        label={files.length > 1 ? 'Title prefix' : 'Title'}
+        htmlFor="title"
+        hint={
+          files.length > 1
+            ? 'Optional. Each file is titled by its own filename; a prefix is added in front.'
+            : undefined
+        }
+      >
         <Input
           id="title"
-          required
+          required={files.length <= 1}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="h-12 text-base"
-          placeholder="Main contract — signed"
+          placeholder={
+            files.length > 1 ? 'e.g. BBMP submission' : 'Main contract — signed'
+          }
         />
       </FieldRow>
 
@@ -232,8 +318,16 @@ export default function UploadForm() {
         </label>
       )}
 
+      {busy && status && (
+        <p className="truncate text-xs text-muted-foreground">{status}</p>
+      )}
+
       <Button type="submit" disabled={busy} className="h-12 w-full text-base">
-        {busy ? (status ?? 'Uploading…') : 'Upload document'}
+        {busy
+          ? 'Uploading…'
+          : files.length > 1
+            ? `Upload ${files.length} documents`
+            : 'Upload document'}
       </Button>
     </form>
   )
