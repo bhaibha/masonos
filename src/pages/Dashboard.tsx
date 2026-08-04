@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Landmark,
   Settings2,
+  ShieldCheck,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -19,6 +20,7 @@ import {
 } from '@/lib/queries/dashboard'
 import { fetchComplianceAlert } from '@/lib/queries/compliance'
 import { fetchProjectSpend } from '@/lib/queries/projects'
+import { fetchInsuranceAlert } from '@/lib/queries/insurance'
 import { fetchBgAlert } from '@/lib/queries/retention'
 import {
   type BgAlert,
@@ -26,6 +28,7 @@ import {
   canManageCompliance,
   canSeeMoney,
   type ComplianceAlert,
+  type InsuranceAlert,
   type PortfolioSummary,
   type ProjectPulse,
   type ProjectSpend,
@@ -43,6 +46,7 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
   const [compliance, setCompliance] = useState<ComplianceAlert | null>(null)
   const [bg, setBg] = useState<BgAlert | null>(null)
+  const [insurance, setInsurance] = useState<InsuranceAlert | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -91,6 +95,12 @@ export default function Dashboard() {
           if (!cancelled) setBg(b)
         })
         .catch(() => {})
+
+      fetchInsuranceAlert()
+        .then((i) => {
+          if (!cancelled) setInsurance(i)
+        })
+        .catch(() => {})
     }
 
     return () => {
@@ -136,6 +146,7 @@ export default function Dashboard() {
 
         {compliance !== null && <ComplianceStrip alert={compliance} />}
         {bg !== null && <BgStrip alert={bg} />}
+        {insurance !== null && <InsuranceStrip alert={insurance} />}
 
         {rows && rows.length > 0 && (
           <>
@@ -184,85 +195,124 @@ export default function Dashboard() {
   )
 }
 
-/* ---------------- Compliance ---------------- */
+/* ---------------- Deadline strips ---------------- */
 
 /**
- * One line, and only when something is actually due. A dashboard banner that is
- * always there stops being read — this renders nothing when the calendar is
- * clear.
+ * One line, and ONLY when something is actually due. A dashboard banner that is
+ * always present stops being read, so every caller returns null on a clear
+ * count rather than rendering a reassuring "all good" row.
+ *
+ * Red when something has already lapsed, amber when it is merely approaching —
+ * the two states mean different things to whoever is looking.
  */
-function ComplianceStrip({ alert }: { alert: ComplianceAlert }) {
-  const { overdue_count: overdue, due_week_count: soon } = alert
-  if (overdue === 0 && soon === 0) return null
-
-  const parts: string[] = []
-  if (overdue > 0) parts.push(`${overdue} overdue`)
-  if (soon > 0) parts.push(`${soon} due this week`)
+function AlertStrip({
+  icon: Icon,
+  label,
+  parts,
+  urgent,
+  to,
+  trailing,
+}: {
+  icon: typeof CalendarClock
+  label: string
+  parts: string[]
+  urgent: boolean
+  to: string
+  trailing?: string
+}) {
+  if (parts.length === 0) return null
 
   return (
     <FadeUp>
       <Link
-        to="/money/compliance"
+        to={to}
         className={cn(
           'mb-5 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors',
-          overdue > 0
+          urgent
             ? 'bg-destructive/10 text-destructive hover:bg-destructive/15'
             : 'bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]',
         )}
       >
-        <CalendarClock className="size-4 shrink-0" aria-hidden="true" />
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm font-medium">
-          Compliance — {parts.join(' · ')}
+          {label} — {parts.join(' · ')}
         </span>
-        {alert.next_title && (
+        {trailing && (
           <span className="ml-auto hidden truncate text-[13px] opacity-80 sm:block">
-            Next: {alert.next_title}
-            {alert.next_due_date && ` · ${alert.next_due_date}`}
-          </span>
-        )}
-        <ChevronRight className="size-4 shrink-0 sm:ml-0" aria-hidden="true" />
-      </Link>
-    </FadeUp>
-  )
-}
-
-/**
- * Bank guarantees inside 30 days, or already lapsed. Same rule as the
- * compliance strip: renders nothing when there is nothing to chase, because a
- * banner that is always present stops being read.
- */
-function BgStrip({ alert }: { alert: BgAlert }) {
-  const { expiring_count: soon, expired_count: gone } = alert
-  if (soon === 0 && gone === 0) return null
-
-  const parts: string[] = []
-  if (gone > 0) parts.push(`${gone} expired`)
-  if (soon > 0) parts.push(`${soon} expiring within 30 days`)
-
-  return (
-    <FadeUp>
-      <Link
-        to="/money/retention"
-        className={cn(
-          'mb-5 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors',
-          gone > 0
-            ? 'bg-destructive/10 text-destructive hover:bg-destructive/15'
-            : 'bg-[color-mix(in_oklab,var(--warning)_14%,transparent)] text-[var(--warning)]',
-        )}
-      >
-        <Landmark className="size-4 shrink-0" aria-hidden="true" />
-        <span className="text-sm font-medium">
-          Bank guarantees — {parts.join(' · ')}
-        </span>
-        {alert.next_bg_number && (
-          <span className="ml-auto hidden truncate text-[13px] opacity-80 sm:block">
-            Next: {alert.next_bg_number}
-            {alert.next_expiry && ` · ${alert.next_expiry}`}
+            {trailing}
           </span>
         )}
         <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
       </Link>
     </FadeUp>
+  )
+}
+
+function ComplianceStrip({ alert }: { alert: ComplianceAlert }) {
+  const parts: string[] = []
+  if (alert.overdue_count > 0) parts.push(`${alert.overdue_count} overdue`)
+  if (alert.due_week_count > 0)
+    parts.push(`${alert.due_week_count} due this week`)
+
+  return (
+    <AlertStrip
+      icon={CalendarClock}
+      label="Compliance"
+      parts={parts}
+      urgent={alert.overdue_count > 0}
+      to="/money/compliance"
+      trailing={
+        alert.next_title
+          ? `Next: ${alert.next_title}${alert.next_due_date ? ` · ${alert.next_due_date}` : ''}`
+          : undefined
+      }
+    />
+  )
+}
+
+function BgStrip({ alert }: { alert: BgAlert }) {
+  const parts: string[] = []
+  if (alert.expired_count > 0) parts.push(`${alert.expired_count} expired`)
+  if (alert.expiring_count > 0)
+    parts.push(`${alert.expiring_count} expiring within 30 days`)
+
+  return (
+    <AlertStrip
+      icon={Landmark}
+      label="Bank guarantees"
+      parts={parts}
+      urgent={alert.expired_count > 0}
+      to="/money/retention"
+      trailing={
+        alert.next_bg_number
+          ? `Next: ${alert.next_bg_number}${alert.next_expiry ? ` · ${alert.next_expiry}` : ''}`
+          : undefined
+      }
+    />
+  )
+}
+
+/** Lapsed cover is the worst of the three — hence the same red treatment. */
+function InsuranceStrip({ alert }: { alert: InsuranceAlert }) {
+  const parts: string[] = []
+  if (alert.expired_count > 0)
+    parts.push(`${alert.expired_count} lapsed`)
+  if (alert.expiring_count > 0)
+    parts.push(`${alert.expiring_count} expiring within 30 days`)
+
+  return (
+    <AlertStrip
+      icon={ShieldCheck}
+      label="Insurance"
+      parts={parts}
+      urgent={alert.expired_count > 0}
+      to="/money/insurance"
+      trailing={
+        alert.next_policy
+          ? `Next: ${alert.next_policy}${alert.next_expiry ? ` · ${alert.next_expiry}` : ''}`
+          : undefined
+      }
+    />
   )
 }
 

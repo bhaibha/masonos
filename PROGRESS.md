@@ -1314,3 +1314,52 @@ amber and past-due red states, the dashboard strip, and the delete refusals.
 **Migration 033 APPLIED** — confirmed 2026-08-01 by `cron.job` returning both `mason-bg-sweep`
 (`40 22 * * *`, active) and `mason-compliance-sweep`. That is the last statement in the file, so the
 whole script ran. Not yet exercised on real data.
+
+---
+
+## Session — A13 Insurance Management (Module 30), migration 034 — GROUP A COMPLETE
+
+Confirmed at start: **001–033 ALL APPLIED**, next = 034.
+
+**Built**
+
+- [x] **Migration 034** `034_insurance.sql` — `insurance_policies`, `insurance_type` /
+      `insurance_status`, `v_insurance_register`, `fn_set_policy_status`, `fn_insurance_alert`,
+      `fn_insurance_sweep` + the `mason-insurance-sweep` cron job, and an insurance branch on
+      `fn_delete_record`.
+- [x] **Company-wide or per project**, `project_id` nullable with the same two-arm RLS as
+      compliance: a CAR policy covers one site, professional indemnity covers the practice.
+- [x] **Renewals chain rather than overwrite.** Renewing creates a NEW policy row pointing at the old
+      one through `renewed_from`, then marks the old one `renewed`. Editing dates in place would
+      erase what was covered last year, which is precisely what a late claim needs. The form
+      prefills from the old policy, and the status flip happens **after** the replacement saves —
+      otherwise a failure would leave a policy marked renewed with nothing renewing it. Delete
+      refuses any policy a later one renews.
+- [x] **Third instance of the expiry-register shape** (028 compliance → 033 guarantees → 034
+      insurance): a view deriving `display_status` from a date in Asia/Kolkata at query time, a
+      nightly sweep that only persists the status, an invoker-rights alert function returning
+      counts, and a dashboard strip. Recorded in CLAUDE.md as a pattern to reuse rather than
+      reinvent.
+- [x] **Dashboard strips refactored.** Three near-identical components collapsed into one
+      `AlertStrip` — icon, label, parts, urgent flag, destination — with the compliance, guarantee
+      and insurance strips as thin callers. All three still render nothing when their count is zero.
+- [x] Unique index on (insurer, policy number): the same number can exist at two insurers, but not
+      twice at one.
+
+**Verification**
+
+- Migration parsed clean: outer SQL, `fn_set_policy_status`, `fn_insurance_sweep`,
+  `fn_delete_record`. No trigger functions.
+- `npx tsc -b --force` clean.
+
+**Not tested** — nothing entered. Untested: adding a policy company-wide and per project, the
+document upload, the 30-day amber and lapsed red states, renewing (including the chain and the
+delete refusal), and the dashboard strip.
+
+**Migration 034 APPLIED** — confirmed 2026-08-01 by `cron.job` returning all three sweeps
+(`mason-compliance-sweep`, `mason-bg-sweep`, `mason-insurance-sweep`, all active). That is the last
+statement in the file, so the whole script ran. Not yet exercised on real data.
+
+**Every Group A module is now built and every migration applied (001–034).** Nine of the thirteen
+have never been exercised on real data — that testing backlog, not Group B, is the largest
+outstanding risk in the project.

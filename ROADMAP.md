@@ -184,7 +184,20 @@ Order within group:
       **Not yet tested:** the ledger appearing after a bill is certified, planning and releasing a
       tranche, the over-release refusal, adding a guarantee with a scan, the amber/red expiry
       states, and the dashboard strip.
-- [ ] A13. M30 Insurance Management (CAR/WC/PI policies, expiry alerts)
+- [~] **A13. M30 Insurance Management — built, migration 034 APPLIED, not yet exercised.**
+      `insurance_policies` covering CAR, workmen's compensation, professional indemnity,
+      third-party liability and contractor's plant; **company-wide or per project** (`project_id`
+      nullable, same two-arm RLS as compliance), policy number unique per insurer, insurer, broker,
+      sum insured, premium, start/expiry, policy document in the existing `compliance` bucket.
+      Expiry derived in `v_insurance_register` at query time — amber inside 30 days, red once
+      lapsed — with `mason-insurance-sweep` (04:20 IST) as bookkeeping only, the third module to use
+      that split. **Renewals chain rather than overwrite:** renewing creates a new policy linked
+      through `renewed_from` and marks the old one renewed, so what was covered last year survives
+      for a late claim; delete refuses a policy another one renews. Dashboard strip alongside
+      compliance and guarantees — all three now share one `AlertStrip` component that renders
+      nothing when the count is zero. Founder/PM/accounts.
+      **Not yet tested:** adding a policy company-wide and per project, the document upload, the
+      amber/lapsed states, renewing (chain + delete refusal), and the dashboard strip.
 
 ## GROUP B — Complex logic (build second) ~3–4 weeks
 - [ ] B1. M02 Schedule + EVM (Gantt, planned vs earned value, CPI/SPI/EAC — all math server-side)

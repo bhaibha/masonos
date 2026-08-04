@@ -39,6 +39,7 @@ export default function MoneyLayout() {
     ...(canIssueInvoice(role) ? [{ to: '/money/invoices', label: 'Invoices' }] : []),
     { to: '/money/bills', label: 'RA bills' },
     { to: '/money/retention', label: 'Retention & BG' },
+    { to: '/money/insurance', label: 'Insurance' },
     { to: '/money/vendors', label: 'Vendors' },
     // Company-wide as well as per-project, so it is not scoped by the picker.
     { to: '/money/compliance', label: 'Compliance' },

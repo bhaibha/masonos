@@ -83,7 +83,20 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified 2026-08-01 by `select … from cron.job` returning **both** `mason-bg-sweep`
   (`40 22 * * *`) and `mason-compliance-sweep` — that is the last statement in the file, so the
   whole script ran.
-  So: **001–033 ALL APPLIED.** Next migration = 034.
+  **034 APPLIED** (confirmed 2026-08-01) — A13 Insurance
+  (`insurance_policies`, `insurance_type`/`insurance_status`, `v_insurance_register`,
+  `fn_set_policy_status`, `fn_insurance_alert`, `fn_insurance_sweep` + a nightly pg_cron job, plus
+  an insurance_policies branch on `fn_delete_record`).
+  Verified 2026-08-01 by `cron.job` returning all three sweeps — `mason-compliance-sweep`,
+  `mason-bg-sweep` and `mason-insurance-sweep`, all active. That is the last statement in the file,
+  so the whole script ran.
+  So: **001–034 ALL APPLIED.** Next migration = 035.
+- **Expiry-register pattern (028 → 033 → 034):** compliance deadlines, bank guarantees and
+  insurance policies are now three instances of one shape — nullable-or-scoped project, a view that
+  derives `display_status` from a date in Asia/Kolkata at query time, a nightly pg_cron sweep that
+  only persists the status, an invoker-rights `fn_*_alert()` returning counts, and a dashboard strip
+  that renders nothing when the count is zero. A fourth one should reuse this shape rather than
+  invent a new one.
 - **Derived-balance lesson (033):** retention *held* is never a stored number — it is summed from
   certified `ra_bills` inside `v_retention_ledger`, and the balance is held − released, computed on
   read. A stored balance drifts the first moment a bill is cancelled. The general rule: if a figure

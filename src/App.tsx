@@ -15,6 +15,7 @@ import BudgetEditor from '@/pages/money/BudgetEditor'
 import Compliance from '@/pages/money/Compliance'
 import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
+import Insurance from '@/pages/money/Insurance'
 import Invoices from '@/pages/money/Invoices'
 import Ledger from '@/pages/money/Ledger'
 import RaBills from '@/pages/money/RaBills'
@@ -116,6 +117,9 @@ export default function App() {
                 {/* A12 retention ledger + bank guarantee register. Retention
                     held is derived from certified bills, never entered. */}
                 <Route path="retention" element={<Retention />} />
+                {/* A13 insurance register. Company-wide or per project, like
+                    compliance — project_id is nullable. */}
+                <Route path="insurance" element={<Insurance />} />
                 <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                   <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

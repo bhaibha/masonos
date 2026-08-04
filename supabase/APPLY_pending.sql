@@ -1,7 +1,7 @@
 -- ==============================================================
 -- MASON OS — pending migrations.
 --
--- NOTHING IS PENDING. 001–033 are all APPLIED (033 confirmed 2026-08-01).
+-- NOTHING IS PENDING. 001–034 are all APPLIED (034 confirmed 2026-08-01).
 --
 -- The next migration written will replace this file's contents.
 -- Individual migrations remain in supabase/migrations/ and are all

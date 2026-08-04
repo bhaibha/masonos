@@ -354,11 +354,13 @@ export type DeletableTable =
   | 'ra_bills'
   | 'retention_releases'
   | 'bank_guarantees'
+  | 'insurance_policies'
 
 export const DELETABLE_LABEL: Record<DeletableTable, string> = {
   ra_bills: 'bill',
   retention_releases: 'retention tranche',
   bank_guarantees: 'guarantee',
+  insurance_policies: 'policy',
   compliance_items: 'compliance item',
   drawings: 'drawing',
   drawing_revisions: 'revision',
@@ -389,7 +391,11 @@ export function canDelete(
   if (table === 'compliance_items') return canManageCompliance(role)
   if (table === 'doc_subfolders') return role === 'founder'
   if (table === 'ra_bills') return canManageRaBills(role)
-  if (table === 'retention_releases' || table === 'bank_guarantees')
+  if (
+    table === 'retention_releases' ||
+    table === 'bank_guarantees' ||
+    table === 'insurance_policies'
+  )
     return canManageRetention(role)
   return role === 'founder' || role === 'pm'
 }
@@ -1368,6 +1374,103 @@ export interface BgAlert {
   expired_count: number
   next_expiry: string | null
   next_bg_number: string | null
+}
+
+// ---------- Insurance (A13, migration 034) ----------
+
+export type InsuranceType =
+  | 'car'
+  | 'workmen_comp'
+  | 'professional_indemnity'
+  | 'third_party_liability'
+  | 'contractors_plant'
+  | 'other'
+
+export type InsuranceStatus = 'active' | 'expired' | 'renewed' | 'cancelled'
+
+/** Derived in v_insurance_register from expiry_date, not read off the column. */
+export type InsuranceDisplayStatus =
+  | 'active'
+  | 'expiring'
+  | 'expired'
+  | 'renewed'
+  | 'cancelled'
+
+export const INSURANCE_TYPES: { value: InsuranceType; label: string }[] = [
+  { value: 'car', label: "Contractor's all-risk" },
+  { value: 'workmen_comp', label: "Workmen's compensation" },
+  { value: 'professional_indemnity', label: 'Professional indemnity' },
+  { value: 'third_party_liability', label: 'Third-party liability' },
+  { value: 'contractors_plant', label: "Contractor's plant" },
+  { value: 'other', label: 'Other' },
+]
+
+export const INSURANCE_TYPE_LABEL = Object.fromEntries(
+  INSURANCE_TYPES.map((t) => [t.value, t.label]),
+) as Record<InsuranceType, string>
+
+export const INSURANCE_DISPLAY_LABEL: Record<InsuranceDisplayStatus, string> = {
+  active: 'Active',
+  expiring: 'Expiring',
+  expired: 'Expired',
+  renewed: 'Renewed',
+  cancelled: 'Cancelled',
+}
+
+/** Cover inside this many days of expiry needs renewing. */
+export const INSURANCE_WARN_DAYS = 30
+
+/** Founder/PM/accounts, same as every money module. */
+export function canManageInsurance(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+export interface PolicyRow {
+  id: string
+  /** null = company-wide cover */
+  project_id: string | null
+  project_name: string | null
+  policy_type: InsuranceType
+  policy_number: string
+  insurer: string
+  broker: string | null
+  sum_insured: number | null
+  premium: number | null
+  start_date: string | null
+  expiry_date: string
+  status: InsuranceStatus
+  file_path: string | null
+  notes: string | null
+  /** the policy this one replaces */
+  renewed_from: string | null
+  /** true when a later policy already renews this one */
+  has_successor: boolean
+  days_to_expiry: number
+  display_status: InsuranceDisplayStatus
+  created_at: string
+}
+
+export interface NewPolicyInput {
+  project_id: string | null
+  policy_type: InsuranceType
+  policy_number: string
+  insurer: string
+  broker: string
+  sum_insured: number | null
+  premium: number | null
+  start_date: string | null
+  expiry_date: string
+  file_path: string | null
+  notes: string
+  renewed_from: string | null
+}
+
+/** fn_insurance_alert — the dashboard strip. Zeroes for a supervisor. */
+export interface InsuranceAlert {
+  expiring_count: number
+  expired_count: number
+  next_expiry: string | null
+  next_policy: string | null
 }
 
 export interface NewRevisionInput {
