@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { toast } from 'sonner'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
 import { ListSkeleton } from '@/components/Skeleton'
 import { ProjectPicker } from '@/components/ProjectPicker'
@@ -19,6 +19,11 @@ export default function TasksLayout() {
 
   const [date, setDate] = useSelectedDate()
 
+  // History spans a range and carries its own from/to controls — leaving the
+  // single-day picker above it would suggest the two are connected.
+  const { pathname } = useLocation()
+  const showDayPicker = !pathname.startsWith('/tasks/history')
+
   useEffect(() => {
     void load()
   }, [load])
@@ -30,6 +35,7 @@ export default function TasksLayout() {
   const tabs = [
     { to: '/tasks', label: 'Tasks', end: true },
     { to: '/tasks/new', label: 'Add task' },
+    { to: '/tasks/history', label: 'History' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },
@@ -46,6 +52,7 @@ export default function TasksLayout() {
         <div className="mx-auto max-w-lg space-y-2 px-4 py-2">
           <ProjectPicker />
 
+          {showDayPicker && (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -71,22 +78,25 @@ export default function TasksLayout() {
               ›
             </Button>
           </div>
+          )}
 
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
-              {formatDayLabel(date)}
-              {date === todayIst() && ' · Today'}
-            </p>
-            {date !== todayIst() && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setDate(todayIst())}
-              >
-                Jump to today
-              </Button>
-            )}
-          </div>
+          {showDayPicker && (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                {formatDayLabel(date)}
+                {date === todayIst() && ' · Today'}
+              </p>
+              {date !== todayIst() && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setDate(todayIst())}
+                >
+                  Jump to today
+                </Button>
+              )}
+            </div>
+          )}
 
           <nav className="-mx-1 flex gap-1 overflow-x-auto">
             {tabs.map((t) => (

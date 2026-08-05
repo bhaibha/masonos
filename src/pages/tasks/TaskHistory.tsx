@@ -1,0 +1,848 @@
+import { Download, History } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { EmptyState } from '@/components/EmptyState'
+import { Select } from '@/components/Field'
+import { useSelectedProjectName } from '@/components/ProjectPicker'
+import { ListSkeleton } from '@/components/Skeleton'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { downloadCsv, toCsv } from '@/lib/csv'
+import { errText } from '@/lib/errText'
+import {
+  type ChecklistHistoryRow,
+  type DocHistoryRow,
+  fetchChecklistHistory,
+  fetchIncidentHistory,
+  fetchRfiHistory,
+  fetchSiHistory,
+  fetchSiteLogHistory,
+  fetchSnagHistory,
+  type IncidentHistoryRow,
+  type SiteLogHistoryRow,
+} from '@/lib/queries/history'
+import { fetchTaskHistory } from '@/lib/queries/tasks'
+import {
+  INCIDENT_TYPE_LABEL,
+  SAFETY_ITEMS,
+  TASK_STATUS_LABEL,
+  type TaskRow,
+  type TaskStatus,
+  TRADES,
+} from '@/lib/types'
+import { addDays, todayIst } from '@/lib/useSelectedDate'
+import { cn } from '@/lib/utils'
+import { useProjects } from '@/store/project'
+
+type Section = 'tasks' | 'logs' | 'safety' | 'instructions' | 'rfis' | 'snags'
+
+const SECTION_LABEL: Record<Section, string> = {
+  tasks: 'Tasks',
+  logs: 'Site logs',
+  safety: 'Safety',
+  instructions: 'Instructions',
+  rfis: 'RFIs',
+  snags: 'Snags',
+}
+
+const STATUS_TONE: Record<TaskStatus, string> = {
+  done: 'text-[var(--positive)]',
+  partial: 'text-[var(--warning)]',
+  not_done: 'text-destructive',
+  pending: 'text-muted-foreground',
+}
+
+/**
+ * What happened on this project between two dates — tasks, daily site logs,
+ * safety checks and incidents — each as a grid you can read like a sheet and
+ * export to Excel.
+ *
+ * One date range drives all three sections, because the question people
+ * actually ask is "what happened in July", not "what tasks happened in July".
+ */
+export default function TaskHistory() {
+  const projectId = useProjects((s) => s.selectedId)
+  const projectName = useSelectedProjectName()
+
+  const [section, setSection] = useState<Section>('tasks')
+  const [from, setFrom] = useState(addDays(todayIst(), -30))
+  const [to, setTo] = useState(todayIst())
+
+  const [tasks, setTasks] = useState<TaskRow[] | null>(null)
+  const [logs, setLogs] = useState<SiteLogHistoryRow[] | null>(null)
+  const [checks, setChecks] = useState<ChecklistHistoryRow[] | null>(null)
+  const [incidents, setIncidents] = useState<IncidentHistoryRow[] | null>(null)
+  const [sis, setSis] = useState<DocHistoryRow[] | null>(null)
+  const [rfis, setRfis] = useState<DocHistoryRow[] | null>(null)
+  const [snags, setSnags] = useState<DocHistoryRow[] | null>(null)
+
+  const [status, setStatus] = useState<TaskStatus | ''>('')
+  const [trade, setTrade] = useState('')
+
+  const reload = useCallback(async () => {
+    if (!projectId) return
+    if (from > to) {
+      toast.error('The start date is after the end date')
+      return
+    }
+
+    setTasks(null)
+    setLogs(null)
+    setChecks(null)
+    setIncidents(null)
+    setSis(null)
+    setRfis(null)
+    setSnags(null)
+
+    try {
+      const [t, l, c, i, s, r, g] = await Promise.all([
+        fetchTaskHistory(projectId, from, to),
+        fetchSiteLogHistory(projectId, from, to),
+        fetchChecklistHistory(projectId, from, to),
+        fetchIncidentHistory(projectId, from, to),
+        fetchSiHistory(projectId, from, to),
+        fetchRfiHistory(projectId, from, to),
+        fetchSnagHistory(projectId, from, to),
+      ])
+      setTasks(t)
+      setLogs(l)
+      setChecks(c)
+      setIncidents(i)
+      setSis(s)
+      setRfis(r)
+      setSnags(g)
+    } catch (err) {
+      toast.error('Could not load history', { description: errText(err) })
+      setTasks([])
+      setLogs([])
+      setChecks([])
+      setIncidents([])
+      setSis([])
+      setRfis([])
+      setSnags([])
+    }
+  }, [projectId, from, to])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
+
+  const shownTasks = useMemo(
+    () =>
+      tasks?.filter(
+        (t) =>
+          (status === '' || t.status === status) &&
+          (trade === '' || t.trade === trade),
+      ) ?? null,
+    [tasks, status, trade],
+  )
+
+  const taskDays = useMemo(() => groupBy(shownTasks, (t) => t.planned_date), [
+    shownTasks,
+  ])
+
+  const stamp = `${from}-to-${to}`
+  const base = projectName ?? 'project'
+
+  function exportTasks() {
+    if (!shownTasks?.length) return toast.error('Nothing to export in this range')
+    downloadCsv(
+      `${base}-tasks-${stamp}`,
+      toCsv(
+        ['Date', 'Task', 'Trade', 'Work area', 'Status', 'Target qty', 'Unit',
+         'Done qty', 'Reason if not done', 'Rolled over from'],
+        shownTasks.map((t) => [
+          t.planned_date, t.title, t.trade ?? '', t.work_area ?? '',
+          TASK_STATUS_LABEL[t.status], t.target_qty ?? '', t.qty_unit ?? '',
+          t.done_qty ?? '', t.not_done_reason ?? '', t.rolled_from_date ?? '',
+        ]),
+      ),
+    )
+    toast.success(`${shownTasks.length} rows exported`)
+  }
+
+  function exportLogs() {
+    if (!logs?.length) return toast.error('Nothing to export in this range')
+    downloadCsv(
+      `${base}-site-logs-${stamp}`,
+      toCsv(
+        ['Date', 'Weather', 'Masons', 'Helpers', 'Other', 'Total labour',
+         'Work summary', 'Issues', 'Photos', 'Logged by'],
+        logs.map((l) => [
+          l.log_date, l.weather ?? '', l.labour_mason, l.labour_helper,
+          l.labour_other, l.labour_total, l.work_summary ?? '', l.issues ?? '',
+          l.photos.length, l.created_by_name ?? '',
+        ]),
+      ),
+    )
+    toast.success(`${logs.length} rows exported`)
+  }
+
+  function exportSafety() {
+    if (!checks?.length && !incidents?.length)
+      return toast.error('Nothing to export in this range')
+
+    if (checks?.length) {
+      downloadCsv(
+        `${base}-safety-checks-${stamp}`,
+        toCsv(
+          ['Date', ...SAFETY_ITEMS.map((i) => i.label), 'Pass', 'Fail', 'N/A',
+           'Checked by', 'Remarks'],
+          checks.map((c) => [
+            c.check_date,
+            ...SAFETY_ITEMS.map((i) => resultLabel(c.results[i.key])),
+            c.pass, c.fail, c.na, c.created_by_name ?? '',
+            Object.entries(c.remarks)
+              .map(([k, v]) => `${labelFor(k)}: ${v}`)
+              .join(' | '),
+          ]),
+        ),
+      )
+    }
+
+    if (incidents?.length) {
+      downloadCsv(
+        `${base}-incidents-${stamp}`,
+        toCsv(
+          ['When', 'Type', 'Description', 'People involved', 'Immediate action',
+           'Status', 'Photos', 'Reported by'],
+          incidents.map((i) => [
+            i.occurred_at.slice(0, 16).replace('T', ' '),
+            INCIDENT_TYPE_LABEL[i.incident_type], i.description,
+            i.people_involved ?? '', i.immediate_action ?? '', i.status,
+            i.photo_count, i.created_by_name ?? '',
+          ]),
+        ),
+      )
+    }
+
+    toast.success('Exported', {
+      description:
+        checks?.length && incidents?.length
+          ? 'Two files — checks and incidents.'
+          : undefined,
+    })
+  }
+
+  /** The three document sections share a shape, so they share a renderer. */
+  const docRows: DocHistoryRow[] | null =
+    section === 'instructions'
+      ? sis
+      : section === 'rfis'
+        ? rfis
+        : section === 'snags'
+          ? snags
+          : null
+
+  function exportDocs() {
+    if (!docRows?.length) return toast.error('Nothing to export in this range')
+
+    const cols = DOC_COLUMNS[section as 'instructions' | 'rfis' | 'snags']
+    downloadCsv(
+      `${base}-${section}-${stamp}`,
+      toCsv(
+        [cols.number, 'Date', cols.party, cols.context, cols.summary, 'Status',
+         cols.due, cols.closed, cols.extra],
+        docRows.map((d) => [
+          d.number, d.date, d.party ?? '', d.context ?? '', d.summary,
+          prettyStatus(d.status), d.due ?? '', d.closed ?? '', d.extra ?? '',
+        ]),
+      ),
+    )
+    toast.success(`${docRows.length} rows exported`)
+  }
+
+  const loading =
+    tasks === null ||
+    logs === null ||
+    checks === null ||
+    incidents === null ||
+    sis === null ||
+    rfis === null ||
+    snags === null
+
+  const count =
+    section === 'tasks'
+      ? (shownTasks?.length ?? 0)
+      : section === 'logs'
+        ? (logs?.length ?? 0)
+        : section === 'safety'
+          ? (checks?.length ?? 0) + (incidents?.length ?? 0)
+          : (docRows?.length ?? 0)
+
+  return (
+    <div className="space-y-4 pb-6">
+      {/* ---------- range ---------- */}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="space-y-1">
+          <span className="text-xs text-muted-foreground">From</span>
+          <Input
+            type="date"
+            value={from}
+            onChange={(e) => e.target.value && setFrom(e.target.value)}
+            className="h-11"
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs text-muted-foreground">To</span>
+          <Input
+            type="date"
+            value={to}
+            onChange={(e) => e.target.value && setTo(e.target.value)}
+            className="h-11"
+          />
+        </label>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: 'Last 7 days', days: -7 },
+          { label: 'Last 30 days', days: -30 },
+          { label: 'Last 90 days', days: -90 },
+        ].map((r) => (
+          <button
+            key={r.days}
+            type="button"
+            onClick={() => {
+              setFrom(addDays(todayIst(), r.days))
+              setTo(todayIst())
+            }}
+            className="min-h-9 rounded-lg bg-secondary px-3 text-xs font-medium text-secondary-foreground"
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ---------- section ---------- */}
+      <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
+        {(
+          ['tasks', 'logs', 'safety', 'instructions', 'rfis', 'snags'] as Section[]
+        ).map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => setSection(s)}
+            className={cn(
+              'min-h-11 shrink-0 rounded-lg px-3.5 text-sm font-medium transition-colors',
+              section === s
+                ? 'bg-secondary text-secondary-foreground'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {SECTION_LABEL[s]}
+          </button>
+        ))}
+      </div>
+
+      {section === 'tasks' && (
+        <div className="grid grid-cols-2 gap-2">
+          <Select
+            value={status}
+            onChange={(e) => setStatus(e.target.value as TaskStatus | '')}
+            aria-label="Filter by status"
+          >
+            <option value="">All statuses</option>
+            {(Object.keys(TASK_STATUS_LABEL) as TaskStatus[]).map((s) => (
+              <option key={s} value={s}>
+                {TASK_STATUS_LABEL[s]}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            value={trade}
+            onChange={(e) => setTrade(e.target.value)}
+            aria-label="Filter by trade"
+          >
+            <option value="">All trades</option>
+            {TRADES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
+
+      {!loading && count > 0 && (
+        <div className="paper flex flex-wrap items-baseline justify-between gap-3 p-4">
+          <p className="text-sm">
+            <span className="figure text-[19px] font-semibold tabular-nums">
+              {count}
+            </span>
+            <span className="ml-2 text-muted-foreground">
+              {section === 'tasks'
+                ? `task${count === 1 ? '' : 's'}`
+                : section === 'logs'
+                  ? `day${count === 1 ? '' : 's'} logged`
+                  : section === 'safety'
+                    ? 'checks and incidents'
+                    : SECTION_LABEL[section].toLowerCase()}
+            </span>
+          </p>
+          <Button
+            variant="outline"
+            className="h-10"
+            onClick={
+              section === 'tasks'
+                ? exportTasks
+                : section === 'logs'
+                  ? exportLogs
+                  : section === 'safety'
+                    ? exportSafety
+                    : exportDocs
+            }
+          >
+            <Download className="size-4" aria-hidden="true" />
+            Export to Excel
+          </Button>
+        </div>
+      )}
+
+      {loading && <ListSkeleton rows={4} />}
+
+      {!loading && count === 0 && (
+        <EmptyState
+          icon={History}
+          title="Nothing in this range"
+          body={
+            section === 'tasks'
+              ? 'Widen the dates, or clear the status and trade filters.'
+              : 'Widen the dates — nothing was recorded in this period.'
+          }
+        />
+      )}
+
+      {/* ---------- tasks ---------- */}
+      {!loading &&
+        section === 'tasks' &&
+        taskDays.map(([date, list]) => (
+          <Day key={date} date={date}>
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <Th>Task</Th>
+                  <Th>Trade</Th>
+                  <Th>Work area</Th>
+                  <Th>Status</Th>
+                  <Th right>Target</Th>
+                  <Th right>Done</Th>
+                  <Th>Notes</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((t) => (
+                  <tr key={t.id} className="border-b border-border last:border-0">
+                    <Td>
+                      <span className="font-medium">{t.title}</span>
+                      {t.rolled_from_date && (
+                        <span className="block text-[11px] text-muted-foreground">
+                          rolled from {t.rolled_from_date}
+                        </span>
+                      )}
+                    </Td>
+                    <Td muted>{t.trade ?? '—'}</Td>
+                    <Td muted>{t.work_area ?? '—'}</Td>
+                    <Td>
+                      <span className={cn('font-medium', STATUS_TONE[t.status])}>
+                        {TASK_STATUS_LABEL[t.status]}
+                      </span>
+                    </Td>
+                    <Td right muted>
+                      {t.target_qty === null
+                        ? '—'
+                        : `${t.target_qty} ${t.qty_unit ?? ''}`}
+                    </Td>
+                    <Td right>{t.done_qty === null ? '—' : String(t.done_qty)}</Td>
+                    <Td muted>{t.not_done_reason ?? '—'}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Day>
+        ))}
+
+      {/* ---------- site logs ---------- */}
+      {!loading && section === 'logs' && logs && logs.length > 0 && (
+        <div className="paper overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <Th>Date</Th>
+                <Th>Weather</Th>
+                <Th right>Masons</Th>
+                <Th right>Helpers</Th>
+                <Th right>Other</Th>
+                <Th right>Total</Th>
+                <Th>Work done</Th>
+                <Th>Issues</Th>
+                <Th right>Photos</Th>
+                <Th>Logged by</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((l) => (
+                <tr key={l.id} className="border-b border-border last:border-0">
+                  <Td>
+                    <span className="font-medium tabular-nums">{l.log_date}</span>
+                  </Td>
+                  <Td muted>{l.weather ?? '—'}</Td>
+                  <Td right muted>{l.labour_mason}</Td>
+                  <Td right muted>{l.labour_helper}</Td>
+                  <Td right muted>{l.labour_other}</Td>
+                  <Td right>
+                    <span className="font-medium">{l.labour_total}</span>
+                  </Td>
+                  <Td>{l.work_summary ?? '—'}</Td>
+                  <Td muted>{l.issues ?? '—'}</Td>
+                  <Td right muted>{l.photos.length}</Td>
+                  <Td muted>{l.created_by_name ?? '—'}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ---------- instructions / RFIs / snags ---------- */}
+      {!loading && docRows && docRows.length > 0 && (
+        <DocTable
+          kind={section as 'instructions' | 'rfis' | 'snags'}
+          rows={docRows}
+        />
+      )}
+
+      {/* ---------- safety ---------- */}
+      {!loading && section === 'safety' && (
+        <>
+          {checks && checks.length > 0 && (
+            <section className="space-y-2">
+              <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Daily checks
+              </p>
+              <div className="paper overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      <Th>Date</Th>
+                      {SAFETY_ITEMS.map((i) => (
+                        <Th key={i.key}>{i.label}</Th>
+                      ))}
+                      <Th>Checked by</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {checks.map((c) => (
+                      <tr
+                        key={c.id}
+                        className="border-b border-border last:border-0"
+                      >
+                        <Td>
+                          <span className="font-medium tabular-nums">
+                            {c.check_date}
+                          </span>
+                          {c.fail > 0 && (
+                            <span className="block text-[11px] text-destructive">
+                              {c.fail} failed
+                            </span>
+                          )}
+                        </Td>
+                        {SAFETY_ITEMS.map((i) => {
+                          const r = c.results[i.key]
+                          return (
+                            <Td key={i.key}>
+                              <span
+                                className={cn(
+                                  'font-medium',
+                                  r === 'pass' && 'text-[var(--positive)]',
+                                  r === 'fail' && 'text-destructive',
+                                  (r === 'na' || !r) && 'text-muted-foreground',
+                                )}
+                              >
+                                {resultLabel(r)}
+                              </span>
+                              {c.remarks[i.key] && (
+                                <span className="block text-[11px] text-muted-foreground">
+                                  {c.remarks[i.key]}
+                                </span>
+                              )}
+                            </Td>
+                          )
+                        })}
+                        <Td muted>{c.created_by_name ?? '—'}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {incidents && incidents.length > 0 && (
+            <section className="space-y-2">
+              <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Incidents & near-misses
+              </p>
+              <div className="paper overflow-x-auto">
+                <table className="w-full min-w-[700px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      <Th>When</Th>
+                      <Th>Type</Th>
+                      <Th>What happened</Th>
+                      <Th>People</Th>
+                      <Th>Action taken</Th>
+                      <Th>Status</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {incidents.map((i) => (
+                      <tr
+                        key={i.id}
+                        className="border-b border-border last:border-0"
+                      >
+                        <Td>
+                          <span className="font-medium tabular-nums">
+                            {i.occurred_at.slice(0, 10)}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {i.occurred_at.slice(11, 16)}
+                          </span>
+                        </Td>
+                        <Td>{INCIDENT_TYPE_LABEL[i.incident_type]}</Td>
+                        <Td>{i.description}</Td>
+                        <Td muted>{i.people_involved ?? '—'}</Td>
+                        <Td muted>{i.immediate_action ?? '—'}</Td>
+                        <Td>
+                          <span
+                            className={cn(
+                              'font-medium',
+                              i.status === 'open'
+                                ? 'text-[var(--warning)]'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {i.status === 'open' ? 'Open' : 'Closed'}
+                          </span>
+                        </Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Instructions, RFIs and snags are the same object in three costumes: a
+ * numbered document with a date, a party, a status and something that closes
+ * it. One table renders all three; only the headings change.
+ */
+const DOC_COLUMNS: Record<
+  'instructions' | 'rfis' | 'snags',
+  {
+    number: string
+    party: string
+    context: string
+    summary: string
+    due: string
+    closed: string
+    extra: string
+  }
+> = {
+  instructions: {
+    number: 'SI no.',
+    party: 'Issued to',
+    context: 'Work area',
+    summary: 'Instruction',
+    due: 'Required by',
+    closed: 'Completed',
+    extra: 'Cost',
+  },
+  rfis: {
+    number: 'RFI no.',
+    party: 'Asked of',
+    context: 'Category',
+    summary: 'Question',
+    due: 'Required by',
+    closed: 'Answered',
+    extra: 'Response',
+  },
+  snags: {
+    number: 'Snag no.',
+    party: 'Assigned to',
+    context: 'Area / trade',
+    summary: 'Defect',
+    due: '—',
+    closed: 'Closed',
+    extra: 'Severity',
+  },
+}
+
+function DocTable({
+  kind,
+  rows,
+}: {
+  kind: 'instructions' | 'rfis' | 'snags'
+  rows: DocHistoryRow[]
+}) {
+  const c = DOC_COLUMNS[kind]
+  const showDue = kind !== 'snags'
+
+  return (
+    <div className="paper overflow-x-auto">
+      <table className="w-full min-w-[820px] text-sm">
+        <thead>
+          <tr className="border-b border-border text-left">
+            <Th>{c.number}</Th>
+            <Th>Date</Th>
+            <Th>{c.party}</Th>
+            <Th>{c.context}</Th>
+            <Th>{c.summary}</Th>
+            <Th>Status</Th>
+            {showDue && <Th>{c.due}</Th>}
+            <Th>{c.closed}</Th>
+            <Th>{c.extra}</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((d) => {
+            // Past its required-by date and nothing has closed it.
+            const late =
+              showDue && d.due !== null && d.closed === null && d.due < todayIst()
+
+            return (
+              <tr key={d.id} className="border-b border-border last:border-0">
+                <Td>
+                  <span className="font-medium tabular-nums">{d.number}</span>
+                </Td>
+                <Td muted>{d.date}</Td>
+                <Td muted>{d.party ?? '—'}</Td>
+                <Td muted>{d.context ?? '—'}</Td>
+                <Td>{d.summary}</Td>
+                <Td>
+                  <span className={cn('font-medium', docStatusTone(d.status))}>
+                    {prettyStatus(d.status)}
+                  </span>
+                </Td>
+                {showDue && (
+                  <Td muted>
+                    <span className={cn(late && 'font-medium text-destructive')}>
+                      {d.due ?? '—'}
+                    </span>
+                  </Td>
+                )}
+                <Td muted>{d.closed ?? '—'}</Td>
+                <Td muted>{d.extra ?? '—'}</Td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Status vocabularies differ per table; the colours don't need to. */
+function docStatusTone(s: string): string {
+  if (['complete', 'closed', 'verified', 'answered'].includes(s))
+    return 'text-[var(--positive)]'
+  if (['cancelled', 'rejected'].includes(s)) return 'text-muted-foreground'
+  if (['open', 'issued', 'resolved', 'in_progress'].includes(s))
+    return 'text-[var(--warning)]'
+  return ''
+}
+
+function prettyStatus(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' ')
+}
+
+/* ---------------- bits ---------------- */
+
+function groupBy<T>(
+  rows: T[] | null,
+  key: (r: T) => string,
+): [string, T[]][] {
+  if (!rows) return []
+  const map = new Map<string, T[]>()
+  for (const r of rows) {
+    const k = key(r)
+    const list = map.get(k)
+    if (list) list.push(r)
+    else map.set(k, [r])
+  }
+  return [...map.entries()]
+}
+
+function labelFor(key: string): string {
+  return SAFETY_ITEMS.find((i) => i.key === key)?.label ?? key
+}
+
+function resultLabel(r: string | undefined): string {
+  if (r === 'pass') return 'Pass'
+  if (r === 'fail') return 'Fail'
+  return 'N/A'
+}
+
+/**
+ * A day's worth of rows. Horizontal scroll on a phone is the deliberate
+ * trade-off: this screen exists to be read like a sheet, and the CSV is one tap
+ * away when the small screen isn't enough.
+ */
+function Day({ date, children }: { date: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+        {date}
+      </p>
+      <div className="paper overflow-x-auto">{children}</div>
+    </section>
+  )
+}
+
+function Th({
+  children,
+  right,
+}: {
+  children: React.ReactNode
+  right?: boolean
+}) {
+  return (
+    <th
+      className={cn(
+        'px-4 py-2.5 text-[11px] font-medium tracking-[0.1em] text-muted-foreground uppercase',
+        right && 'text-right',
+      )}
+    >
+      {children}
+    </th>
+  )
+}
+
+function Td({
+  children,
+  right,
+  muted,
+}: {
+  children: React.ReactNode
+  right?: boolean
+  muted?: boolean
+}) {
+  return (
+    <td
+      className={cn(
+        'px-4 py-3 align-top',
+        right && 'text-right tabular-nums',
+        muted && 'text-muted-foreground',
+      )}
+    >
+      {children}
+    </td>
+  )
+}

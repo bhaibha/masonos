@@ -1,4 +1,4 @@
-import { PackageSearch } from 'lucide-react'
+import { PackageSearch, Send } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { COMPANY, companyNeedsSetup } from '@/lib/company'
 import { formatInr } from '@/lib/format'
 import { generatePoFile, generatePoPdf } from '@/lib/poPdf'
+import { shareDocument } from '@/lib/share'
 import { createDocument } from '@/lib/queries/documents'
 import { fetchProject } from '@/lib/queries/projects'
 import {
@@ -435,6 +436,70 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
     setFiling(false)
   }
 
+  /**
+   * Sends the full PO — rates included — to the vendor through the phone's
+   * share sheet, or downloads it and opens WhatsApp with the message ready.
+   *
+   * Always the FULL copy, never the delivery copy: the vendor is the one party
+   * who is supposed to see the rates. The delivery copy exists for site.
+   */
+  async function send() {
+    setBusy(true)
+    try {
+      const [vendor, project] = await Promise.all([
+        po.vendor_id ? fetchVendor(po.vendor_id) : Promise.resolve(null),
+        fetchProject(po.project_id),
+      ])
+
+      const pdf = generatePoFile(
+        {
+          po,
+          lines,
+          vendor:
+            vendor ?? (po.vendor_display ? synthVendor(po.vendor_display) : null),
+          projectName: project?.name ?? '',
+          siteAddress: project?.site_address ?? null,
+          gstPct: Number(gst) || 0,
+        },
+        'full',
+      )
+
+      const message = [
+        `${po.po_number} — purchase order`,
+        project?.name ? `Project: ${project.name}` : null,
+        po.need_by ? `Required by: ${po.need_by}` : null,
+        '',
+        'The order is attached. Please confirm acceptance and delivery date.',
+        '',
+        `— ${COMPANY.name}`,
+      ]
+        .filter(Boolean)
+        .join('\n')
+
+      const outcome = await shareDocument({
+        file: pdf,
+        message,
+        phone: vendor?.phone ?? null,
+        label: po.po_number,
+      })
+
+      if (outcome === 'shared') {
+        toast.success('Shared', { description: 'Pick the app and send.' })
+      } else if (outcome === 'downloaded-and-opened-whatsapp') {
+        toast.success('PDF downloaded, WhatsApp opened', {
+          description: vendor?.phone
+            ? 'Attach the downloaded PO and send.'
+            : 'No number on file for this vendor — pick the chat, attach and send.',
+        })
+      }
+    } catch (err) {
+      toast.error('Could not prepare the PO', {
+        description: err instanceof Error ? err.message : undefined,
+      })
+    }
+    setBusy(false)
+  }
+
   async function download() {
     setBusy(true)
     try {
@@ -466,7 +531,7 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
   }
 
   return (
-    <div className="mt-4 flex items-center gap-2 border-t border-border pt-4">
+    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
       <label className="text-xs text-muted-foreground" htmlFor={`gst_${po.id}`}>
         GST
       </label>
@@ -482,6 +547,10 @@ function PoDocument({ po, lines }: { po: PurchaseOrder; lines: PoLine[] }) {
           </option>
         ))}
       </Select>
+      <Button className="h-11" disabled={busy} onClick={() => void send()}>
+        <Send className="size-4" aria-hidden="true" />
+        Send to vendor
+      </Button>
       <Button
         variant="outline"
         className="h-11 flex-1"

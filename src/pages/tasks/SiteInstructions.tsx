@@ -1,4 +1,4 @@
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, Send } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
@@ -14,7 +14,7 @@ import {
 import { CancelDialog, CancelNote } from '@/components/VoidDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { companyNeedsSetup } from '@/lib/company'
+import { COMPANY, companyNeedsSetup } from '@/lib/company'
 import { errText } from '@/lib/errText'
 import { createDocument } from '@/lib/queries/documents'
 import { fetchProject } from '@/lib/queries/projects'
@@ -24,6 +24,7 @@ import {
   fetchSiList,
   setSiStatus,
 } from '@/lib/queries/siteInstructions'
+import { shareDocument } from '@/lib/share'
 import { generateSiFile, generateSiPdf } from '@/lib/siPdf'
 import { compressImage, signedSitePhotoUrl, uploadDocument, uploadSitePhoto } from '@/lib/storage'
 import {
@@ -149,6 +150,60 @@ function SiCard({
     setBusy(false)
   }
 
+  /**
+   * Hands the PDF to the phone's share sheet, or downloads it and opens
+   * WhatsApp with the message ready. Never sends on its own — see
+   * src/lib/share.ts.
+   */
+  async function send() {
+    setBusy(true)
+    try {
+      const project = await fetchProject(si.project_id)
+      const pdf = generateSiFile({
+        si,
+        projectName: project?.name ?? '',
+        siteAddress: project?.site_address ?? null,
+        clientName: project?.client_name ?? null,
+      })
+
+      const lines = [
+        `${si.si_number} — site instruction`,
+        project?.name ? `Project: ${project.name}` : null,
+        si.work_area ? `Location: ${si.work_area}` : null,
+        si.required_by ? `Required by: ${si.required_by}` : null,
+        '',
+        si.instruction,
+        // Deliberately the flag, never a figure: the amount lives on the linked
+        // VO, which the recipient has no business seeing in a WhatsApp message.
+        si.has_cost_implication ? '\nThis instruction carries a cost implication.' : null,
+        '',
+        `— ${COMPANY.name}`,
+      ].filter(Boolean)
+
+      const outcome = await shareDocument({
+        file: pdf,
+        message: lines.join('\n'),
+        phone: si.addressed_phone,
+        label: si.si_number,
+      })
+
+      if (outcome === 'shared') {
+        toast.success('Shared', { description: 'Pick the app and send.' })
+      } else if (outcome === 'downloaded-and-opened-whatsapp') {
+        toast.success('PDF downloaded, WhatsApp opened', {
+          description: si.addressed_phone
+            ? 'Attach the downloaded PDF and send.'
+            : 'No number on file — pick the chat, attach the PDF and send.',
+        })
+      }
+    } catch (err) {
+      toast.error('Could not prepare the instruction', {
+        description: errText(err),
+      })
+    }
+    setBusy(false)
+  }
+
   async function document(file: boolean) {
     setBusy(true)
     try {
@@ -268,6 +323,12 @@ function SiCard({
       )}
 
       <div className="mt-2 flex flex-wrap gap-2">
+        {!cancelled && (
+          <Button variant="outline" disabled={busy} onClick={() => void send()}>
+            <Send className="size-4" aria-hidden="true" />
+            Send
+          </Button>
+        )}
         <Button variant="ghost" disabled={busy} onClick={() => void document(false)}>
           Download
         </Button>

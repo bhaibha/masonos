@@ -1530,6 +1530,8 @@ export interface RfiRow extends CancelFields {
   /** registered vendor name if linked, else the free-text consultant */
   addressed_display: string | null
   addressed_registered: boolean
+  /** the linked vendor's phone, for the share sheet. null for free text. */
+  addressed_phone: string | null
   category: RfiCategory
   question: string
   attachments: string[]
@@ -1537,6 +1539,8 @@ export interface RfiRow extends CancelFields {
   response: string | null
   response_date: string | null
   responded_by: string | null
+  /** what came back — paths in the `documents` bucket, not site-photos (035) */
+  response_attachments: string[]
   status: RfiStatus
   raised_by: string
   raised_by_name: string | null
@@ -1672,6 +1676,8 @@ export interface SiRow extends CancelFields {
   /** registered vendor name if linked, else the free-text name */
   addressed_display: string | null
   addressed_registered: boolean
+  /** the linked vendor's phone, for the share sheet. null for free text. */
+  addressed_phone: string | null
   work_area: string | null
   instruction: string
   attachments: string[]

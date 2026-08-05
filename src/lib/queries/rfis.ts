@@ -4,8 +4,9 @@ import type { NewRfiInput, RfiCategory, RfiRow, RfiStatus } from '@/lib/types'
 const COLUMNS =
   'id, rfi_number, project_id, raised_date, vendor_id, addressed_to, category, ' +
   'question, attachments, required_by, response, response_date, responded_by, ' +
+  'response_attachments, ' +
   'status, raised_by, closed_at, created_at, cancelled_at, cancelled_by, ' +
-  'cancel_reason, vendors(name)'
+  'cancel_reason, vendors(name, phone)'
 
 /**
  * RFIs for one project, newest first.
@@ -38,8 +39,10 @@ export async function fetchRfis(projectId: string): Promise<RfiRow[]> {
   )
 
   return rows.map((row) => {
-    const v = row.vendors as { name: string } | { name: string }[] | null
-    const registered = (Array.isArray(v) ? v[0]?.name : v?.name) ?? null
+    type V = { name: string; phone: string | null }
+    const v = row.vendors as V | V[] | null
+    const joined = Array.isArray(v) ? (v[0] ?? null) : v
+    const registered = joined?.name ?? null
     const vendorId = (row.vendor_id as string | null) ?? null
 
     return {
@@ -52,12 +55,15 @@ export async function fetchRfis(projectId: string): Promise<RfiRow[]> {
         ? registered
         : ((row.addressed_to as string | null) ?? null),
       addressed_registered: vendorId !== null,
+      // Only a linked vendor has a number on file; free text is just a name.
+      addressed_phone: vendorId ? (joined?.phone ?? null) : null,
       category: row.category as RfiCategory,
       question: row.question as string,
       attachments: (row.attachments as string[] | null) ?? [],
       required_by: (row.required_by as string | null) ?? null,
       response: (row.response as string | null) ?? null,
       response_date: (row.response_date as string | null) ?? null,
+      response_attachments: (row.response_attachments as string[] | null) ?? [],
       responded_by: (row.responded_by as string | null) ?? null,
       status: row.status as RfiStatus,
       raised_by: row.raised_by as string,
@@ -97,15 +103,22 @@ export async function createRfi(input: NewRfiInput): Promise<string> {
  * logged it and the status move all in one statement, so the record can never
  * read "answered" with a blank answer. A CHECK constraint backs that up.
  */
+/**
+ * Records the answer. `files` are paths in the `documents` bucket — a
+ * consultant usually replies with a marked-up PDF, and the RPC APPENDS them, so
+ * correcting the wording later doesn't drop the sketch that came with it.
+ */
 export async function answerRfi(
   id: string,
   response: string,
   date: string,
+  files: string[] = [],
 ): Promise<void> {
   const { error } = await supabase.rpc('fn_answer_rfi', {
     p_id: id,
     p_response: response,
     p_date: date,
+    p_files: files,
   })
   if (error) throw error
 }

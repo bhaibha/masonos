@@ -1,4 +1,4 @@
-import { HelpCircle } from 'lucide-react'
+import { HelpCircle, Paperclip, Send } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
@@ -14,14 +14,16 @@ import {
 import { CancelDialog, CancelNote } from '@/components/VoidDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { companyNeedsSetup } from '@/lib/company'
+import { COMPANY, companyNeedsSetup } from '@/lib/company'
 import { errText } from '@/lib/errText'
 import { createDocument } from '@/lib/queries/documents'
 import { fetchProject } from '@/lib/queries/projects'
 import { answerRfi, createRfi, fetchRfis, setRfiStatus } from '@/lib/queries/rfis'
 import { generateRfiFile, generateRfiPdf } from '@/lib/rfiPdf'
+import { shareDocument } from '@/lib/share'
 import {
   compressImage,
+  signedDocumentUrl,
   signedSitePhotoUrl,
   uploadDocument,
   uploadSitePhoto,
@@ -159,6 +161,8 @@ function RfiCard({
   const [responseDate, setResponseDate] = useState(
     rfi.response_date ?? todayIst(),
   )
+  const [replyFiles, setReplyFiles] = useState<File[]>([])
+  const [uploadNote, setUploadNote] = useState<string | null>(null)
 
   const mayRaise = canRaiseRFI(role)
   const cancelled = rfi.status === 'cancelled'
@@ -171,14 +175,41 @@ function RfiCard({
     }
     setBusy(true)
     try {
-      await answerRfi(rfi.id, response, responseDate)
-      toast.success('Response recorded')
+      // The consultant's reply is usually a marked-up PDF or drawing, so these
+      // go to the documents bucket — uploadSitePhoto would re-encode them as
+      // JPEG and destroy the detail.
+      const paths: string[] = []
+      for (let i = 0; i < replyFiles.length; i++) {
+        setUploadNote(`Uploading ${i + 1} of ${replyFiles.length}…`)
+        const f = replyFiles[i]
+        if (f) {
+          const up = await uploadDocument(rfi.project_id, f)
+          paths.push(up.path)
+        }
+      }
+
+      setUploadNote(null)
+      await answerRfi(rfi.id, response, responseDate, paths)
+      toast.success('Response recorded', {
+        description:
+          paths.length > 0
+            ? `${paths.length} file${paths.length === 1 ? '' : 's'} attached.`
+            : undefined,
+      })
       setAnswering(false)
+      setReplyFiles([])
       await onChanged()
     } catch (err) {
       toast.error('Could not record the response', { description: errText(err) })
     }
     setBusy(false)
+    setUploadNote(null)
+  }
+
+  async function openReply(path: string) {
+    const url = await signedDocumentUrl(path)
+    if (url) window.open(url, '_blank', 'noopener')
+    else toast.error('Could not open that file')
   }
 
   async function move(next: 'open' | 'closed') {
@@ -190,6 +221,54 @@ function RfiCard({
     } catch (err) {
       // The RPC refuses to close an unanswered RFI and says why — surface it.
       toast.error('Could not update the RFI', { description: errText(err) })
+    }
+    setBusy(false)
+  }
+
+  /**
+   * Hands the PDF to the phone's share sheet (WhatsApp, mail, anything), or
+   * falls back to downloading it and opening WhatsApp with the message ready.
+   * Nothing is sent without the user tapping send — see src/lib/share.ts.
+   */
+  async function send() {
+    setBusy(true)
+    try {
+      const project = await fetchProject(rfi.project_id)
+      const pdf = generateRfiFile({
+        rfi,
+        projectName: project?.name ?? '',
+        siteAddress: project?.site_address ?? null,
+        clientName: project?.client_name ?? null,
+      })
+
+      const lines = [
+        `${rfi.rfi_number} — request for information`,
+        project?.name ? `Project: ${project.name}` : null,
+        rfi.required_by ? `Response needed by: ${rfi.required_by}` : null,
+        '',
+        rfi.question,
+        '',
+        `— ${COMPANY.name}`,
+      ].filter(Boolean)
+
+      const outcome = await shareDocument({
+        file: pdf,
+        message: lines.join('\n'),
+        phone: rfi.addressed_phone,
+        label: rfi.rfi_number,
+      })
+
+      if (outcome === 'shared') {
+        toast.success('Shared', { description: 'Pick the app and send.' })
+      } else if (outcome === 'downloaded-and-opened-whatsapp') {
+        toast.success('PDF downloaded, WhatsApp opened', {
+          description: rfi.addressed_phone
+            ? 'Attach the downloaded PDF and send.'
+            : 'No number on file for this consultant — pick the chat, attach the PDF and send.',
+        })
+      }
+    } catch (err) {
+      toast.error('Could not prepare the RFI', { description: errText(err) })
     }
     setBusy(false)
   }
@@ -288,6 +367,22 @@ function RfiCard({
             Response{rfi.response_date ? ` · ${rfi.response_date}` : ''}
           </p>
           <p className="mt-1 text-sm">{rfi.response}</p>
+
+          {rfi.response_attachments.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {rfi.response_attachments.map((p, i) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => void openReply(p)}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-secondary px-2.5 text-xs font-medium text-primary"
+                >
+                  <Paperclip className="size-3.5" aria-hidden="true" />
+                  Reply {i + 1}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -313,6 +408,40 @@ function RfiCard({
               className="h-12 text-base"
             />
           </FieldRow>
+          <FieldRow
+            label="Attach the reply"
+            htmlFor={`respf-${rfi.id}`}
+            hint="Marked-up drawing, letter or sketch. PDFs and drawings are stored byte-for-byte; photos are compressed."
+          >
+            <Input
+              id={`respf-${rfi.id}`}
+              type="file"
+              multiple
+              accept="image/*,application/pdf,.dwg,.dxf,.doc,.docx"
+              onChange={(e) =>
+                setReplyFiles(e.target.files ? Array.from(e.target.files) : [])
+              }
+              className="h-12 text-base"
+            />
+          </FieldRow>
+
+          {replyFiles.length > 0 && (
+            <ul className="space-y-1">
+              {replyFiles.map((f, i) => (
+                <li
+                  key={`${f.name}-${i}`}
+                  className="truncate rounded-lg bg-secondary px-3 py-2 text-xs"
+                >
+                  {f.name} · {Math.round(f.size / 1024)} KB
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {uploadNote && (
+            <p className="text-xs text-muted-foreground">{uploadNote}</p>
+          )}
+
           <div className="flex gap-2">
             <Button
               className="h-11 flex-1"
@@ -361,6 +490,12 @@ function RfiCard({
       )}
 
       <div className="mt-2 flex flex-wrap gap-2">
+        {!cancelled && (
+          <Button variant="outline" disabled={busy} onClick={() => void send()}>
+            <Send className="size-4" aria-hidden="true" />
+            Send
+          </Button>
+        )}
         <Button variant="ghost" disabled={busy} onClick={() => void document(false)}>
           Download
         </Button>

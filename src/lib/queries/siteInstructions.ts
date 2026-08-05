@@ -5,7 +5,7 @@ const COLUMNS =
   'id, si_number, project_id, issued_date, vendor_id, addressed_to, work_area, ' +
   'instruction, attachments, has_cost_implication, variation_id, required_by, ' +
   'status, issued_by, acknowledged_at, completed_at, created_at, ' +
-  'cancelled_at, cancelled_by, cancel_reason, vendors(name)'
+  'cancelled_at, cancelled_by, cancel_reason, vendors(name, phone)'
 
 /**
  * Site instructions for one project, newest first.
@@ -59,8 +59,10 @@ export async function fetchSiList(projectId: string): Promise<SiRow[]> {
   )
 
   return rows.map((row) => {
-    const v = row.vendors as { name: string } | { name: string }[] | null
-    const registered = (Array.isArray(v) ? v[0]?.name : v?.name) ?? null
+    type V = { name: string; phone: string | null }
+    const v = row.vendors as V | V[] | null
+    const joined = Array.isArray(v) ? (v[0] ?? null) : v
+    const registered = joined?.name ?? null
     const vendorId = (row.vendor_id as string | null) ?? null
     const variationId = (row.variation_id as string | null) ?? null
 
@@ -74,6 +76,8 @@ export async function fetchSiList(projectId: string): Promise<SiRow[]> {
         ? registered
         : ((row.addressed_to as string | null) ?? null),
       addressed_registered: vendorId !== null,
+      // Only a linked vendor has a number on file; free text is just a name.
+      addressed_phone: vendorId ? (joined?.phone ?? null) : null,
       work_area: (row.work_area as string | null) ?? null,
       instruction: row.instruction as string,
       attachments: (row.attachments as string[] | null) ?? [],

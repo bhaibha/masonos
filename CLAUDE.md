@@ -90,7 +90,13 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified 2026-08-01 by `cron.job` returning all three sweeps — `mason-compliance-sweep`,
   `mason-bg-sweep` and `mason-insurance-sweep`, all active. That is the last statement in the file,
   so the whole script ran.
-  So: **001–034 ALL APPLIED.** Next migration = 035.
+  So: **001–034 ALL APPLIED.** **035 PENDING** (written 2026-08-01) — attachments on an RFI
+  response (`rfis.response_attachments`, `fn_answer_rfi` now takes `p_files text[]`).
+  **Confirm 035 has been run before building on it.** Next migration = 036.
+- **Function-signature lesson (035):** adding a defaulted parameter to an existing function creates
+  an OVERLOAD, not a replacement — the old arity survives and later calls become ambiguous.
+  `drop function if exists fn_x(old, arg, types);` FIRST, then create. The verify block should count
+  the rows in `pg_proc` for that name: two means the drop was missed.
 - **Expiry-register pattern (028 → 033 → 034):** compliance deadlines, bank guarantees and
   insurance policies are now three instances of one shape — nullable-or-scoped project, a view that
   derives `display_status` from a date in Asia/Kolkata at query time, a nightly pg_cron sweep that

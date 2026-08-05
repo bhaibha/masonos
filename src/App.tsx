@@ -44,6 +44,7 @@ import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
 import Snags from '@/pages/tasks/Snags'
 import TaskForm from '@/pages/tasks/TaskForm'
+import TaskHistory from '@/pages/tasks/TaskHistory'
 import TaskList from '@/pages/tasks/TaskList'
 import TasksLayout from '@/pages/tasks/TasksLayout'
 import { useAuth } from '@/store/auth'
@@ -80,6 +81,9 @@ export default function App() {
               <Route index element={<TaskList />} />
               <Route path="new" element={<TaskForm />} />
               <Route path="log" element={<SiteLog />} />
+              {/* Task history across a date range, with CSV export. Its own
+                  from/to dates, so it ignores the layout's day picker. */}
+              <Route path="history" element={<TaskHistory />} />
               <Route path="safety" element={<SafetyChecklist />} />
               <Route path="incidents" element={<Incidents />} />
               {/* A6 Site Instructions. Readable by every project member —

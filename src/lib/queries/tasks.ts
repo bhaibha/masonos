@@ -53,6 +53,63 @@ export async function fetchTasks(
   }))
 }
 
+/**
+ * Tasks for one project across a date range, oldest first — the history view.
+ *
+ * Deliberately capped at 2000 rows: a year of a busy site is a few hundred, and
+ * an unbounded query that quietly starts taking six seconds is worse than one
+ * that tells you to narrow the range.
+ */
+export async function fetchTaskHistory(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<TaskRow[]> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select(COLUMNS)
+    .eq('project_id', projectId)
+    .gte('planned_date', from)
+    .lte('planned_date', to)
+    .order('planned_date', { ascending: false })
+    .order('created_at')
+    .limit(2000)
+
+  if (error) throw error
+
+  const rows = (data ?? []).map((r) => {
+    const t = r as unknown as RawTask
+    return {
+      ...t,
+      target_qty: t.target_qty === null ? null : Number(t.target_qty),
+      done_qty: t.done_qty === null ? null : Number(t.done_qty),
+    }
+  })
+
+  // Same parent-date resolution as fetchTasks, so a rolled-over row can say
+  // where it came from instead of showing a uuid.
+  const parentIds = [...new Set(rows.map((r) => r.rolled_from).filter(Boolean))]
+  const parentDates = new Map<string, string>()
+
+  if (parentIds.length > 0) {
+    const { data: parents } = await supabase
+      .from('tasks')
+      .select('id, planned_date')
+      .in('id', parentIds as string[])
+
+    for (const p of parents ?? []) {
+      parentDates.set(p.id as string, p.planned_date as string)
+    }
+  }
+
+  return rows.map((r) => ({
+    ...r,
+    rolled_from_date: r.rolled_from
+      ? (parentDates.get(r.rolled_from) ?? null)
+      : null,
+  }))
+}
+
 export async function createTask(input: NewTask): Promise<void> {
   const { error } = await supabase.from('tasks').insert({
     project_id: input.project_id,

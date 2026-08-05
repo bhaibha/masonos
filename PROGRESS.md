@@ -1394,7 +1394,112 @@ guarantees, insurance), and an `index.html` that reads offline.
   level costs seconds and saves almost nothing.
 
 **New dependency: `jszip` ^3.10.1** (pure JS, MIT — same class as jspdf). It is installed in
-node_modules and listed in package.json; **run `npm install` once to update package-lock.json**
-before pushing, since Cloudflare builds from the lockfile.
+node_modules and listed in package.json; `npm install` run 2026-08-01 to sync the lockfile.
+The 10 npm-audit findings that surfaced are all transitive dev-tooling (hono/MCP SDK,
+brace-expansion, fast-uri, ip-address, postcss) plus a react-router **RSC-mode** CSRF advisory that
+doesn't apply — this is a client-side SPA with no RSC. `npm audit fix --force` would *downgrade*
+react-router-dom from 7.18.1 to 7.11.0 across a major boundary, so it stays as it is.
 
 `npx tsc -b --force` clean.
+
+---
+
+## Session — Tasks → History: tasks, site logs and safety (no migration)
+
+A **History** tab on Tasks with one date range (last 7 / 30 / 90 shortcuts or explicit from/to)
+driving three sections, because the question people actually ask is "what happened in July", not
+"what tasks happened in July":
+
+- **Tasks** — grouped by day; task, trade, work area, status, target vs done quantity, reason if
+  not done, and where a rolled-over row came from. Status and trade filters.
+- **Site logs** — one row per day: weather, masons / helpers / other and the labour total, work
+  summary, issues, photo count, who logged it.
+- **Safety** — daily checks **pivoted one row per day with a column per check item** (PPE,
+  scaffolding, edge protection, electrical, housekeeping, excavation), pass/fail coloured with the
+  remark underneath, failures counted on the date cell; plus a separate incidents-and-near-misses
+  table. A row per item would have made a month 180 unreadable rows.
+
+- **Instructions, RFIs and Snags** — one shared table, because all three are the same object in
+  different costumes: a numbered document with a date, a party, a status and something that closes
+  it. `DocHistoryRow` carries that shape and each fetcher maps its own columns onto it; only the
+  headings differ (SI no. / Issued to / Required by / Completed vs Snag no. / Assigned to / Closed).
+  A required-by date that has passed with nothing closing it prints red.
+- Snag severity and "in DLP", and an SI's cost-implication flag, ride in the generic `extra` column.
+  The SI stays a **boolean** — the rupee value lives on the linked VO, which supervisors cannot
+  read, so printing "Cost implication" rather than an amount keeps the money-hiding rule intact on a
+  screen every role can reach.
+
+**Export to Excel** on each section writes a CSV of exactly what's on screen, filters included.
+Safety exports two files — checks and incidents — since they don't share a shape.
+
+- Every range query is **capped** (tasks 2000, site logs 1000, checks/incidents 500). A year of a
+  busy site is a few hundred; an unbounded query that quietly starts taking six seconds is worse
+  than one that tells you to narrow the range.
+- New `src/lib/queries/history.ts` holds the three range reads. Names are resolved in a second pass
+  rather than an embedded join — the join defeats PostgREST's type inference and costs the same one
+  query either way.
+- The layout's single-day picker is **hidden on this tab** — leaving it above a range view would
+  suggest the two are connected.
+- New shared `src/lib/csv.ts`: UTF-8 BOM (without it Excel turns ₹ into mojibake) and CRLF line
+  endings, with RFC 4180 quoting so a note containing a comma doesn't shift every column after it.
+  The archive builder has its own inline copy of the same logic — worth consolidating if a third
+  export appears.
+- Horizontal scroll on a phone is deliberate: this screen exists to be read like a sheet, and the
+  CSV is one tap away when the small screen isn't enough.
+
+`npx tsc -b --force` clean.
+
+---
+
+## Session — Send button on RFIs, instructions and POs (no migration)
+
+**Nothing in this app sends anything on its own, and that stays true.** A **Send** button on an RFI,
+site instruction or PO now hands the generated PDF to the browser's own share sheet
+(`navigator.share` with files) so the user picks WhatsApp — or whatever else — and taps send. Where
+file sharing isn't supported (most desktops), it downloads the PDF and opens WhatsApp Web with the
+message already written, prefilled to the vendor's number when one is on file.
+
+- **No API, no provider, no secret, no cost.** WhatsApp Business API is on the cut list and email
+  would mean a provider plus a stored credential; the share sheet is the browser's.
+- `shareDocument()` returns **what actually happened** — shared / downloaded-and-opened / cancelled —
+  so the toast never claims "sent" when the user backed out of the share sheet. An `AbortError` is
+  a closed sheet, not a failure, and gets no error toast.
+- `canShare({ files })` is the capability test, not `share` alone: Safari exposes `share()` without
+  file support and throws when handed one.
+- Phone numbers come from the **linked vendor only** — free-text recipients have a name, not a
+  number, and the toast says so rather than silently opening an empty chat. `waNumber()` prepends
+  91 to a bare 10-digit Indian number and leaves anything longer alone.
+- The PO always shares the **full copy including rates**: the vendor is the one party who is meant
+  to see them. The rate-free delivery copy stays for site.
+- The SI message carries the cost-implication **flag**, never an amount — the figure lives on the
+  linked VO, and a WhatsApp message is the last place it should leak.
+
+Vendor `phone` is now joined into the RFI and SI queries (`vendors(name, phone)`) and exposed as
+`addressed_phone`. `npx tsc -b --force` clean.
+
+---
+
+## Session — RFI response attachments, migration 035
+
+Recording an RFI response now takes files. An answer is usually a marked-up sketch or a revised
+detail, not a paragraph — until now only the *question* could carry attachments, so the actual
+answer arrived on WhatsApp and lived nowhere.
+
+- **`rfis.response_attachments` is a separate column** from `attachments`. Merging them would leave
+  the record unable to answer "what did we send, and what came back" — which is the entire reason to
+  keep an RFI log rather than a chat thread.
+- **Files go to the `documents` bucket, not site-photos.** A consultant replies with a PDF or DWG,
+  and the site-photos path re-encodes everything as JPEG, which would silently destroy the detail.
+  The documents bucket stores non-images byte-for-byte and its RLS is is_member() plus the
+  confidential check, so any project member can open a reply exactly as they can open the RFI.
+- **The RPC appends rather than replaces**, so correcting the wording of an answer later doesn't
+  drop the sketch that came with it. The text answer stays mandatory — "see attached" is a summary
+  someone can read in a list; a bare file is not.
+- **`fn_answer_rfi` was dropped before being recreated.** Adding a defaulted parameter creates an
+  *overload*, not a replacement, and the three-argument version would have survived to make later
+  calls ambiguous. The verify block counts rows in `pg_proc` so a missed drop is visible. Recorded
+  in CLAUDE.md.
+
+`npx tsc -b --force` clean.
+
+**Run migration 035 before testing.**
