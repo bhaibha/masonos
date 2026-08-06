@@ -1502,4 +1502,106 @@ answer arrived on WhatsApp and lived nowhere.
 
 `npx tsc -b --force` clean.
 
-**Run migration 035 before testing.**
+---
+
+## Session — web push for the daily task list, migration 036
+
+Automatic morning notification: "3 due today · 2 still open" with the project names underneath,
+tapping it opens Tasks. No provider, no per-message cost — the app is already an installable PWA, so
+the phone can receive a push directly.
+
+**Pieces**
+
+- **Migration 036** — `push_subscriptions` (per DEVICE, unique on endpoint, because the browser
+  issues one endpoint per install and someone with a phone and a tablet wants both),
+  `fn_daily_task_digest()` which returns one row per person with counts already computed, and
+  `fn_schedule_daily_push(url, secret, cron)` so the shared secret is typed once into a statement
+  you can clear rather than committed in a migration file.
+- **Edge Function `daily-task-push`** — verifies a shared-secret header, reads the digest with the
+  service role, sends one push per device via VAPID.
+- **`public/sw.js`** — `push` and `notificationclick` handlers; CACHE_VERSION bumped to v2. The
+  click focuses an already-open window instead of opening a second copy of the app.
+- **`src/lib/push.ts` + `PushCard`** on the Dashboard — per-device toggle.
+
+**Decisions**
+
+- **A push is a nudge, not a receipt.** Phone off, no coverage, permission revoked — it simply
+  doesn't arrive, and nothing in the app depends on one having done so. The list stays the record.
+- **The Edge Function computes nothing.** Wording comes from counts `fn_daily_task_digest` returns,
+  so the notification and the screen cannot disagree.
+- **Two gates on the service-role key**: a shared-secret header, and the function takes no input at
+  all — no user id, no project, nothing an attacker could steer. A leaked secret buys a duplicate
+  notification, nothing more.
+- **404/410 disables a subscription; anything else only counts a failure.** A push service having a
+  bad minute must not silently unsubscribe the team.
+- **iOS is called out in the UI**, not discovered: Apple exposes the Push API only to PWAs added to
+  the Home Screen, so the card says so instead of offering a button that would fail.
+- `fn_daily_task_digest` is **not granted to `authenticated`** — nobody needs to read everyone
+  else's workload.
+
+`npx tsc -b --force` clean.
+
+**Migrations 035 + 036 APPLIED** (2026-08-01), Edge Function deployed with its secrets, and
+`mason-daily-task-push` scheduled. **Whether a notification has actually landed on a phone is not
+yet confirmed** — that is the only thing that proves this module works, and it is the outstanding
+check.
+
+**Setup, for the record** (a rebuilt database needs all five): `npx web-push generate-vapid-keys` →
+public half into `VITE_VAPID_PUBLIC_KEY` (also in the Cloudflare Worker's variables) → run 036 →
+deploy `daily-task-push` with `PUSH_SECRET`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`,
+`VAPID_SUBJECT`, `APP_URL` → `select fn_schedule_daily_push(url, secret, '30 1 * * *')`.
+
+**One bug found on first use:** `fn_schedule_daily_push` gated on `my_role() = 'founder'`, but the
+SQL editor connects as `postgres` with no JWT, so `my_role()` is NULL and the founder was locked
+out of their own setup step. Fixed to the same shape the sweep functions already used — gate a
+signed-in caller, let an owner-level connection through. Recorded in CLAUDE.md.
+
+Also added: the card **hides itself** when `VITE_VAPID_PUBLIC_KEY` is absent, rather than offering a
+Turn-on button that throws.
+
+**CONFIRMED WORKING 2026-08-01** — `{"people":3,"sent":1,"disabled":0,"failed":0}` from a manual
+trigger, with the notification delivered. Migrations 035–037 applied, function deployed, cron
+scheduled `30 1 * * *`.
+
+**Four things broke on the way, all worth keeping:**
+
+1. **`serviceWorker.ready` never resolves in dev.** registerSW.ts skips registration on the dev
+   server (a service worker would shadow Vite's HMR), so the Turn-on button hung on "Working…"
+   forever with no error. Now fails fast with "notifications need the built app", and the button
+   uses try/finally so an exception can never strand it. Test push against `npm run build && npm run
+   preview`, not the dev server.
+2. **The Supabase function gateway needs `Authorization: Bearer <anon key>`** — without it you get
+   401 UNAUTHORIZED_NO_AUTH_HEADER before your own code runs. `fn_schedule_daily_push` gained an
+   anon-key parameter for this (signature change, so the old three-arg version is dropped first —
+   the 035 lesson, applied deliberately this time).
+3. **A missing PUSH_SECRET and a wrong one both returned a bare 403**, which sent us hunting for a
+   mismatch that didn't exist. A missing secret now returns 500 with the reason; a wrong one still
+   gets the terse 403, because that one might be an attacker.
+4. **The digest ignored founders** (migration 037) — see the is_member() lesson in CLAUDE.md.
+
+**Not a bug, worth knowing:** the digest only counts **active** projects. AADHYA being `completed`
+is why the first successful call still reported "nothing due" — correct behaviour, confusing symptom.
+
+**Outstanding:** only one device is subscribed. The other two people with tasks due need to open the
+app and turn it on themselves — subscriptions are per device and cannot be enabled on someone's
+behalf. And `VITE_VAPID_PUBLIC_KEY` must be added to the **Cloudflare Worker's** variables before the
+live site can offer the card at all.
+
+---
+
+## Session — "Send today's list" on Tasks (no migration)
+
+A WhatsApp fallback beside the push, because the push only reaches people who installed the app and
+granted permission — and on a site not everyone will. A message someone sends by hand always arrives.
+
+- Button on the Tasks list (founder/PM/supervisor) → pick a person from the project team → WhatsApp
+  opens with the day's tasks written out: numbered, with trade, work area and target quantity, and a
+  status tag only when it isn't the default so a fresh list stays clean.
+- `fetchProjectTeam` reads `project_members` joined to profiles; a member with no phone on file says
+  so and falls back to the chat picker rather than opening an empty conversation.
+- `shareText()` added to `src/lib/share.ts`. It **prefers WhatsApp's deep link over the OS share
+  sheet when a number is known** — the share sheet can't target a contact, so the deep link is
+  strictly better in that case. With no number it uses the share sheet where available.
+- Still nothing automatic: WhatsApp opens with the text, the person taps send.
+
+`npx tsc -b --force` clean.

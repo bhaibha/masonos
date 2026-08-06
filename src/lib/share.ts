@@ -26,6 +26,43 @@ export function waNumber(phone: string | null | undefined): string | null {
   return digits.replace(/^0+/, '')
 }
 
+/**
+ * Text-only share — the day's task list, where there is no PDF to attach.
+ *
+ * Same bargain as shareDocument: the phone's own share sheet where it exists,
+ * WhatsApp with the message prefilled where it doesn't. Nothing is sent without
+ * the person tapping send.
+ */
+export async function shareText(opts: {
+  message: string
+  phone?: string | null
+  label: string
+}): Promise<ShareOutcome> {
+  const { message, phone, label } = opts
+  const to = waNumber(phone)
+
+  // A share sheet cannot target a specific contact, so when we DO have a
+  // number, WhatsApp's own deep link is the better tool — it opens the right
+  // chat instead of asking who to send to.
+  if (!to && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ text: message, title: label })
+      return 'shared'
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return 'cancelled'
+      }
+    }
+  }
+
+  const wa = to
+    ? `https://wa.me/${to}?text=${encodeURIComponent(message)}`
+    : `https://wa.me/?text=${encodeURIComponent(message)}`
+
+  window.open(wa, '_blank', 'noopener')
+  return 'downloaded-and-opened-whatsapp'
+}
+
 export interface ShareDocOpts {
   /** the generated PDF */
   file: File

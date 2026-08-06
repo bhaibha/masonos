@@ -90,9 +90,30 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified 2026-08-01 by `cron.job` returning all three sweeps — `mason-compliance-sweep`,
   `mason-bg-sweep` and `mason-insurance-sweep`, all active. That is the last statement in the file,
   so the whole script ran.
-  So: **001–034 ALL APPLIED.** **035 PENDING** (written 2026-08-01) — attachments on an RFI
-  response (`rfis.response_attachments`, `fn_answer_rfi` now takes `p_files text[]`).
-  **Confirm 035 has been run before building on it.** Next migration = 036.
+  **035 + 036 APPLIED** (confirmed 2026-08-01). 035 = attachments on an RFI response
+  (`rfis.response_attachments`, `fn_answer_rfi` now takes `p_files text[]`). 036 = web push
+  (`push_subscriptions`, `fn_daily_task_digest`, `fn_schedule_daily_push`, pg_net) plus the
+  `daily-task-push` Edge Function and the `mason-daily-task-push` cron job, scheduled separately
+  with the founder's own URL and secret.
+  **037 APPLIED** (confirmed 2026-08-01) — the daily digest scopes projects the way `is_member()`
+  does, so a founder (who has no `project_members` rows) is included.
+  So: **001–037 ALL APPLIED.** Next migration = 038.
+- **is_member() semantics lesson (037):** `is_member()` returns TRUE for a founder on every project
+  *without any `project_members` row*, so founders have none. Any query that asks "which projects
+  does this person work on" by joining `project_members` directly will silently return nothing for
+  the founder — which is exactly how `fn_daily_task_digest` claimed there was nothing due while a
+  pending task sat on screen. Scope the same way RLS scopes, or the two disagree precisely when it
+  matters.
+- **SQL-editor caller lesson (036):** the dashboard SQL editor connects as `postgres`, so
+  `auth.uid()` is NULL and `my_role()` returns NULL. Any function meant to be run from there must
+  gate as `if auth.uid() is not null and my_role() <> 'founder'` — a bare `my_role() <> 'founder'`
+  locks the founder out of their own setup step. The sweep functions in 028/033/034 already had
+  this shape; `fn_schedule_daily_push` didn't, and failed on first use.
+- **Push is a nudge, never a record (036).** A phone that is off or has revoked permission misses
+  it, so nothing in the app may depend on a notification having arrived — the task list stays the
+  truth. Subscriptions are per DEVICE (the browser issues one endpoint per install), and a 404/410
+  from the push service marks the row `disabled_at` rather than deleting it, so "why did Ravi stop
+  getting these" stays answerable.
 - **Function-signature lesson (035):** adding a defaulted parameter to an existing function creates
   an OVERLOAD, not a replacement — the old arity survives and later calls become ambiguous.
   `drop function if exists fn_x(old, arg, types);` FIRST, then create. The verify block should count

@@ -110,6 +110,50 @@ export async function fetchTaskHistory(
   }))
 }
 
+/**
+ * The people assigned to a project, for the "send today's list" picker.
+ *
+ * `profiles_read` is true for any signed-in user and `members_read` likewise,
+ * so this needs no special role — it returns names and phone numbers, which
+ * everyone in the business already has.
+ */
+export async function fetchProjectTeam(
+  projectId: string,
+): Promise<{ id: string; full_name: string; phone: string | null; role: string }[]> {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('user_id, profiles(id, full_name, phone, role, is_active)')
+    .eq('project_id', projectId)
+
+  if (error) throw error
+
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+
+  return rows
+    .map((r) => {
+      const p = r.profiles as
+        | { id: string; full_name: string; phone: string | null; role: string; is_active: boolean }
+        | null
+      return p
+    })
+    .filter(
+      (p): p is {
+        id: string
+        full_name: string
+        phone: string | null
+        role: string
+        is_active: boolean
+      } => Boolean(p) && p!.is_active,
+    )
+    .map((p) => ({
+      id: p.id,
+      full_name: p.full_name,
+      phone: p.phone,
+      role: p.role,
+    }))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+}
+
 export async function createTask(input: NewTask): Promise<void> {
   const { error } = await supabase.from('tasks').insert({
     project_id: input.project_id,

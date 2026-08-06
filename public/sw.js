@@ -10,7 +10,7 @@
  * Bump CACHE_VERSION on any change to this file.
  */
 
-const CACHE_VERSION = 'mason-os-v1'
+const CACHE_VERSION = 'mason-os-v2'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
@@ -57,6 +57,56 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting()
+})
+
+/* ---------------- Push (migration 036) ----------------
+ *
+ * The payload is built entirely by the Edge Function from counts the database
+ * returned, so nothing is computed here. A push with an unreadable body still
+ * shows something rather than nothing — a silent failure would look identical
+ * to no notification at all, which is the hardest kind to debug.
+ */
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = {}
+  }
+
+  const title = data.title || 'Mason OS'
+  const options = {
+    body: data.body || 'You have tasks waiting.',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    // A tag means a second push replaces the first rather than stacking six
+    // identical rows on the lock screen.
+    tag: data.tag || 'mason-os',
+    renotify: true,
+    data: { url: data.url || '/tasks' },
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = (event.notification.data && event.notification.data.url) || '/tasks'
+
+  // Focus an already-open window rather than opening a second copy of the app.
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((list) => {
+        for (const client of list) {
+          if ('focus' in client) {
+            client.navigate(target)
+            return client.focus()
+          }
+        }
+        return self.clients.openWindow(target)
+      }),
+  )
 })
 
 self.addEventListener('fetch', (event) => {

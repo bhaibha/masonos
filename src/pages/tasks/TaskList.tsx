@@ -7,7 +7,11 @@ import { Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { EmptyState } from '@/components/EmptyState'
 import { OpenInstructions } from '@/components/OpenInstructions'
-import { OtherProjectsHint } from '@/components/ProjectPicker'
+import {
+  OtherProjectsHint,
+  useSelectedProjectName,
+} from '@/components/ProjectPicker'
+import { SendTaskList } from '@/components/SendTaskList'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,6 +34,7 @@ export default function TaskList() {
   // Project comes from the store — the single source of truth, and immune to
   // where this screen sits in the route tree.
   const projectId = useProjects((s) => s.selectedId)
+  const projectName = useSelectedProjectName()
   const role = useAuth((s) => s.role)
   const canWrite = canWriteTasks(role)
   const [date] = useSelectedDate()
@@ -115,6 +120,17 @@ export default function TaskList() {
             </RevealItem>
           ))}
         </Stagger>
+      )}
+
+      {/* Sits alongside the 7am push, not instead of it: the push only reaches
+          people who installed the app and granted permission. */}
+      {canWrite && projectId && tasks && tasks.length > 0 && (
+        <SendTaskList
+          projectId={projectId}
+          projectName={projectName}
+          date={date}
+          tasks={tasks}
+        />
       )}
 
       {canWrite && tasks && tasks.length > 0 && incomplete > 0 && (

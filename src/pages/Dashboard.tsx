@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { PageHeader } from '@/components/PageHeader'
+import { PushCard } from '@/components/PushCard'
 import { FadeUp, RevealItem, Stagger } from '@/components/Reveal'
 import { ProjectCardSkeleton, Skeleton } from '@/components/Skeleton'
 import { barGeometry, formatInr } from '@/lib/format'
@@ -190,6 +191,9 @@ export default function Dashboard() {
             </Stagger>
           </>
         )}
+
+        {/* Per device, so it lives on the screen everyone opens first. */}
+        <PushCard />
       </div>
     </>
   )
