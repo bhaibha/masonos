@@ -30,7 +30,16 @@ what's unverified. Audited honestly on 2026-07-28.
 - [x] M03 Site Management / Daily Log
 - [x] M16 Material Usage Tracker (inward/issue/stock) + Movements history
 - [x] M09 Document Vault
-- [x] **Roles & Permissions — supervisor incognito pass re-run 2026-08-01 and CLEAN.** Covered:
+- [x] **Roles & Permissions — full supervisor pass re-run 2026-08-06 and CLEAN**, this time covering
+      every module including A10–A13, History with its CSV exports, the handover archive, the
+      drawing register and the Send buttons. Specifically confirmed: all eleven /money routes and
+      /admin bounce by direct URL; no compliance / bank-guarantee / insurance strips on the
+      dashboard; no Handover archive card on Project Detail; Materials → Orders shows no value, no
+      rate and no PO document block while raise-request and goods-receipt still work; the drawing
+      register shows only the current IFC revision and a superseded sheet's signed URL refuses;
+      History CSVs contain no money column; an SI's cost implication travels as a flag, never a
+      figure, including in the WhatsApp text.
+      *Earlier pass, 2026-08-01, covered the modules that existed then:*
       every /money route by direct URL (ledger, add, budget, vendors, orders, variations, invoices,
       compliance) plus /admin — all bounced; Dashboard and Project Detail showing "restricted" with
       no contract value, fee, spend or budget; **Materials → Orders**, the sharpest edge, showing
@@ -44,10 +53,12 @@ what's unverified. Audited honestly on 2026-07-28.
 - [~] M02 Tasks — list + rollover done and in use; EVM/AI-schedule pending (Group B)
 - [~] **Admin module (founder-only)** — projects create/edit tested; **creating a user through the
       `admin-create-user` Edge Function has never been run successfully end to end.**
-- [~] **Record removal (migrations 020–022)** — void tested (stock movements show VOID with reasons)
-      and hard-delete refusal tested (materials blocked with a reference count). **Cancel on a PO or
-      an approved VO has not been exercised**, so the revised-contract-corrects-itself path is
-      unverified.
+- [x] **Record removal (migrations 020–022) — all three mechanisms tested.** Void (stock movements
+      show VOID with reasons, and voiding an expense moves ledger, dashboard and project detail
+      together); hard-delete refusals (materials blocked with a reference count, and the later
+      refusals on verified snags, filed compliance, issued revisions and certified bills); and
+      cancellation — confirmed 2026-08-06 on a VO, where the revised contract value on Project
+      Detail corrected itself immediately.
 
 ---
 
@@ -56,24 +67,25 @@ Order within group:
 - [x] A1. M08 Vendor Management screen — list + search, add/edit/deactivate, inline "add new vendor"
        on the expense form. Full design system (brass primary, toasts, ListSkeleton, EmptyState,
        staggered reveal).
-- [~] A2. M04 Safety — **built, never tested.** Daily checklist per site
+- [x] **A2. M04 Safety — built and TESTED 2026-08-06.** Daily checklist per site
        (PPE/scaffolding/edge/electrical/housekeeping/excavation, Pass/Fail/NA + remark + photo, one
        per site per day), incident & near-miss reports, safety summary on Project Detail.
-       Migration 011 applied. No checklist or incident has ever been filed on real data.
+       Migration 011 applied. **Tested 2026-08-06:** a checklist filed with a Fail plus remark and
+       photo that survived a reload, an incident reported and closed, and the Project Detail safety
+       card moving in response.
 - [x] A3. M22 Procurement — full PR → PO → GRN → 3-way match. Backend migrations 012/013/015;
        raise/approve, PO PDF (full + delivery copy) auto-filed to Docs, GRN receipt (feeds stock),
        vendor invoice + 3-way match with variance flags, post-to-Open-Book. Rate privacy throughout.
-- [~] **A4. M15 Invoice Generator — built, PARTIALLY tested** (migrations 024 + 025 applied).
+- [x] **A4. M15 Invoice Generator — built and TESTED 2026-08-06** (migrations 024 + 025 applied).
       Three types with separate number series: progress bill (INV-P), management-fee invoice
       (INV-M), vendor payment voucher (INV-V). Every figure computed by `fn_issue_invoice` from
       expenses / project fee % / posted vendor invoices and stored as an immutable snapshot —
       nothing retyped, nothing recomputed on read. Letterhead PDF matching PO/VO/SI, GST breakup,
       total in words (Indian lakh/crore), VOID watermark when cancelled. Founder/accounts only.
       **Tested:** progress bills (INV-P) across two consecutive bills including the
-      previously-billed deduction, which is where the 025 structural bug was found.
-      **Not yet tested: INV-M (management fee) and INV-V (vendor payment voucher) have never been
-      issued** — neither number series has produced a single document, so their figure derivation
-      and PDFs are unverified. Also untested: the cancel path and the VOID watermark.
+      previously-billed deduction, which is where the 025 structural bug was found; and on
+      2026-08-06 the management-fee invoice (fee derived from contract value x fee %, never typed),
+      the vendor payment voucher, and cancellation with its VOID watermark.
       **GST treatment is a tax position — see the note in 024's header and confirm with your CA
       before the first real client bill.**
       *025 fixed the running-account structure: the deduction was landing inside the taxable
@@ -82,16 +94,16 @@ Order within group:
 - [x] A5. M26 Variation Orders — register (raise/approve/reject, +/- cost impact, status), revised
        contract value on Project Detail, VO PDF on letterhead + file to Docs. Migration 016. PM raises,
        founder approves. Money-gated (supervisors excluded).
-- [~] **A6. M56 Site Instruction (SI) — built, partially tested** (migration 023 applied). SI number
+- [x] **A6. M56 Site Instruction (SI) — built and TESTED 2026-08-06** (migration 023 applied). SI number
       series, addressed-to (linked vendor or free text), work area, instruction, photo attachments,
       cost-implication flag + optional VO link, required-by date,
       issued/acknowledged/complete/cancelled with a mandatory reason. Founder/PM issue; supervisors
       read their project (the table holds no figures, so no role gate on read). Open instructions
       surface on the Tasks list until marked complete.
-      **Tested:** issuing, and the open-instructions strip appearing under Tasks.
-      **Not yet tested:** the letterhead PDF, the CANCELLED watermark, the cancel path, the
-      complete-cannot-be-cancelled guard, and the supervisor view.
-- [~] **A7. M57 RFI Management — built, migration 026 APPLIED, not yet exercised.**
+      **Tested:** issuing and the open-instructions strip under Tasks; then on 2026-08-06 the
+      letterhead PDF, the cancel path with its CANCELLED watermark, the refusal to cancel an
+      instruction already marked complete, and the supervisor view.
+- [x] **A7. M57 RFI Management — built, migration 026 APPLIED, TESTED 2026-08-06.**
       RFI number series, addressed-to (linked vendor or free text), category
       (design/structural/MEP/finishes/other), question, photo attachments, required-by date,
       response text + date, open/answered/closed/cancelled with a mandatory cancel reason.
@@ -127,7 +139,7 @@ Order within group:
       **Tested 2026-08-01** by the founder on the live app: adding a deadline, the filing flow with
       proof upload, next-occurrence generation, reopen, and the dashboard strip. pg_cron confirmed
       enabled and the sweep scheduled and active (`mason-compliance-sweep`, `30 22 * * *`).
-- [~] **A10. M32 Design / Drawing Management — built, migration 029 APPLIED, not yet exercised.**
+- [x] **A10. M32 Design / Drawing Management — built, migrations 029+030 APPLIED, TESTED 2026-08-06.**
       Two tables: `drawings` is the identity (number unique per project, title, discipline —
       arch/structural/MEP/interior/landscape/other), `drawing_revisions` is what gets issued
       (revision, WIP/IFC/superseded, issued date, sheet file, what-changed notes).
@@ -145,7 +157,11 @@ Order within group:
       **Not yet tested:** adding a drawing, the duplicate-number refusal, upload-and-issue, the
       supersede swap, withdraw, the delete refusals, and the supervisor view (IFC only, and a
       superseded sheet's URL must not open).
-- [~] **A11. M33 Bill Certification / RA Bills — built, migration 032 APPLIED, not yet exercised.**
+- [x] **A11. M33 Bill Certification / RA Bills — built, migration 032 APPLIED, reconciled 2026-08-06.**
+      Verified in the reconciliation pass: a certified bill's arithmetic
+      (gross − previously certified = value this bill; value − retention = net certified), the
+      previously-certified deduction across two consecutive bills for the same contractor, and that
+      cancelling a certified bill removes its contribution from the running account.
       `ra_bills` + `ra_bill_lines` with `RA-0001` numbering, contractor as a linked vendor or free
       text, period, their bill number, claimed amount, retention %, and
       submitted → under review → certified / rejected / cancelled.
@@ -167,7 +183,12 @@ Order within group:
       **Not yet tested:** recording a bill, measurements, certifying, the previously-certified
       deduction across two consecutive bills, retention, rejection, cancel-after-certify, and the
       certificate PDF.
-- [~] **A12. M34 Retention & Bank Guarantee — built, migration 033 APPLIED, not yet exercised.**
+- [x] **A12. M34 Retention & Bank Guarantee — built, migration 033 APPLIED, TESTED 2026-08-06.**
+      **Confirmed 2026-08-06:** retention held is derived correctly from certified RA bills, the
+      ledger agrees with `sum(retention_amount)`, and the balance falls immediately when a
+      certified bill is cancelled — the derived-not-stored design holds.
+      **Still unexercised:** planning and releasing a tranche, the over-release refusal, and the BG
+      register (adding a guarantee, the scan upload, the amber/red expiry states).
       **Retention held is never typed in** — `v_retention_ledger` sums `retention_amount` from
       CERTIFIED ra_bills per contractor, and the balance is held − released, computed on read, so a
       cancelled bill corrects it immediately. `retention_releases` is both the schedule and the
@@ -184,7 +205,7 @@ Order within group:
       **Not yet tested:** the ledger appearing after a bill is certified, planning and releasing a
       tranche, the over-release refusal, adding a guarantee with a scan, the amber/red expiry
       states, and the dashboard strip.
-- [~] **A13. M30 Insurance Management — built, migration 034 APPLIED, not yet exercised.**
+- [x] **A13. M30 Insurance Management — built, migration 034 APPLIED, TESTED 2026-08-06.**
       `insurance_policies` covering CAR, workmen's compensation, professional indemnity,
       third-party liability and contractor's plant; **company-wide or per project** (`project_id`
       nullable, same two-arm RLS as compliance), policy number unique per insurer, insurer, broker,

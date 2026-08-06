@@ -1589,6 +1589,61 @@ live site can offer the card at all.
 
 ---
 
+## Two gates before Group B — both CLEAN, 2026-08-06
+
+**Gate 1 — supervisor RLS, full pass.** Every module this time, including the six surfaces added
+since the 2026-08-01 pass: /money/bills, /money/retention, /money/insurance, the drawing register,
+Tasks → History with its CSV exports, and the handover archive card. All clean. The two that mattered
+most and held: **Materials → Orders**, which supervisors legitimately reach, showed no value, no rate
+and no PO document block while raise-request and goods-receipt kept working; and the **drawing
+register**, where a supervisor sees only the current IFC revision and a superseded sheet's signed URL
+refuses to open.
+
+**Gate 2 — money reconciliation.** Spend agrees across Ledger, Dashboard and Project Detail; the
+portfolio total equals the sum of its projects; **voiding an expense moves all four figures together**
+and leaves the row visible marked VOID; the three-way match posts a vendor invoice to the ledger
+exactly once; a second progress bill's arithmetic reconciles on the page; and retention held equals
+`sum(retention_amount)` over certified RA bills, dropping the moment a certified bill is cancelled.
+
+That last one is the proof the derived-balance decision was right: nobody typed the retention figure,
+so nothing could drift.
+
+**What these gates did NOT cover** was then cleared in a dedicated testing pass, below.
+
+---
+
+## Testing residue cleared — GROUP A COMPLETE, 2026-08-06
+
+Every remaining untested path exercised on real data. **A1–A13 are now all `[x]`.**
+
+- **A2 Safety** — checklist with a Fail, remark and photo surviving a reload; incident reported and
+  closed; the Project Detail safety card responding.
+- **A7 RFIs** — raise, letterhead PDF with its ruled empty response block, Send, response recorded
+  **with an attachment**, the attachment surviving a text-only edit (the 035 append behaviour), and
+  the refusal to close an unanswered RFI.
+- **A13 Insurance** — company-wide and project policies, the amber expiring state, the renewal
+  chain, and the refusal to delete a policy a later one renews.
+- **A10 Drawings, founder side** — add with first sheet, issue, then a second revision **superseding
+  the first automatically**; WIP saved without issuing; delete refused on an issued revision and
+  allowed on a WIP one.
+- **A12 Retention + BG** — a tranche planned and released with the balance dropping, the
+  over-release refusal, a guarantee added with a scan showing amber inside 30 days, and marking it
+  returned.
+- **A4 INV-M / INV-V** — management fee derived from contract value × fee % rather than typed, the
+  vendor payment voucher, and cancellation with its VOID watermark.
+- **A5 / A6 loose ends** — cancelling an approved VO corrected the revised contract value on Project
+  Detail immediately; cancelling an SI produced the CANCELLED watermark, and a completed one was
+  refused.
+
+That also closes **Record removal (020–022)**: all three mechanisms — void, hard delete with its
+refusals, and cancel — have now been exercised.
+
+**Still open, and deliberately so:** M21 Petty Cash has a full backend and no UI (build or drop),
+M02 Tasks awaits EVM in Group B, and creating a user through the `admin-create-user` Edge Function
+has still never been run end to end.
+
+---
+
 ## Session — "Send today's list" on Tasks (no migration)
 
 A WhatsApp fallback beside the push, because the push only reaches people who installed the app and
