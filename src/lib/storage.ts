@@ -95,6 +95,21 @@ export async function signedReceiptUrl(
   return signed(RECEIPTS_BUCKET, path, expiresInSeconds)
 }
 
+/**
+ * The literal first segment for company overhead proofs (migration 040).
+ *
+ * Overheads belong to the firm, not a site, so there is no project id to key
+ * the path off. `company/` is that key: 040's storage policies match this exact
+ * prefix and require founder/accounts, which is why it must never be a project
+ * id someone could collide with — a uuid can't equal the word "company".
+ */
+export const COMPANY_PREFIX = 'company'
+
+/** Compresses then uploads an overhead proof to `receipts/company/…`. */
+export async function uploadCompanyProof(file: File): Promise<string> {
+  return upload(RECEIPTS_BUCKET, COMPANY_PREFIX, file)
+}
+
 export async function signedSitePhotoUrl(
   path: string,
   expiresInSeconds = 300,

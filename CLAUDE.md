@@ -97,7 +97,56 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   with the founder's own URL and secret.
   **037 APPLIED** (confirmed 2026-08-01) — the daily digest scopes projects the way `is_member()`
   does, so a founder (who has no `project_members` rows) is included.
-  So: **001–037 ALL APPLIED.** Next migration = 038.
+  **038 APPLIED** (confirmed 2026-08-06) — B6 P&L (`v_project_pnl`, `v_pnl_by_category`,
+  `fn_company_pnl`). Views only, no new tables.
+  **039 APPLIED** (confirmed 2026-08-06) — `fn_company_pnl` scopes to the caller instead of
+  demanding the founder, so the dashboard shows a margin total for PM and accounts too.
+  **040 APPLIED** (confirmed 2026-08-07) — M29 part 2, company overheads
+  (`company_expenses`, `overhead_category`, `fn_void_company_expense`,
+  `fn_duplicate_overheads`, `fn_overhead_summary`, `fn_company_net`, plus
+  `receipts_company_read`/`receipts_company_insert` storage policies for the
+  `company/` prefix).
+  **041 APPLIED** (confirmed 2026-08-07) — overhead headings moved from the
+  `overhead_category` enum to a founder-managed `overhead_categories` table
+  (`company_expenses.category` → `category_id`, `fn_delete_overhead_category`,
+  `fn_overhead_summary` re-created with a new return type,
+  `fn_duplicate_overheads` carrying `category_id`).
+  So: **001–041 ALL APPLIED.** Next migration = 042.
+- **Owner-run views cannot be verified from the SQL editor (038).** The dashboard connects as
+  `postgres`, so `auth.uid()` is NULL, `my_role()` is NULL and `is_founder()` is false — every
+  is_member/role-gated view returns ZERO rows there, and an aggregate over that empty set returns
+  one row of NULLs with count 0. That is the gate working, not missing data. Verify these through
+  the app with a real JWT, and sanity-check the arithmetic in the editor by querying the underlying
+  tables directly.
+- **Owner-run view pattern (010 → 038):** any view that reads
+  `projects.contract_value` / `management_fee_pct` must NOT be security_invoker — those columns are
+  revoked from `authenticated`, so an invoker-rights view returns a permission error for everyone
+  including the founder. Run it as owner and put `is_member(...) and my_role() in (...)` in the
+  WHERE clause, exactly as `v_project_commercials`, `v_project_contract`, `v_po_value` and now
+  `v_project_pnl` do. The WHERE clause IS the access control in that pattern — losing it is a
+  silent full-table leak, so it is the first thing to check when editing one.
+- **Don't model a non-project cost as a pseudo-project (040).** Company overheads could have been an
+  "Office" project with expenses hanging off it. Every existing view — portfolio spend, budget vs
+  actual, `v_project_pnl`, the dashboard cards — would then have had to learn to exclude one magic
+  row, and each of them would be one edit away from silently including it again. A separate table
+  keeps `expenses` meaning exactly what it has always meant: money spent ON A SITE. Reach for a new
+  table whenever a record would be a member of a set that every query already filters on.
+- **A configurable list needs one editor, not none (041).** 040 kept overhead headings as an enum to
+  stop the list fragmenting. The real risk was never that the list changes — it is that TWO people
+  change it and "Internet" and "Office utilities" become two series nobody can compare. So the table
+  is founder-write / accounts-read, with a unique index on `lower(btrim(name))` (case and a trailing
+  space are how duplicates actually get created), rename-by-id so a spelling fix corrects history
+  instead of forking it, and **retire, not delete**, for anything with entries behind it. Reach for
+  this shape — single editor + normalised uniqueness + retire — before reaching for an enum.
+- **Two spans in one figure must be labelled (040).** `fn_company_net` subtracts overheads for the
+  CHOSEN PERIOD from project margin that is LIFETIME to date. That is the right comparison for a
+  financial year and a misleading one for a single month, so the card names both spans on screen.
+  Any figure combining two different time windows says so, or it is a trap.
+- **Retention is not a margin deduction (038):** the retained slice of a certified RA bill is
+  already inside total cost — the work was done and is owed. Subtracting "retention held" from
+  margin as well would double-count it, flattering any project holding retention and worsening the
+  figure as tranches are released. P&L therefore reports margin = revenue − cost, and carries
+  retention alongside as a cash memo.
 - **is_member() semantics lesson (037):** `is_member()` returns TRUE for a founder on every project
   *without any `project_members` row*, so founders have none. Any query that asks "which projects
   does this person work on" by joining `project_members` directly will silently return nothing for

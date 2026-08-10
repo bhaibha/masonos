@@ -4,7 +4,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { PageHeader } from '@/components/PageHeader'
 import { ListSkeleton } from '@/components/Skeleton'
 import { ProjectPicker } from '@/components/ProjectPicker'
-import { canEditBudgets, canIssueInvoice } from '@/lib/types'
+import { canEditBudgets, canIssueInvoice, canSeeOverheads } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 import { useProjects } from '@/store/project'
@@ -27,6 +27,12 @@ export default function MoneyLayout() {
 
   const tabs = [
     { to: '/money', label: 'Ledger', end: true },
+    { to: '/money/pnl', label: 'P&L' },
+    // Founder/accounts only — company_expenses' RLS enforces it; hiding the
+    // tab keeps a PM off a screen that would only tell them they can't see it.
+    ...(canSeeOverheads(role)
+      ? [{ to: '/money/overheads', label: 'Overheads' }]
+      : []),
     { to: '/money/new', label: 'Add' },
     { to: '/money/budget', label: 'Budget' },
     ...(canEditBudgets(role)

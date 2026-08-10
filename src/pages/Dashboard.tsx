@@ -14,7 +14,13 @@ import { PageHeader } from '@/components/PageHeader'
 import { PushCard } from '@/components/PushCard'
 import { FadeUp, RevealItem, Stagger } from '@/components/Reveal'
 import { ProjectCardSkeleton, Skeleton } from '@/components/Skeleton'
-import { barGeometry, formatInr } from '@/lib/format'
+import {
+  barGeometry,
+  formatInr,
+  MARGIN_LABEL,
+  MARGIN_TEXT,
+  marginTone,
+} from '@/lib/format'
 import {
   fetchPortfolioSummary,
   fetchProjectPulse,
@@ -22,15 +28,18 @@ import {
 import { fetchComplianceAlert } from '@/lib/queries/compliance'
 import { fetchProjectSpend } from '@/lib/queries/projects'
 import { fetchInsuranceAlert } from '@/lib/queries/insurance'
+import { fetchCompanyPnl, fetchProjectPnl } from '@/lib/queries/pnl'
 import { fetchBgAlert } from '@/lib/queries/retention'
 import {
   type BgAlert,
   canAdminister,
   canManageCompliance,
   canSeeMoney,
+  type CompanyPnl,
   type ComplianceAlert,
   type InsuranceAlert,
   type PortfolioSummary,
+  type ProjectPnl,
   type ProjectPulse,
   type ProjectSpend,
 } from '@/lib/types'
@@ -48,6 +57,8 @@ export default function Dashboard() {
   const [compliance, setCompliance] = useState<ComplianceAlert | null>(null)
   const [bg, setBg] = useState<BgAlert | null>(null)
   const [insurance, setInsurance] = useState<InsuranceAlert | null>(null)
+  const [pnl, setPnl] = useState<Map<string, ProjectPnl>>(new Map())
+  const [totals, setTotals] = useState<CompanyPnl | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -78,6 +89,26 @@ export default function Dashboard() {
         if (!cancelled) setPortfolio(p)
       })
       .catch(() => {})
+
+    // Profitability per project. v_project_pnl returns zero rows for a
+    // supervisor, so this is safe to call unconditionally — but there's no
+    // reason to spend the round trip when the card will hide the figures
+    // anyway.
+    if (canSeeMoney(role)) {
+      fetchProjectPnl()
+        .then((rows) => {
+          if (!cancelled) setPnl(new Map(rows.map((r) => [r.project_id, r])))
+        })
+        .catch(() => {})
+
+      // Totals summed in Postgres, scoped to whatever this person can see —
+      // never added up in the browser (CLAUDE.md rule 2).
+      fetchCompanyPnl()
+        .then((c) => {
+          if (!cancelled) setTotals(c)
+        })
+        .catch(() => {})
+    }
 
     // Compliance counts. RLS gives a supervisor zeroes rather than an error,
     // and the query returns null before migration 028 — either way the strip
@@ -154,6 +185,7 @@ export default function Dashboard() {
             <FadeUp>
               <PortfolioCard
                 portfolio={portfolio}
+                totals={totals}
                 projectCount={rows.length}
                 totalAlerts={totalAlerts}
                 showMoney={showMoney}
@@ -184,6 +216,7 @@ export default function Dashboard() {
                   <ProjectCard
                     project={p}
                     pulse={pulse.get(p.project_id)}
+                    pnl={pnl.get(p.project_id)}
                     showMoney={showMoney}
                   />
                 </RevealItem>
@@ -324,11 +357,14 @@ function InsuranceStrip({ alert }: { alert: InsuranceAlert }) {
 
 function PortfolioCard({
   portfolio,
+  totals,
   projectCount,
   totalAlerts,
   showMoney,
 }: {
   portfolio: PortfolioSummary | null
+  /** margin across every project this person can see */
+  totals: CompanyPnl | null
   projectCount: number
   totalAlerts: number
   showMoney: boolean
@@ -409,9 +445,68 @@ function PortfolioCard({
               {portfolio.over_budget_count === 1 ? '' : 's'} over budget
             </p>
           )}
+
+          {/* Profit across every project this person can see. Spend answers
+              "what has gone out"; this answers "are we making anything" — the
+              question the spend figure alone can't. */}
+          {totals && totals.revenue > 0 && <TotalMargin totals={totals} />}
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * Combined margin across the visible projects, summed in Postgres by
+ * fn_company_pnl — never added up here.
+ */
+function TotalMargin({ totals }: { totals: CompanyPnl }) {
+  const tone = marginTone(totals.gross_margin)
+
+  return (
+    <div className="mt-5 border-t border-border pt-4">
+      <div className={cn('flex items-end justify-between gap-4', MARGIN_TEXT[tone])}>
+        <div>
+          <p className="text-[11px] tracking-[0.12em] uppercase">
+            {tone === 'loss'
+              ? 'Overall loss'
+              : tone === 'breakeven'
+                ? 'Break-even'
+                : 'Overall margin'}
+          </p>
+          <p className="figure mt-1.5 text-[26px] leading-none font-semibold">
+            {formatInr(Math.abs(totals.gross_margin))}
+          </p>
+        </div>
+        {totals.blended_margin_pct !== null && (
+          <p className="text-sm font-medium tabular-nums">
+            {totals.blended_margin_pct}%
+          </p>
+        )}
+      </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        Revenue {formatInr(totals.revenue)} · Cost {formatInr(totals.total_cost)}
+      </p>
+
+      {(totals.profitable_count > 0 || totals.bleeding_count > 0) && (
+        <p className="mt-1.5 text-[13px]">
+          {totals.profitable_count > 0 && (
+            <span className="text-positive">
+              {totals.profitable_count} in profit
+            </span>
+          )}
+          {totals.profitable_count > 0 && totals.bleeding_count > 0 && (
+            <span className="text-muted-foreground"> · </span>
+          )}
+          {totals.bleeding_count > 0 && (
+            <span className="font-medium text-destructive">
+              {totals.bleeding_count} losing money
+            </span>
+          )}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -450,10 +545,12 @@ function Metric({
 function ProjectCard({
   project,
   pulse,
+  pnl,
   showMoney,
 }: {
   project: ProjectSpend
   pulse: ProjectPulse | undefined
+  pnl: ProjectPnl | undefined
   showMoney: boolean
 }) {
   const bar = barGeometry(project.total_spent, project.total_budget)
@@ -546,8 +643,63 @@ function ProjectCard({
         </p>
       )}
 
+      {showMoney && pnl && <MarginLine pnl={pnl} />}
+
       <StatsRow pulse={pulse} />
     </Link>
+  )
+}
+
+/**
+ * Profit or loss on this project — revenue less cost, straight from
+ * v_project_pnl.
+ *
+ * A project with revenue and NO recorded cost computes to a 100% margin, which
+ * is arithmetically true and completely misleading: it means work hasn't
+ * started, not that it's wildly profitable. Saying so is more use than a
+ * triumphant number nobody should trust.
+ */
+function MarginLine({ pnl }: { pnl: ProjectPnl }) {
+  const tone = marginTone(pnl.gross_margin)
+
+  if (pnl.revenue === 0) {
+    return (
+      <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+        No contract value set — profitability can't be worked out yet.
+      </p>
+    )
+  }
+
+  if (pnl.total_cost === 0) {
+    return (
+      <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+        No cost recorded yet, so there is no margin to report.
+      </p>
+    )
+  }
+
+  // Word and figure share the tone — see marginTone in lib/format.
+  return (
+    <div
+      className={cn(
+        'mt-4 flex items-baseline justify-between gap-3 border-t border-border pt-3',
+        MARGIN_TEXT[tone],
+      )}
+    >
+      <span className="text-[11px] tracking-[0.1em] uppercase">
+        {MARGIN_LABEL[tone]}
+      </span>
+      <span className="text-right">
+        <span className="figure text-[19px] leading-none font-semibold">
+          {formatInr(Math.abs(pnl.gross_margin))}
+        </span>
+        {pnl.margin_pct !== null && (
+          <span className="ml-2 text-xs font-medium tabular-nums">
+            {pnl.margin_pct}%
+          </span>
+        )}
+      </span>
+    </div>
   )
 }
 

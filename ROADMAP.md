@@ -226,7 +226,44 @@ Order within group:
 - [ ] B3. M05 Material Procurement full (indent → rate compare → order, ties into M22)
 - [ ] B4. M13 Estimation / BOQ / BBS generator (BOQ, bar-bending schedule per IS-2502 — reinforcement math)
 - [ ] B5. M24 Contract Labour (BOCW registers: Form XIII/XVI/XVII as data, gang attendance)
-- [ ] B6. M29 Company P&L + Tally export (CSV first, XML later; per-project + company P&L rollup)
+- [x] **B6. M29 Company P&L & Project Profitability — 038–041 ALL APPLIED and working.**
+       `v_project_pnl` per project: revenue (contract + APPROVED variations only — pending shown
+       separately), cost (expenses excluding voids, plus certified RA bills, which deliberately never
+       post to Open Book), gross margin and %, cost breakdown by category ranked by overspend, and a
+       projected final margin from actual + unspent budget + open commitments (null without a budget
+       — a forecast needs something to forecast against).
+       **Retention is NOT deducted from margin**: it is already inside cost, so subtracting it again
+       would double-count. It appears as a cash memo — "of this cost, ₹X is owed but unpaid".
+       `fn_company_pnl` gives the founder-only roll-up: revenue, cost, blended margin, retention,
+       commitments, and how many projects are in profit versus losing money. CSV export for the CA.
+       Views are owner-run with `is_member + role` in the WHERE clause, because they read
+       `contract_value` which 010 revoked; supervisors match no arm and see nothing.
+       Tally XML remains deferred — CSV first, as planned.
+       **Part 2 (migration 040) — company overheads.** `company_expenses`: a DEDICATED table, not a
+       pseudo-project, because an "Office" project would have poisoned portfolio spend, budget vs
+       actual, the dashboard cards and `v_project_pnl` — every one of them would have needed to
+       learn to exclude one magic row. 12 overhead categories as an enum, manual entry only
+       (`fn_duplicate_overheads` copies a month forward on request and REFUSES if the target month
+       already has rows), void-not-delete with its own `fn_void_company_expense` (no project, no
+       stock, nothing to cascade, so a `fn_void_record` branch would route nowhere), audit trigger,
+       and explicit `receipts/company/…` storage policies rather than relying on `is_member()`
+       happening to return true for a founder.
+       `fn_overhead_summary` gives spend by category for a period; `fn_company_net` returns the three
+       layers in one row so the screen cannot present them inconsistently. **The period governs
+       overheads only** — project margins stay lifetime-to-date, and the card says so, because
+       silently comparing one month's rent against lifetime margin is the easiest way to mislead
+       yourself on this screen. Founder/accounts at RLS; a PM gets `sees_overheads = false`, a null
+       net, and no Overheads tab; supervisors match no arm anywhere.
+       **Tested:** 038/039 verified against raw tables (AADHYA loss ₹25,17,520 / −13.4%; company
+       margin ₹4,98,92,480 / 70.1%), dashboard margin lines and portfolio total confirmed live.
+       **041** made the headings a founder-managed table rather than an enum: founder writes /
+       accounts reads, a unique index on `lower(btrim(name))` so case and a trailing space cannot
+       fork a series, rename-by-id so a spelling fix corrects history, and **retire, not delete**
+       for anything with entries behind it (`fn_delete_overhead_category` allows a true delete only
+       where nothing has ever pointed at the heading).
+       **Tested:** overheads entered, headings added and managed, the net position reading through
+       on the P&L. Still unexercised: copy-last-month's double-copy refusal and the PM/supervisor
+       gates on the new screens.
 - [ ] B7. M37 MIS Reports & KPI Dashboard (cross-project KPIs, exportable reports)
 
 ## GROUP C — Content & internal workflow (build third) ~2–3 weeks

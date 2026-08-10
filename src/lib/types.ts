@@ -1473,6 +1473,164 @@ export interface InsuranceAlert {
   next_policy: string | null
 }
 
+// ---------- P&L / profitability (B6, migration 038) ----------
+
+/**
+ * A row of v_project_pnl. Every figure is computed in Postgres.
+ *
+ * `retention_held` is a CASH memo, not a margin deduction — the retained money
+ * is already inside `total_cost`, because the work was done and we owe it.
+ * Subtracting it again would flatter a project holding retention.
+ */
+export interface ProjectPnl {
+  project_id: string
+  name: string
+  project_status: ProjectStatus
+  contract_value: number
+  variations_value: number
+  /** submitted but not approved — never counted as revenue */
+  pending_variations: number
+  revenue: number
+  expense_cost: number
+  /** certified RA bills, which deliberately never post to Open Book */
+  contractor_cost: number
+  total_cost: number
+  gross_margin: number
+  margin_pct: number | null
+  retention_held: number
+  budget_total: number
+  budget_remaining: number
+  /** approved POs with nothing invoiced against them yet */
+  committed_open: number
+  /** null when the project has no budget — a forecast needs one */
+  projected_cost: number | null
+  projected_margin: number | null
+}
+
+export interface PnlCategoryRow {
+  project_id: string
+  category: string
+  budget: number
+  actual: number
+  variance: number
+  pct_used: number | null
+  over_budget: boolean
+}
+
+/** fn_company_pnl — founder only; zero rows for anyone else. */
+export interface CompanyPnl {
+  project_count: number
+  active_count: number
+  revenue: number
+  total_cost: number
+  gross_margin: number
+  blended_margin_pct: number | null
+  retention_held: number
+  committed_open: number
+  profitable_count: number
+  bleeding_count: number
+}
+
+/** Same three roles as every money module; supervisors see nothing. */
+export function canSeePnl(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+// ---------- Company overheads (M29 part 2, migrations 040 + 041) ----------
+
+/**
+ * An overhead heading. 041 moved these from an enum to a founder-managed
+ * table — the list is data now, so nothing here hard-codes it.
+ */
+export interface OverheadCategoryRow {
+  id: string
+  name: string
+  /** set only on the 12 seeded headings; null on anything the founder added */
+  slug: string | null
+  /** retired headings stay for history and vanish from new entries */
+  active: boolean
+  sort_order: number
+}
+
+/**
+ * Overheads are the firm's cost base. A PM runs sites; the rent is not their
+ * business. Enforced by RLS on company_expenses — this only decides whether to
+ * render the screen.
+ */
+export function canSeeOverheads(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+/**
+ * Who may change the chart of headings. Accounts records money against them;
+ * only the founder decides what they are, so two people can't invent
+ * "Internet" and "Office utilities" for the same bill.
+ */
+export function canEditOverheadCategories(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
+export interface OverheadRow {
+  id: string
+  spend_date: string
+  category_id: string
+  category_name: string
+  amount: number
+  gst_amount: number
+  total: number
+  vendor_id: string | null
+  /** linked vendor's name when set, else the free-text payee */
+  vendor_display: string | null
+  description: string | null
+  proof_path: string | null
+  voided_at: string | null
+  void_reason: string | null
+  created_at: string
+}
+
+export interface NewOverheadInput {
+  spend_date: string
+  category_id: string
+  amount: number
+  gst_amount: number
+  vendor_id: string | null
+  vendor_name: string
+  description: string
+  proof_path: string | null
+}
+
+export interface OverheadSummaryRow {
+  category_id: string
+  category_name: string
+  entry_count: number
+  amount: number
+  gst_amount: number
+  total: number
+}
+
+/**
+ * The three layers of the net position. `project_margin` is LIFETIME to date;
+ * `overheads` covers the chosen period only — the screen says so, because
+ * mixing the two silently would be the easiest way to mislead yourself here.
+ */
+export interface CompanyNet {
+  project_margin: number
+  overheads: number | null
+  net_position: number | null
+  overhead_count: number
+  sees_overheads: boolean
+}
+
+/** Period presets for the P&L. FY is India's April–March. */
+export type PnlPeriod = 'month' | 'quarter' | 'fy' | 'all'
+
+export const PNL_PERIODS: { value: PnlPeriod; label: string }[] = [
+  { value: 'month', label: 'This month' },
+  { value: 'quarter', label: 'This quarter' },
+  { value: 'fy', label: 'This FY' },
+  { value: 'all', label: 'All time' },
+]
+
 export interface NewRevisionInput {
   drawing_id: string
   revision: string

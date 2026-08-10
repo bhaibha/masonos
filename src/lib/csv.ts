@@ -19,12 +19,33 @@ export function csvCell(v: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-export function toCsv(headers: string[], rows: unknown[][]): string {
+/** One header row plus its rows, with no BOM. Use for a section of a file. */
+export function csvBlock(headers: string[], rows: unknown[][]): string {
   const lines = [
     headers.map(csvCell).join(','),
     ...rows.map((r) => r.map(csvCell).join(',')),
   ]
-  return `﻿${lines.join('\r\n')}`
+  return lines.join('\r\n')
+}
+
+export function toCsv(headers: string[], rows: unknown[][]): string {
+  return `﻿${csvBlock(headers, rows)}`
+}
+
+/**
+ * Several tables in one file, separated by a blank line.
+ *
+ * The BOM belongs at the very start of the FILE, not at the start of each
+ * block — a stray one mid-file shows up as a visible junk character in the
+ * first cell of that section, which is exactly the sort of thing a CA notices
+ * and nobody can explain.
+ */
+export function toCsvSections(
+  sections: { headers: string[]; rows: unknown[][] }[],
+): string {
+  return `﻿${sections
+    .map((s) => csvBlock(s.headers, s.rows))
+    .join('\r\n\r\n')}`
 }
 
 /** Triggers a download. `name` should not include the extension. */

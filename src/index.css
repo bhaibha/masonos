@@ -45,6 +45,9 @@
   --warning: #b8863b;
   --destructive: #9b3d3d;
   --destructive-foreground: #ffffff;
+  /* Break-even: neither profit nor loss. A slate blue rather than a bright
+     one, so it sits with the greens and reds instead of shouting past them. */
+  --neutral: #3f5c78;
 
   /* Charts lean brass → bronze → ink so nothing shouts */
   --chart-1: #a67c52;
@@ -98,6 +101,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-positive: var(--positive);
   --color-warning: var(--warning);
+  --color-neutral: var(--neutral);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

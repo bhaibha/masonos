@@ -18,6 +18,8 @@ import ExpenseForm from '@/pages/money/ExpenseForm'
 import Insurance from '@/pages/money/Insurance'
 import Invoices from '@/pages/money/Invoices'
 import Ledger from '@/pages/money/Ledger'
+import Overheads from '@/pages/money/Overheads'
+import Pnl from '@/pages/money/Pnl'
 import RaBills from '@/pages/money/RaBills'
 import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
@@ -121,6 +123,14 @@ export default function App() {
                 {/* A12 retention ledger + bank guarantee register. Retention
                     held is derived from certified bills, never entered. */}
                 <Route path="retention" element={<Retention />} />
+                {/* B6 P&L. Not project-scoped — it spans every project the
+                    caller may see, and the company card is founder-only. */}
+                <Route path="pnl" element={<Pnl />} />
+                {/* M29 part 2 — company overheads. No project at all: these
+                    are the firm's own costs. company_expenses' RLS is
+                    founder/accounts, and the page says so for a PM who
+                    reaches the URL directly. */}
+                <Route path="overheads" element={<Overheads />} />
                 {/* A13 insurance register. Company-wide or per project, like
                     compliance — project_id is nullable. */}
                 <Route path="insurance" element={<Insurance />} />

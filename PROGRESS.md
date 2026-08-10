@@ -1612,6 +1612,82 @@ so nothing could drift.
 
 ---
 
+## Session — B6 Company P&L & Project Profitability (Module 29), migration 038
+
+Confirmed at start: **001–037 ALL APPLIED**, next = 038. First Group B module.
+
+**Built**
+
+- [x] **Migration 038** — `v_project_pnl`, `v_pnl_by_category`, `fn_company_pnl`. Views only: no new
+      tables, so no new RLS policies or audit triggers. Every figure derives from tables that
+      already have both.
+- [x] **I did not implement the margin formula as briefed, and this is the important note.** The
+      brief said *revenue − cost − retention held = margin*. That double-counts: retention is a
+      slice of a certified RA bill we haven't PAID, but the work is done and the full certified
+      value is already inside cost. Deducting it again would flatter any project holding retention,
+      then quietly worsen the figure as tranches are released — backwards from the truth. So margin
+      is **revenue − cost**, and retention rides alongside as a labelled cash memo. If the CA wants
+      a cash-position view, that is a second report, not this one.
+- [x] **Cost = expenses (voids excluded) + certified RA bills.** Those two are disjoint by
+      construction, because 032 deliberately doesn't post certified bills to Open Book. If a
+      contractor is ever paid through both paths this figure double-counts them — noted in the
+      migration header, because the fix is to stop doing that, not to net it out in a view.
+- [x] **Revenue counts approved variations only.** Pending VOs appear on their own line so nobody
+      plans around money the client hasn't agreed to.
+- [x] **Projection** = actual + unspent budget + open commitments (approved POs with nothing
+      invoiced). **Null when there's no budget** — an honest blank beats a confident wrong number,
+      and the card says why.
+- [x] **Category breakdown ranked by overspend**, not alphabetically. Contractor bills appear as
+      their own line rather than being folded into a budget category they'd silently consume.
+- [x] **Owner-run views, WHERE clause as access control** — the 010 pattern, forced by
+      `contract_value` being revoked from `authenticated`. Supervisors match no arm and get zero
+      rows. The company roll-up is a separate SECURITY DEFINER function gated to `is_founder()`,
+      returning zero rows for anyone else so the screen renders nothing rather than erroring.
+- [x] CSV export of every project's P&L for the CA. Tally XML stays deferred, as planned.
+
+**Verification**
+
+- Migration parses clean against the real PostgreSQL grammar.
+- `npx tsc -b --force` clean.
+
+**Not tested** — nothing exercised. Untested: the figures themselves against a project with real
+cost, the founder-only company card, the PM seeing only assigned projects, the category ranking, the
+projection, and the CSV.
+
+**Migration 038 APPLIED** — confirmed 2026-08-06.
+
+**Margin now also appears on the Dashboard**, under each project card's spend figures, for
+money-roles only. Same source (`v_project_pnl`), so the dashboard and the P&L screen cannot
+disagree.
+
+**Two honest-blank cases added in both places**, because the arithmetic is right and the meaning
+isn't: a project with revenue and **zero recorded cost** computes to a 100% margin, which means work
+hasn't started rather than that it is wildly profitable — it now reads "Not started" / "No cost
+recorded yet". A project with **no contract value** says profitability can't be worked out, rather
+than showing a 100% loss.
+
+**Migration 039** (applied same day) removes a gate rather than adding one: 038 had `fn_company_pnl`
+demanding `is_founder()`, which was redundant — it sums `v_project_pnl`, and that view already
+scopes rows to the caller. The extra check gave a PM or accounts a blank where a number belongs.
+Now founder and accounts total every project, a PM totals their own, a supervisor gets nothing.
+The P&L screen still shows its "Company position" card to the founder alone, which is a
+presentation choice made in the UI.
+
+Also in 039: **"in profit" requires cost to exist**. IHA has revenue and no spend, so counting it as
+profitable would have read "2 in profit" on a dashboard where one project is losing ₹25 lakh.
+
+**Colour rule, one place:** `marginTone` / `MARGIN_TEXT` / `MARGIN_LABEL` in `lib/format.ts` —
+green profit, red loss, blue break-even (new `--neutral` token), with the **label taking the same
+colour as the figure**. Three screens rendering the same verdict from three separate ternaries is
+how they eventually disagree.
+
+**Verified against the raw tables 2026-08-06** (queried directly as `postgres`, bypassing the view):
+AADHYA revenue ₹1,87,78,000 against cost ₹2,12,95,520 = a loss of ₹25,17,520 (−13.4%); IHA revenue
+₹5,24,10,000 with no cost recorded. Company: revenue ₹7,11,88,000, cost ₹2,12,95,520, margin
+₹4,98,92,480 at 70.1% blended, one project in profit and one losing money.
+
+---
+
 ## Testing residue cleared — GROUP A COMPLETE, 2026-08-06
 
 Every remaining untested path exercised on real data. **A1–A13 are now all `[x]`.**
@@ -1660,3 +1736,129 @@ granted permission — and on a site not everyone will. A message someone sends 
 - Still nothing automatic: WhatsApp opens with the text, the person taps send.
 
 `npx tsc -b --force` clean.
+
+---
+
+## Session — M29 part 2: company overheads + true net position, migration 040
+
+Confirmed at start: **001–039 ALL APPLIED**, next = 040.
+
+038 gave every project a gross margin. That is not profit — it ignores the rent, the CA, the
+software, the salaries of people who never set foot on a site. This session adds those costs and the
+arithmetic that turns margin into an actual net figure.
+
+- [x] **Migration 040** — `overhead_category` (12 headings as an enum, not a lookup table: they
+      change about once a year, and a table invites someone to "just add one" mid-month and quietly
+      split a year's reporting in two), `company_expenses`, RLS, audit trigger, storage policies,
+      and four functions: `fn_void_company_expense`, `fn_duplicate_overheads`,
+      `fn_overhead_summary`, `fn_company_net`.
+- [x] `src/lib/queries/overheads.ts` — CRUD, the three RPCs, and `periodRange()` (India's FY is
+      April–March; reading "this FY" as the calendar year would misstate every annual figure by nine
+      months in Q1–Q3).
+- [x] **Overheads screen** (`/money/overheads`, founder + accounts) — month picker, category filter,
+      running total for the month, entry form with optional compressed proof, void with a mandatory
+      reason, and **Copy last month**.
+- [x] **P&L rebuilt around three layers** — period selector (month / quarter / FY / all), the **net
+      position as the hero figure** in green or red, overheads by category with share bars, then the
+      per-project cards that were already there.
+- [x] **CSV for the CA** — now multi-section: project margins, overheads by category, and the net
+      position. `toCsvSections()` added to `src/lib/csv.ts` so the BOM sits once at the top of the
+      file instead of once per block (a stray mid-file BOM shows up as junk in the first cell of that
+      section — the sort of thing a CA notices and nobody can explain).
+
+### Decisions worth keeping
+
+**A dedicated table, not a pseudo-project.** Overheads could have been an "Office" project with
+expenses hanging off it. That would have poisoned every existing view — portfolio spend, budget vs
+actual, `v_project_pnl`, the dashboard cards — each needing to learn to exclude one magic row, and
+each one edit away from silently including it again. A separate table keeps `expenses` meaning
+exactly what it has always meant: money spent ON A SITE.
+
+**Manual only.** No recurrence, no auto-posting, no scheduled job. Rent that posts itself is rent
+nobody checks. `fn_duplicate_overheads` copies a month forward when asked and **refuses if the
+target month already has rows** — the failure mode of a copy button is copying twice, and two months
+of office rent in one month is the kind of error that survives to the annual accounts.
+
+**Its own void function, not a `fn_void_record` branch.** That dispatcher exists to route
+project-scoped side effects — reversing stock, unwinding a mirrored expense, refusing a void that
+would push inventory negative. A company overhead has no project, no stock and no cascade, so a
+branch there would be routing with nowhere to route. Same contract: mandatory reason, security
+definer, no client-side UPDATE path.
+
+**Explicit storage policies for `receipts/company/…`.** 006's existing policies already resolve
+correctly, because `is_member()` returns true for a founder regardless of project — but that is an
+accident of how `is_member()` is written, not a stated rule. 040 says it out loud so a future edit
+to `is_member()` cannot silently open the firm's bank charges to a supervisor.
+
+**The period governs overheads only.** Project margins stay lifetime-to-date — a contract is judged
+over its whole life, not by the calendar — while overheads are inherently monthly. So the net reads:
+project margins TO DATE, less overheads for the CHOSEN PERIOD, and the card **names both spans on
+screen**. Picking "this FY" makes the comparison meaningful; picking "last month" answers a narrower
+question, and a screen that mixed the two silently would be the easiest way in this app to mislead
+yourself.
+
+### Access
+
+founder + accounts: everything. **pm:** project margins only — `fn_company_net` returns
+`sees_overheads = false` and a **null** net, `fn_overhead_summary` returns no rows, the Overheads tab
+is not rendered, and the CSV omits both overhead sections. **supervisor:** nothing, as with every
+money module. All of it at RLS on `company_expenses` and inside the functions, not in the UI — the
+tab-hiding and the "restricted for your role" panel only spare a PM a screen that would tell them
+they can't see it.
+
+`npx tsc -b --force` clean.
+
+**Run migration 040 before testing.**
+
+---
+
+## Session — overhead headings become a founder-managed list, migration 041
+
+Two questions from the founder: can headings be added manually, and are overheads counted inside
+projects or separately.
+
+**Answer to the second, for the record:** completely separately. Nothing in 040/041 touches
+`expenses`, `v_project_pnl`, budget vs actual, portfolio spend or the dashboard cards — no project
+carries a share of the rent. The two meet in exactly one place, `fn_company_net`:
+Σ project gross margins (lifetime) − company overheads (period) = net position. Apportioning
+overheads across projects would be a different feature, and only worth building if the CA asks.
+
+**The first became migration 041.** 040 had argued for an enum because a lookup table invites
+someone to "just add one" mid-month and split a year's reporting in two. That argument was about
+WHO can add one, not about whether the list may change — and it is the founder's firm.
+
+- [x] **Migration 041** — `overhead_categories` (name, slug on the 12 seeds only, active,
+      sort_order), `company_expenses.category` → `category_id`, `fn_delete_overhead_category`,
+      `fn_overhead_summary` re-created grouped by heading id, `fn_duplicate_overheads` carrying the
+      new column. `fn_company_net` untouched: it sums amounts and never looked at the heading.
+- [x] Founder-only **Manage headings** panel on the Overheads screen — rename, retire, restore,
+      delete — plus a **+ Add a new heading** link inline in the entry form.
+- [x] Accounts picks from the list and cannot change it; the panel and the link are hidden, and
+      RLS refuses the write regardless.
+
+### The three guards that make a free list safe
+
+**One editor.** Founder writes, accounts reads. The real risk was never that the list changes — it
+is that TWO people change it and "Internet" and "Office utilities" become two series nobody can
+compare.
+
+**Normalised uniqueness.** A unique index on `lower(btrim(name))`, because case and a trailing space
+are the two ways a duplicate heading actually gets created. The form translates the constraint
+violation into "a heading with that name already exists — pick it from the list."
+
+**Retire, not delete.** Entries reference the heading by id, so a rename corrects history rather
+than forking it, and retiring hides a heading from new entries while every past month reports
+exactly as before. `fn_delete_overhead_category` permits a true delete only where nothing has ever
+pointed at the heading — the typo you made a minute ago — and otherwise refuses with the count.
+Voided entries count as history too: a voided row still has to be able to say what it was for.
+
+Its own delete RPC rather than a `fn_delete_record` branch, for the same reason
+`fn_void_company_expense` is its own function: every branch in that dispatcher resolves a project
+and calls `is_member()`, and a heading has no project.
+
+The enum→table step is guarded on the old column still existing and runs as dynamic SQL, so a second
+run is a no-op rather than a plan-time failure on a column that is gone.
+
+`npx tsc -b --force` clean.
+
+**Run migration 041 before testing.**

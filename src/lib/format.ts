@@ -45,6 +45,33 @@ export interface BarGeometry {
  * A solid full bar can't distinguish "exactly on budget" from "double budget";
  * this can.
  */
+/**
+ * Profit / loss / break-even, as one decision made in one place.
+ *
+ * Green for profit, red for loss, blue for exactly nil. The label and the
+ * figure always take the SAME colour — a muted word next to a red number reads
+ * as decoration; both coloured reads as a verdict.
+ */
+export type MarginTone = 'profit' | 'loss' | 'breakeven'
+
+export function marginTone(margin: number): MarginTone {
+  if (margin > 0) return 'profit'
+  if (margin < 0) return 'loss'
+  return 'breakeven'
+}
+
+export const MARGIN_TEXT: Record<MarginTone, string> = {
+  profit: 'text-[var(--positive)]',
+  loss: 'text-destructive',
+  breakeven: 'text-[var(--neutral)]',
+}
+
+export const MARGIN_LABEL: Record<MarginTone, string> = {
+  profit: 'Margin',
+  loss: 'Loss',
+  breakeven: 'Break-even',
+}
+
 export function barGeometry(spent: number, budget: number): BarGeometry {
   if (!budget || budget <= 0) {
     return { budgetAt: 0, fillTo: 0, over: false, hasBudget: false }
