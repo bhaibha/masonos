@@ -21,6 +21,7 @@ import {
   fetchExpenses,
   fetchExpenseTotal,
 } from '@/lib/queries/expenses'
+import { fetchActivities, retagExpense } from '@/lib/queries/schedule'
 import { fetchUserNames } from '@/lib/queries/voids'
 import { signedReceiptUrl } from '@/lib/storage'
 import {
@@ -32,6 +33,7 @@ import {
   type ExpenseRow,
   type ExpenseSource,
   type ExpenseTotal,
+  type ScheduleActivity,
 } from '@/lib/types'
 import { useAuth } from '@/store/auth'
 import type { MoneyContext } from './MoneyLayout'
@@ -52,6 +54,7 @@ export default function Ledger() {
   const [names, setNames] = useState<Map<string, string>>(new Map())
   const [showFilters, setShowFilters] = useState(false)
   const [voiding, setVoiding] = useState<ExpenseRow | null>(null)
+  const [activities, setActivities] = useState<ScheduleActivity[]>([])
 
   const [categoryId, setCategoryId] = useState('')
   const [source, setSource] = useState('')
@@ -61,6 +64,12 @@ export default function Ledger() {
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => setCategories([]))
   }, [])
+
+  // The programme, for re-tagging. A project without one shows no control at
+  // all rather than an empty select.
+  useEffect(() => {
+    fetchActivities(projectId).then(setActivities).catch(() => setActivities([]))
+  }, [projectId])
 
   const filtered = Boolean(categoryId || source || from || to)
 
@@ -225,8 +234,10 @@ export default function Ledger() {
                 <LedgerRow
                   row={r}
                   mayVoid={mayVoid}
+                  activities={activities}
                   voidedByName={r.voided_by ? names.get(r.voided_by) : null}
                   onVoid={() => setVoiding(r)}
+                  onRetagged={load}
                 />
               </RevealItem>
             ))}
@@ -256,16 +267,47 @@ export default function Ledger() {
 function LedgerRow({
   row,
   mayVoid,
+  activities,
   voidedByName,
   onVoid,
+  onRetagged,
 }: {
   row: ExpenseRow
   mayVoid: boolean
+  activities: ScheduleActivity[]
   voidedByName?: string | null
   onVoid: () => void
+  onRetagged: () => Promise<void>
 }) {
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
   const [loadingReceipt, setLoadingReceipt] = useState(false)
+  const [retagging, setRetagging] = useState(false)
+
+  /**
+   * Changing which activity this cost is measured against.
+   *
+   * Not a void — no total on this screen, the P&L or the dashboard moves when
+   * a tag changes. Only earned value does, and only to become right. Voiding
+   * would put VOID on a payment that was fine and leave the audit log implying
+   * something was wrong with it.
+   */
+  async function retag(activityId: string) {
+    setRetagging(true)
+    try {
+      await retagExpense(row.id, activityId || null)
+      toast.success(
+        activityId
+          ? `Moved to ${activities.find((a) => a.id === activityId)?.code ?? 'that activity'}`
+          : 'Removed from the programme',
+        { description: 'Earned value recalculates; no ledger figure changes.' },
+      )
+      await onRetagged()
+    } catch (err) {
+      toast.error('Could not change the activity', { description: errText(err) })
+    } finally {
+      setRetagging(false)
+    }
+  }
 
   async function openReceipt() {
     if (!row.receipt_path || receiptUrl) return
@@ -355,6 +397,34 @@ function LedgerRow({
         </div>
       )}
       </div>
+
+      {/* Founder/PM/accounts only — the whole Money module already is, and
+          fn_retag_expense re-checks. Hidden on a voided row: it counts for
+          nothing, so its tag makes no difference. */}
+      {!voided && activities.length > 0 && (
+        <div className="mt-2 flex items-center gap-2">
+          <label
+            htmlFor={`act-${row.id}`}
+            className="shrink-0 text-xs text-muted-foreground"
+          >
+            Activity
+          </label>
+          <Select
+            id={`act-${row.id}`}
+            value={row.activity_id ?? ''}
+            disabled={retagging}
+            onChange={(e) => void retag(e.target.value)}
+            className="h-9 flex-1 text-xs"
+          >
+            <option value="">Not tied to an activity</option>
+            {activities.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} {a.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+      )}
 
       {voided ? (
         <VoidNote

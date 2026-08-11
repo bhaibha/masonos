@@ -221,7 +221,53 @@ Order within group:
       amber/lapsed states, renewing (chain + delete refusal), and the dashboard strip.
 
 ## GROUP B — Complex logic (build second) ~3–4 weeks
-- [ ] B1. M02 Schedule + EVM (Gantt, planned vs earned value, CPI/SPI/EAC — all math server-side)
+- [~] **B1. M02 Schedule + EVM — migration 042 APPLIED and generating; supervisor pass outstanding.**
+       `schedule_activities` (WBS code, planned dates, BAC, planned qty, % complete) and
+       `activity_dependencies` (finish-to-start with lag, cycles refused by a trigger at write time
+       rather than defended against at read time). `activity_id` added to tasks, expenses and
+       ra_bills — all ON DELETE SET NULL, because removing a plan line must not take the work or the
+       money with it. `fn_activity_float` runs a forward and backward CPM pass and returns total
+       float per activity; float ≤ 0 is the critical path. `fn_activity_evm` computes PV (straight
+       line across the planned dates), EV (% × BAC), AC (tagged expenses + certified RA bills up to
+       the data date), SV, CV, SPI, CPI, EAC, ETC and VAC; `fn_project_evm` rolls up from the SUMS,
+       never by averaging the per-activity indices. **Every ratio is NULL, never 0 or Infinity, when
+       its denominator is zero** — an activity that has not started has no performance, which is not
+       the same as bad performance.
+       **The role split is a column grant, not a second table:** `budget_amount` is revoked from
+       `authenticated`, so a supervisor reads dates, sequence and progress and cannot reach the
+       money; both EVM functions gate on `my_role() in ('founder','pm','accounts')` in their WHERE
+       clause and return a supervisor zero rows. Because a column grant is table-wide, the UPDATE
+       policy is founder/PM only and a supervisor's progress update goes through
+       `fn_set_activity_progress`, which writes exactly three columns.
+       **The programme is GENERATED, not typed, and it is a MICRO schedule.**
+       `fn_generate_schedule(project, start, end, floors, plot_area)` lays out the whole WBS at the
+       level a site engineer works at — not "slab" but staging, shuttering, beam steel, slab steel,
+       conduits, sleeves, pre-pour check, pour, cure, deshutter — with its finish-to-start chain.
+       76 fixed activities plus 22 per floor: **~120 for a G+1, ~142 for a G+2.** A macro line
+       reading "Superstructure — 90 days" cannot be marked 40% complete honestly, cannot say which
+       trade is holding the job up, and cannot carry a meaningful budget; at this level each line is
+       one crew doing one thing.
+       Activities carry a `phase` label (Mobilisation, Substructure, Superstructure — Ground floor,
+       …) used only for grouping on screen — every row is a LEAF, so nothing double-counts in EVM.
+       Durations come from `fn_schedule_template`, scaled by sqrt(plot area ÷ 2400) for groundworks
+       and structure and by sqrt(built-up ÷ 2400) for finishes and services (four times the plot is
+       about twice the time, not four times), then by ONE factor that makes the chain land on the
+       requested handover date. It returns `compression` = target ÷ natural; below 0.7 the screen
+       warns that the dates demand a materially faster build than the method suggests, and generates
+       anyway — that call is the founder's. Regenerating is refused outright if the project already
+       has activities, and refused even with `replace` if any expense or certified bill is tagged to
+       them. `projects.floors` and `plot_area_sqft` store what it was generated from.
+       Entry points: the Admin project-creation form (all four fields or none), and a generator that
+       IS the empty state on the Schedule tab for the four projects already running.
+       Screen at /tasks/schedule: SPI/CPI as big serif figures with green/amber/red bands, a
+       plain-English verdict, EAC against BAC, a scrollable Gantt with progress overlay, today line,
+       data-date line and critical path picked out, plus per-activity cards with an inline progress
+       input.
+       **Tested:** 042 applied 2026-08-11 and the generator confirmed working end to end.
+       **Still outstanding before this can be ticked [x]:** the supervisor incognito pass on
+       /tasks/schedule (no budget, PV, EV, AC, CPI or EAC anywhere; progress still writable), the
+       double-generate and money-tagged regenerate refusals, the dependency cycle refusal, an EVM
+       reading checked against a hand calculation, and the Excel export opened in real Excel.
 - [ ] B2. M17 QA/QC (Inspection & Test Plans, hold points, NCR raise/close, checklists)
 - [ ] B3. M05 Material Procurement full (indent → rate compare → order, ties into M22)
 - [ ] B4. M13 Estimation / BOQ / BBS generator (BOQ, bar-bending schedule per IS-2502 — reinforcement math)

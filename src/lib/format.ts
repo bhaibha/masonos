@@ -72,6 +72,79 @@ export const MARGIN_LABEL: Record<MarginTone, string> = {
   breakeven: 'Break-even',
 }
 
+/**
+ * EVM index bands.
+ *
+ * ≥ 1 good, 0.9–1 watch, < 0.9 alert — the conventional thresholds, kept in one
+ * place so the card, the row and any future report cannot disagree about what
+ * counts as trouble. `null` (undefined index) is its own band: an activity that
+ * has not started has no performance, which is not the same as bad performance.
+ */
+export type IndexBand = 'good' | 'watch' | 'alert' | 'na'
+
+export function indexBand(v: number | null | undefined): IndexBand {
+  if (v === null || v === undefined) return 'na'
+  if (v >= 1) return 'good'
+  if (v >= 0.9) return 'watch'
+  return 'alert'
+}
+
+export const INDEX_TEXT: Record<IndexBand, string> = {
+  good: 'text-[var(--positive)]',
+  watch: 'text-[var(--warning)]',
+  alert: 'text-destructive',
+  na: 'text-muted-foreground',
+}
+
+export const INDEX_BG: Record<IndexBand, string> = {
+  good: 'bg-[var(--positive)]',
+  watch: 'bg-[var(--warning)]',
+  alert: 'bg-destructive',
+  na: 'bg-border',
+}
+
+/** "1.04" / "n/a" — never "Infinity", never a bare 0 standing in for unknown. */
+export function formatIndex(v: number | null | undefined): string {
+  return v === null || v === undefined ? 'n/a' : v.toFixed(2)
+}
+
+/**
+ * The plain-English read. Deliberately says "on plan" rather than "on track"
+ * when an index is merely ≥ 1 — the number says the plan is being met, not
+ * that the plan was any good.
+ */
+export function evmVerdict(
+  spi: number | null,
+  cpi: number | null,
+): string {
+  const s = indexBand(spi)
+  const c = indexBand(cpi)
+
+  if (s === 'na' && c === 'na') {
+    return 'Not enough recorded yet — no planned value has fallen due and nothing has been spent against the programme.'
+  }
+
+  const sched =
+    s === 'na'
+      ? 'Schedule performance not yet measurable'
+      : s === 'good'
+        ? 'On or ahead of programme'
+        : s === 'watch'
+          ? 'Slipping slightly'
+          : 'Behind programme'
+
+  const cost =
+    c === 'na'
+      ? 'no cost booked yet'
+      : c === 'good'
+        ? 'within cost'
+        : c === 'watch'
+          ? 'cost creeping up'
+          : 'over cost'
+
+  return `${sched}, ${cost}.`
+}
+
 export function barGeometry(spent: number, budget: number): BarGeometry {
   if (!budget || budget <= 0) {
     return { budgetAt: 0, fillTo: 0, over: false, hasBudget: false }

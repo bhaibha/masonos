@@ -1862,3 +1862,375 @@ run is a no-op rather than a plan-time failure on a column that is gone.
 `npx tsc -b --force` clean.
 
 **Run migration 041 before testing.**
+
+---
+
+## Session — B1 Schedule + Earned Value (Module 02), migration 042
+
+Confirmed at start: **001–041 ALL APPLIED**, next = 042.
+
+- [x] **Migration 042** — `schedule_activities`, `activity_dependencies`, `activity_id` on
+      tasks/expenses/ra_bills, and six functions: `fn_activity_dep_check` (trigger),
+      `fn_set_activity_progress`, `fn_activity_float`, `fn_activity_evm`, `fn_project_evm`,
+      `fn_delete_activity`.
+- [x] `src/lib/queries/schedule.ts`, `src/pages/tasks/Schedule.tsx`, a Schedule tab in TasksLayout,
+      index bands and the plain-English verdict in `src/lib/format.ts`.
+- [x] Optional **Schedule activity** picker on the expense form and the RA bill form — without a way
+      to tag cost to an activity, AC is permanently zero and the whole module reports nothing.
+
+### The design problem, and how it is solved
+
+**One table, two audiences.** The programme is for everyone on the project — a schedule nobody on
+site can read is a schedule nobody follows. Its money is not. Rather than two tables kept in step,
+`budget_amount` is REVOKED from `authenticated` (the 010 pattern) and granted back nowhere; every
+figure derived from it — PV, EV, AC, CPI, EAC — lives behind owner-run functions that gate on
+`my_role() in ('founder','pm','accounts')` in their WHERE clause. A supervisor selecting the table
+gets dates, sequence and % complete, and `fn_activity_evm` returns them zero rows, so there is no
+cost figure on their screen at all — not even a blank one to wonder about.
+
+**The corollary that nearly bit.** A column grant is table-wide for the role. Any UPDATE policy
+permissive enough to let a supervisor set `pct_complete` would also let them set `budget_amount`. So
+the UPDATE policy is founder/PM only and `fn_set_activity_progress` is the supervisor's way in — it
+writes exactly three columns and cannot be argued into writing a fourth.
+
+**Cycles are refused, not survived.** The dependency trigger walks forward from the successor and
+refuses any link that leads back to the predecessor. A cycle makes the critical path meaningless and
+the forward pass non-terminating, and there is no sensible way to render one — far better to refuse
+the edit while the person still remembers what they meant.
+
+**Every ratio is nullable.** PV = 0 (not started), AC = 0 (nothing spent) and EV = 0 with money
+spent are all real states with no defined index. They return NULL, the UI prints "n/a", and nothing
+computes with a null downstream. Being "infinitely ahead" of a plan that expected nothing is not a
+finding, and a screen showing ∞ would be worse than one admitting it doesn't know.
+
+**Roll-up from the sums, never from the indices.** `fn_project_evm` sums BAC, PV, EV and AC and then
+divides. Averaging the per-activity SPIs would weight a ₹5,000 activity the same as a ₹50 lakh one
+and produce a number that looks reasonable and is wrong. Project % complete is EV/BAC for the same
+reason.
+
+**Straight-line PV, and said out loud.** Planned value spreads evenly across each activity's dates.
+Nothing here models a resource curve, and the footnote on the screen says so — false precision in an
+S-curve nobody entered would be worse than an honest straight line.
+
+### Two Postgres traps hit on the way
+
+**RETURNS TABLE names are in scope in a SQL function body.** `fn_activity_evm` returns columns
+called `pv`, `ev`, `ac`, `bac`, `code`, `name`, all of which are also CTE column names — a bare
+mention is ambiguous between the output parameter and the column. Every reference in both EVM
+functions is table-qualified for that reason.
+
+**Recursion belongs in a flat WITH RECURSIVE list.** The CPM passes were first written as
+`with recursive` blocks nested inside ordinary CTEs. Legal, but fragile; they are now side by side
+in one flat list, which is plainer and provably valid.
+
+### Access
+
+founder / PM / accounts: full EVM. **supervisor:** the programme, the critical path, float and their
+own progress updates — and no AC, CPI, CV or EAC anywhere, enforced by the column grant and the
+function gates rather than by hiding a card. **The supervisor RLS test must be re-run** against
+/tasks/schedule before this is ticked.
+
+`npx tsc -b --force` clean.
+
+**Run migration 042 before testing.**
+
+---
+
+## Session addendum — the programme is generated, not typed (still migration 042)
+
+042 had not been run yet, so this went into the same migration rather than a 043.
+
+The first cut expected someone to type thirty-odd activities before a project started. Nobody does
+that, which means nobody would have had a programme at all. Now: **start date, handover date,
+floors, plot area → the entire work-breakdown structure.**
+
+- [x] `fn_schedule_template(floors)` — the firm's method as a function, not a table. A table would
+      invite someone to edit it mid-project and change what "generate" means between two projects
+      that ought to be comparable. Departing from the method is done by editing the GENERATED
+      schedule, which is ordinary rows the moment it exists.
+      22 fixed activities plus a four-activity cycle per floor: mobilisation, substructure, columns
+      / slab shuttering + rebar / slab concreting / blockwork per floor, roof, services, finishes,
+      external works, handover. Activities marked `par` run alongside the one before them (external
+      plaster beside internal, plumbing beside electrical) and therefore carry float rather than
+      sitting on the critical path.
+- [x] `fn_generate_schedule(project, start, end, floors, plot_area, replace)` — durations scaled,
+      chain laid out, dependencies drawn, `projects.floors` / `plot_area_sqft` recorded.
+- [x] `projects.floors` and `plot_area_sqft` added **with their column grant** — 010 revoked SELECT
+      on projects, so a new column is invisible until it is named. Two statements, never one.
+- [x] Entry points: the Admin project-creation form (all four fields or none — three of four would
+      silently skip generation and a founder who filled in three would reasonably expect a
+      programme), and a generator that IS the empty state on the Schedule tab, for the four projects
+      already running.
+
+### Decisions
+
+**Scale to fit, and say when it's tight.** Durations come from the size factors, then one scale
+factor lands the chain on the requested handover date. `compression` = target ÷ natural comes back
+with the result; below 0.7 the toast says the build normally runs about N months and you have
+allowed M, and that every duration was compressed. It still generates — the founder sets the dates,
+not the database — but a programme that silently squashed 18 months into 10 and presented itself as
+a plan would be the most damaging thing this module could produce.
+
+**Square roots, not ratios.** Four times the plot is about twice the time; more of the work happens
+in parallel across a bigger face. 2400 sqft (a 30×80 site) is the reference. Groundworks and
+structure scale with the footprint, finishes and services with total built-up area.
+
+**Natural length is measured by dry-running the real layout.** Summing the non-parallel durations
+was out by about a week, because a parallel branch outlasting the activity beside it pushes the
+cursor on and a plain sum cannot see that. The generator walks its own algorithm once at scale 1 to
+measure, then again for real. Whole-day rounding still leaves a few days either way, so the handover
+activity is stretched to end exactly on the target date.
+
+**Budgets stay at zero.** An auto-split by typical residential percentages would produce SPI and CPI
+figures that look authoritative and are guesses. Earned value stays silent until someone sets the
+BACs, which is the honest state.
+
+**Regenerating is guarded twice.** Refused outright if activities exist; refused even with `replace`
+if any live expense or certified bill is tagged to them — the money would survive with a null
+activity and drop out of earned value with nothing to show why.
+
+Verified offline against six size/duration combinations: a 2400 sqft G+1 comes out at ~12 months
+natural, 6000 sqft G+2 at ~23 months, and the compression figure flags the absurd cases.
+
+`npx tsc -b --force` clean.
+
+**Run migration 042 before testing.**
+
+---
+
+## Session addendum 2 — micro schedule, not macro (still migration 042)
+
+042 is still unapplied, so this went into the same file again.
+
+The first generator produced ~30 macro lines. A line reading "Superstructure — 90 days" cannot be
+marked 40% complete honestly, cannot say which trade is holding the job up, and cannot carry a
+budget anyone believes. So `fn_schedule_template` now breaks the build down to the level a site
+engineer actually works at.
+
+**76 fixed activities plus 22 per floor — about 120 for a G+1, 142 for a G+2.**
+
+A slab is no longer one row. It is: staging and props · shuttering and decking · beam reinforcement ·
+slab main reinforcement · distribution steel and cover blocks · electrical conduits in slab ·
+plumbing sleeves and cutouts · pre-pour checks and level marking · concreting · curing ·
+deshuttering and prop removal. Columns get marking, reinforcement, shuttering, concreting,
+deshuttering-and-curing. Masonry gets external walls, internal partitions, frame fixing, lintels and
+sunshades, chasing, curing.
+
+Substructure runs excavation → anti-termite → PCC → footing steel → footing shuttering → pour →
+curing → starter bars → pedestal → backfill → plinth beam steel → shuttering → pour → plinth filling
+→ ground floor bed. Services split electrical conduiting, wiring pulling, DB and earthing, water
+lines, drainage stacks, pressure testing, HVAC piping, duct framing, low voltage, solar. Finishes run
+through plastering, curing, wet-area waterproofing and its ponding test, wall tiling, flooring,
+staircase, kitchen counter, false ceiling, putty and primer, shutters, glazing, wardrobes, final
+paint, then fixtures and fittings. Handover includes the electrical load test, the plumbing flow
+test, HVAC commissioning, deep cleaning, snag list, rectification, client inspection, as-builts.
+
+### What that forced
+
+**A `phase` column, purely for reading.** 120 flat cards is a wall nobody scrolls. Activities carry
+a phase label — Mobilisation, Substructure, "Superstructure — Ground floor" (one per floor, so each
+collapses on its own), Roof and terrace, Services rough-in, Finishes, External works, Testing and
+handover — and the screen groups by it. **It is NOT a parent row.** Every activity is a leaf, so
+nothing double-counts in earned value; summary rows would have been the obvious move and the wrong
+one. Column-granted like everything else on that table (the 027 lesson: a new column is invisible
+until it is named).
+
+**Sections open at the work in hand.** The phase containing today is expanded on load, the rest are
+shut. Headers count finished activities — "14 of 22 done" — rather than averaging percentages across
+activities of wildly different size, which would be a number that looks meaningful and isn't.
+
+**The Gantt scrolls in both axes** and its rows are 18px, so 140 activities don't bury the rest of
+the page. Capped at 60vh.
+
+**Manually added activities can join a phase**, via a picker of the phases already on the project.
+Otherwise every hand-added row lands alone under "Other activities" at the bottom, which is where a
+generated programme starts diverging from the real one.
+
+### Durations, re-checked
+
+2400 sqft G+1 → 120 activities, natural length ~15 months. 6000 sqft G+2 → 142 activities, ~29
+months. 1500 sqft single floor → 98 activities, ~9 months. Those are the *natural* lengths; the
+generator still scales everything to land on the founder's handover date and reports the compression
+it applied.
+
+`npx tsc -b --force` clean.
+
+**Run migration 042 before testing.**
+
+---
+
+## Fix during 042 testing — `create table if not exists` skipped a later column
+
+The founder ran an earlier cut of 042, then re-ran the file after the micro-schedule rewrite added
+`schedule_activities.phase`. `create table if not exists` is a no-op on an existing table, so the
+column was never created, and the script aborted at the column grant that names it:
+
+    ERROR: 42703: column "phase" of relation "schedule_activities" does not exist
+
+Everything above the grant had already run; nothing below it — the audit triggers, the progress RPC,
+the CPM pass, both EVM functions, the template and the generator — existed at all.
+
+**Fix:** an explicit `alter table public.schedule_activities add column if not exists phase text;`
+immediately after the create block, and re-run the whole file.
+
+**The lesson, now in CLAUDE.md:** a create block stops being the source of truth the moment the
+table exists anywhere. Any column added to a table after its `create` first shipped needs its own
+`add column if not exists`, even though the create statement above it already lists the column.
+Same family as the 027 trap where a new column on a column-granted table needs a second statement.
+
+---
+
+## Session addendum 3 — the programme exports to Excel (no migration)
+
+Asked for "automatically update in an Excel sheet, or export — you suggest". Export, and here is why
+the other one was not built:
+
+**A live-linked workbook would need database credentials inside the file.** Power Query against
+PostgREST means the anon key and a long-lived token sit in a .xlsx that then gets emailed to a
+client, a consultant, the CA. Worse, the money columns on this module are role-gated — a supervisor
+gets no cost figures — and **a shared spreadsheet has no role**. The moment the programme lives in a
+file that refreshes itself, the whole 042 access model is bypassed by anyone holding the file. The
+export instead is built from the rows already on screen, so it inherits whatever the person opening
+it was entitled to see, and it is regenerated fresh on every tap rather than going stale.
+
+- [x] **`src/lib/xlsx.ts`** — a small .xlsx writer with **no new dependency**. An xlsx is a zip of
+      XML and jszip has been in the project since the handover archive, so this costs nothing
+      against roughly a megabyte for SheetJS or ExcelJS. Typed cells, column widths, a frozen bold
+      header, autofilter, one sheet per concern.
+- [x] **Export to Excel** on the Schedule screen — three sheets: *Schedule* (phase, code, activity,
+      planned and actual dates, duration, % complete, float, critical flag, and for founder/PM/
+      accounts the full EVM columns), *Earned value* (the project roll-up plus the plain-English
+      read), *Sequence* (every finish-to-start link with its lag).
+
+### Why xlsx rather than another CSV
+
+A CSV has no types. A 120-row programme opens with dates as text — so they sort alphabetically,
+01-Apr before 02-Jan — percentages as bare numbers and rupee figures Excel may or may not decide are
+numeric. For a sheet somebody is going to filter and sort, that is the difference between a working
+document and a wall of strings. So: dates as Excel serials with a `dd-mmm-yyyy` format, money as
+`#,##,##0.00` (Indian grouping — 12,34,567.00, not 1,234,567.00), percent as `0.0"%"`, integers as
+`#,##0`.
+
+An undefined index writes the literal **"n/a"**, never 0. A zero in a CPI column is a finding; a
+blank denominator is not, and the sheet must not blur the two.
+
+### Verified, not assumed
+
+Generated a workbook through the real code path with tsx, then opened it with openpyxl under
+`warnings.simplefilter('error')`: both sheets present, dates round-trip as real datetimes carrying
+the date format, rupees carrying Indian grouping, freeze pane at A2, autofilter A1:I1, column widths
+applied, `&` and `<` in an activity name surviving escaping, and no warnings at all. Added
+`<cellStyles>` and `createFolders: false` to clear the two things a strict reader did complain
+about.
+
+`npx tsc -b --force` clean.
+
+---
+
+## Addendum 4 — the Gantt goes into the workbook too (no migration)
+
+"The graph is not exported" — correct, the first cut wrote rows only.
+
+The chart is now its own **Gantt** sheet, drawn out of **filled cells**, one column per week.
+
+**Not a picture of the on-screen chart, deliberately.** A PNG in a spreadsheet is a screenshot: it
+does not print at the right size, cannot be re-sorted, and is stale the moment a date moves. Filled
+cells are native Excel — the bar prints, survives a column being widened, and a planner can drag it.
+
+**A week per column, not a day.** A 15-month programme is 65 week columns or 456 day columns. Excel
+copes with either; a person does not. Weeks start on the project's first day rather than on a
+Monday, so the grid lines up with the programme instead of with a calendar nobody set.
+
+Each bar reads the same as the screen: the completed portion solid brass, the remainder in the pale
+tint, and both in danger red when the activity is on the critical path. The header cell for the week
+containing today is filled green — a spreadsheet has no vertical lines, so the marker goes in the
+header. A legend sits two rows below the bars, because otherwise the colours are decoration.
+
+Code, activity, start and finish are frozen on the left alongside the header row, which is what
+makes 65 columns of bars readable at all.
+
+### Writer changes
+
+`XlsxCell` can now be `{ v, fill }` as well as a plain value, with five named fills mapped to style
+indices; `XlsxColumn` gained `headerFill`; `XlsxSheet` gained `freezeCols`. A filled cell with no
+value still emits — that IS the Gantt.
+
+### Verified
+
+Generated through the real code path and read back with openpyxl under
+`warnings.simplefilter('error')`: freeze pane at E2 (four label columns plus the header row), header
+fills correct including the green today marker, bar fills landing in the right cells with the right
+colours (`FFA67C52` brass done, `FFE4DFD8` remaining, `FF9B3D3D` / `FFEFD9D9` critical), and dates
+still typed. Re-checked the Schedule sheet to confirm no regression — it still freezes at A2 with its
+autofilter intact.
+
+`npx tsc -b --force` clean.
+
+---
+
+## Addendum 5 — re-tagging cost to an activity, without voiding (still 042)
+
+Found while answering "how do I edit earned value". The answer is that you don't — every EVM figure
+is derived, so you change one of its four inputs. But one input had no edit path at all: **an
+expense or bill tagged to the wrong activity could only be fixed by voiding and re-entering.**
+
+That is the wrong remedy. A wrong tag is a FILING error, not a money error — no total on the ledger,
+the P&L or the dashboard moves when it changes. Only earned value moves, and only to become correct.
+Voiding would stamp VOID on a payment that was fine and leave the audit log implying otherwise.
+
+- [x] `fn_retag_expense(expense, activity)` and `fn_retag_ra_bill(bill, activity)` — founder / PM /
+      accounts, member of the project, security definer.
+- [x] An **Activity** picker on every live ledger row and on every bill that isn't cancelled.
+- [x] `v_ra_bill_totals` re-created with `activity_id` — the bill list reads the view, never the
+      table, so the column had to reach the screen through it. Reproduced whole from 032 with one
+      line added and nothing else changed (`create or replace view` cannot add a column, so
+      drop-then-create; nothing in SQL depends on it).
+
+### Why an RPC and not just an UPDATE policy
+
+`exp_update` (002) already allows a founder — or the row's own author — to write ANY column on
+`expenses`, including `amount`. There is simply no UI that does. Adding a re-tag control that used a
+direct update would have made that screen a back door to editing a figure. The RPC writes exactly
+`activity_id` and cannot be argued into writing a second column.
+
+### The guard that matters
+
+**Same project.** Tagging a Whitefield expense to an Indiranagar activity would quietly move cost
+between two projects' earned value while both P&Ls stayed correct — a discrepancy that takes a day
+to find and points at nothing. The function refuses it by name.
+
+Also refused: re-tagging a voided expense (it counts for nothing, so its tag is meaningless) and a
+cancelled bill. Re-tagging a CERTIFIED bill is allowed on purpose — 032 freezes the bill's *value*,
+and the activity tag is not a value; a certified bill measured against the wrong line is exactly
+what needs correcting.
+
+`npx tsc -b --force` clean.
+
+**Run migration 042 before testing** (still the only pending one — it now also drops and recreates
+`v_ra_bill_totals`).
+
+---
+
+## Migration 042 APPLIED — 2026-08-11
+
+Confirmed working by the founder after the `phase` column fix. **001–042 all applied.** Nothing
+pending.
+
+B1 stays **[~]**, not [x]. Generation works; the parts that protect the money and the parts that
+refuse bad input have not been exercised. What remains before it can be ticked:
+
+1. **Supervisor incognito pass on /tasks/schedule.** The programme, phases, critical path, float and
+   the progress box must all be there, and there must be NO budget, PV, EV, AC, SV, CV, SPI, CPI or
+   EAC anywhere — no EVM card, no per-activity SPI/CPI, no Cost button, and no cost columns in their
+   Excel export. Confirm a supervisor can still move % complete (it goes through
+   `fn_set_activity_progress`, which writes three columns and cannot reach the budget).
+2. **The refusals.** Generate twice on the same project (must refuse, naming the activity count);
+   tag an expense to an activity, then Rebuild (must refuse, naming the expense); draw A→B then B→A
+   (must refuse as a loop).
+3. **One EVM reading checked by hand.** Set a budget on an activity, mark it part complete, tag one
+   expense to it, and confirm PV/EV/AC and the two indices against a manual calculation. The
+   arithmetic is the thing worth doubting, not the plumbing.
+4. **The Excel file opened in real Excel**, not just a reader — the Gantt fills, the frozen panes and
+   the Indian number format.
+5. **Re-tagging**: move an expense between two activities and watch AC move on both without any
+   ledger or P&L figure changing.

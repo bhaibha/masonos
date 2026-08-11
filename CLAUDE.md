@@ -111,7 +111,17 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   (`company_expenses.category` → `category_id`, `fn_delete_overhead_category`,
   `fn_overhead_summary` re-created with a new return type,
   `fn_duplicate_overheads` carrying `category_id`).
-  So: **001–041 ALL APPLIED.** Next migration = 042.
+  So: **001–041 ALL APPLIED.**
+  **042 APPLIED** (confirmed 2026-08-11) — B1 Schedule + EVM
+  (`schedule_activities` incl. `phase`, `activity_dependencies`, `activity_id`
+  on tasks/expenses/ra_bills, `projects.floors`/`plot_area_sqft` **+ the column
+  grant**, `v_ra_bill_totals` re-created carrying `activity_id`,
+  `fn_activity_dep_check`, `fn_set_activity_progress`, `fn_activity_float`,
+  `fn_activity_evm`, `fn_project_evm`, `fn_delete_activity`,
+  `fn_schedule_template`, `fn_generate_schedule`, `fn_retag_expense`,
+  `fn_retag_ra_bill`, plus the column grant that withholds
+  `schedule_activities.budget_amount`).
+  So: **001–042 ALL APPLIED.** Next migration = 043.
 - **Owner-run views cannot be verified from the SQL editor (038).** The dashboard connects as
   `postgres`, so `auth.uid()` is NULL, `my_role()` is NULL and `is_founder()` is false — every
   is_member/role-gated view returns ZERO rows there, and an aggregate over that empty set returns
@@ -131,6 +141,40 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   row, and each of them would be one edit away from silently including it again. A separate table
   keeps `expenses` meaning exactly what it has always meant: money spent ON A SITE. Reach for a new
   table whenever a record would be a member of a set that every query already filters on.
+- **`create table if not exists` does NOT add a column you added later (042, found in testing).** A
+  migration that is edited after someone has already run it will silently skip the new column, and
+  the first statement that names it — a column grant, an insert, a view — aborts the whole script.
+  Every column added to a table AFTER that table's `create` first shipped needs its own
+  `alter table … add column if not exists`, even when the create statement above it already lists
+  the column. Same family as the 027 column-grant trap: the create block is not the source of truth
+  once the table exists anywhere.
+- **Measure the natural length by dry-running the real layout (042).** `fn_generate_schedule` scales
+  every duration so the chain lands on the requested handover date. Summing the non-parallel base
+  durations to get that "natural length" was wrong by about a week: a parallel branch outlasting the
+  activity it runs beside pushes the cursor on, and a plain sum can't see it. Walking the same
+  algorithm at scale 1 measures what actually gets laid out. Whole-day rounding still leaves a few
+  days either way, so the final handover activity is stretched to end exactly on the target — a
+  programme that claims one date and draws a bar to another is not trusted twice.
+- **A generator must report its own compression (042).** The template's durations say how long a
+  build of that size takes; the founder's dates say how long they have. When the second is much
+  smaller the function still generates — that is the founder's call, not the database's — but it
+  returns `compression` (target ÷ natural) and the screen warns below 0.7. Silently squashing 18
+  months into 10 and presenting it as a plan would be the most damaging thing that module could do.
+- **One table can serve two audiences if the SECRET is a column (042).** The schedule is for
+  everyone; its budget is not. Rather than two tables kept in step, `budget_amount` is revoked from
+  `authenticated` and granted back nowhere — every figure derived from it lives behind an owner-run
+  function gated on role. The corollary caught us in the same migration: a column grant is table-wide
+  for the role, so ANY update policy loose enough to let a supervisor set `pct_complete` also lets
+  them set the budget. Hence `fn_set_activity_progress` — a controlled write is the answer whenever
+  the row is shared but one column isn't.
+- **A SQL function's RETURNS TABLE names are in scope in its body (042).** `fn_activity_evm` returns
+  columns called `pv`, `ev`, `ac`, `bac`, `code`, `name` — all of which are also CTE column names, so
+  a bare mention is ambiguous between the output parameter and the column. Qualify EVERY reference
+  (`e.pv`, `sum(a.bac)`) in any function whose output names could collide, or it fails at create time
+  with an ambiguity error that reads like a typo.
+- **Nest recursion at the top level, not inside a CTE (042).** A `with recursive` buried inside an
+  ordinary CTE is legal and fragile. `WITH RECURSIVE` lets recursive and non-recursive CTEs sit side
+  by side in one flat list — use that, and both CPM passes stay readable.
 - **A configurable list needs one editor, not none (041).** 040 kept overhead headings as an enum to
   stop the list fragmenting. The real risk was never that the list changes — it is that TWO people
   change it and "Internet" and "Office utilities" become two series nobody can compare. So the table

@@ -22,7 +22,12 @@ export default function TasksLayout() {
   // History spans a range and carries its own from/to controls — leaving the
   // single-day picker above it would suggest the two are connected.
   const { pathname } = useLocation()
-  const showDayPicker = !pathname.startsWith('/tasks/history')
+  // History spans a range; Schedule spans the whole programme and carries its
+  // own data date. A single-day picker above either would suggest a connection
+  // that isn't there.
+  const showDayPicker =
+    !pathname.startsWith('/tasks/history') &&
+    !pathname.startsWith('/tasks/schedule')
 
   useEffect(() => {
     void load()
@@ -36,6 +41,7 @@ export default function TasksLayout() {
     { to: '/tasks', label: 'Tasks', end: true },
     { to: '/tasks/new', label: 'Add task' },
     { to: '/tasks/history', label: 'History' },
+    { to: '/tasks/schedule', label: 'Schedule' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },

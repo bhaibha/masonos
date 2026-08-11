@@ -13,7 +13,7 @@ const BILL_COLUMNS =
   'contractor_bill_no, period_from, period_to, claimed_amount, retention_pct, ' +
   'status, notes, line_count, gross_work_value, less_previously_certified, ' +
   'value_this_bill, retention_amount, net_certified, is_frozen, certified_at, ' +
-  'certified_by, rejected_at, reject_reason, cancelled_at, cancel_reason, created_at'
+  'certified_by, rejected_at, reject_reason, cancelled_at, cancel_reason, created_at, activity_id'
 
 const num = (v: unknown) => (v === null || v === undefined ? 0 : Number(v))
 const numOrNull = (v: unknown) =>
@@ -48,6 +48,7 @@ function toBill(r: Record<string, unknown>): RaBillRow {
     cancelled_at: (r.cancelled_at as string | null) ?? null,
     cancel_reason: (r.cancel_reason as string | null) ?? null,
     created_at: r.created_at as string,
+    activity_id: (r.activity_id as string | null) ?? null,
   }
 }
 
@@ -122,6 +123,7 @@ export async function createRaBill(input: NewRaBillInput): Promise<string> {
       claimed_amount: input.claimed_amount,
       retention_pct: input.retention_pct,
       notes: input.notes.trim() || null,
+      activity_id: input.activity_id ?? null,
     })
     .select('id')
     .single()

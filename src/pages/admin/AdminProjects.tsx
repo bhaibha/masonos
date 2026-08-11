@@ -14,9 +14,11 @@ import {
   fetchProjectCommercials,
   fetchProjects,
 } from '@/lib/queries/projects'
+import { generateSchedule } from '@/lib/queries/schedule'
 import { fetchSnagSummary, setProjectDlp } from '@/lib/queries/snags'
 import {
   PROJECT_STATUS_LABEL,
+  SCHEDULE_TIGHT_BELOW,
   type NewProjectInput,
   type Project,
   type ProjectStatus,
@@ -30,6 +32,10 @@ const EMPTY: NewProjectInput = {
   status: 'active',
   contract_value: null,
   management_fee_pct: null,
+  start_date: null,
+  target_end_date: null,
+  floors: null,
+  plot_area_sqft: null,
 }
 
 export default function AdminProjects() {
@@ -201,12 +207,11 @@ function ProjectForm({
     })
 
     setForm({
+      ...EMPTY,
       name: project.name,
       client_name: project.client_name ?? '',
       site_address: project.site_address ?? '',
       status: project.status,
-      contract_value: null,
-      management_fee_pct: null,
     })
 
     // 010 revoked SELECT on the commercial columns — read them through the view.
@@ -240,6 +245,33 @@ function ProjectForm({
       return
     }
 
+    // All four or none. Three of four silently skips generation, and a founder
+    // who filled in three would reasonably expect a programme.
+    if (!project) {
+      const filled = [
+        form.start_date,
+        form.target_end_date,
+        form.floors,
+        form.plot_area_sqft,
+      ].filter(Boolean).length
+
+      if (filled > 0 && filled < 4) {
+        toast.error('Fill in all four programme fields, or none', {
+          description:
+            'Start, handover, floors and plot area together generate the schedule. Leave them all blank to do it later.',
+        })
+        return
+      }
+      if (
+        form.start_date &&
+        form.target_end_date &&
+        form.target_end_date <= form.start_date
+      ) {
+        toast.error('Handover must be after the start date')
+        return
+      }
+    }
+
     setSaving(true)
     try {
       if (project) {
@@ -251,8 +283,38 @@ function ProjectForm({
         if (dlpStart || dlpEnd) {
           await setProjectDlp(created.id, dlpStart || null, dlpEnd || null)
         }
+
+        // All four build parameters present: lay out the programme now, while
+        // the founder still has the numbers in front of them. A failure here
+        // must not read as a failure to create the project — it exists either
+        // way, and the Schedule tab can generate later.
+        let scheduleNote = 'Assign the team on the Team tab.'
+        if (
+          form.start_date &&
+          form.target_end_date &&
+          form.floors &&
+          form.plot_area_sqft
+        ) {
+          try {
+            const res = await generateSchedule(created.id, {
+              start: form.start_date,
+              end: form.target_end_date,
+              floors: form.floors,
+              plot_area_sqft: form.plot_area_sqft,
+            })
+            scheduleNote =
+              res.compression < SCHEDULE_TIGHT_BELOW
+                ? `${res.activities_created} activities laid out — the dates are tight, see Tasks → Schedule.`
+                : `${res.activities_created} activities laid out under Tasks → Schedule.`
+          } catch (err) {
+            toast.warning('Project created, programme not generated', {
+              description: errText(err),
+            })
+          }
+        }
+
         toast.success(`${form.name.trim()} created`, {
-          description: 'Assign the team on the Team tab.',
+          description: scheduleNote,
         })
       }
       await onSaved()
@@ -357,6 +419,84 @@ function ProjectForm({
         The fee amount is computed in Postgres from these two figures. Both are
         hidden from supervisors by the database, not by this screen.
       </p>
+
+      {/* Build parameters — creation only. The edit form cannot read these
+          back (010 revoked SELECT on some project columns and these follow the
+          same shape), so showing them on an edit would post nulls and wipe
+          what the programme was generated from. Rebuilding happens on the
+          Schedule tab, which writes them as part of generating. */}
+      {!project && (
+        <div className="border-t border-border pt-5">
+          <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+            Programme
+          </p>
+
+          <div className="mt-3 grid grid-cols-2 gap-4">
+            <FieldRow label="Start on site" htmlFor="p-start">
+              <Input
+                id="p-start"
+                type="date"
+                value={form.start_date ?? ''}
+                onChange={(e) => set('start_date', e.target.value || null)}
+                className="h-12"
+              />
+            </FieldRow>
+            <FieldRow label="Target handover" htmlFor="p-end">
+              <Input
+                id="p-end"
+                type="date"
+                value={form.target_end_date ?? ''}
+                onChange={(e) => set('target_end_date', e.target.value || null)}
+                className="h-12"
+              />
+            </FieldRow>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <FieldRow label="Floors" htmlFor="p-floors" hint="Including ground">
+              <Input
+                id="p-floors"
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max="12"
+                step="1"
+                value={form.floors ?? ''}
+                onChange={(e) =>
+                  set('floors', e.target.value === '' ? null : Number(e.target.value))
+                }
+                className="h-12 tabular-nums"
+              />
+            </FieldRow>
+            <FieldRow label="Plot area (sqft)" htmlFor="p-area">
+              <Input
+                id="p-area"
+                type="number"
+                inputMode="decimal"
+                min="1"
+                step="1"
+                value={form.plot_area_sqft ?? ''}
+                onChange={(e) =>
+                  set(
+                    'plot_area_sqft',
+                    e.target.value === '' ? null : Number(e.target.value),
+                  )
+                }
+                className="h-12 tabular-nums"
+                placeholder="2400"
+              />
+            </FieldRow>
+          </div>
+
+          <p className="mt-2 text-xs text-muted-foreground">
+            Fill all four and the whole work-breakdown structure is laid out on
+            creation — mobilisation, substructure, a cycle per floor, services,
+            finishes, external works, handover — compressed or stretched to
+            land on the handover date. Leave them blank to generate it later
+            from Tasks → Schedule.
+          </p>
+        </div>
+      )}
 
       <div className="border-t border-border pt-5">
         <div className="grid grid-cols-2 gap-4">

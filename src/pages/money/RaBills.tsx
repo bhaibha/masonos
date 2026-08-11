@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
 import { formatInr } from '@/lib/format'
 import { fetchProject } from '@/lib/queries/projects'
+import { fetchActivities, retagRaBill } from '@/lib/queries/schedule'
 import {
   addRaLine,
   certifyRaBill,
@@ -39,6 +40,7 @@ import {
   type RaBillRow,
   type RaPayable,
   type RaStatus,
+  type ScheduleActivity,
   type UserRole,
 } from '@/lib/types'
 import { todayIst } from '@/lib/useSelectedDate'
@@ -67,6 +69,14 @@ export default function RaBills() {
   const [payables, setPayables] = useState<RaPayable[]>([])
   const [filter, setFilter] = useState<Filter>('open')
   const [raising, setRaising] = useState(false)
+  // The programme, for re-tagging which activity a bill is measured against.
+  // A project without one shows no control rather than an empty select.
+  const [activities, setActivities] = useState<ScheduleActivity[]>([])
+
+  useEffect(() => {
+    if (!projectId) return
+    fetchActivities(projectId).then(setActivities).catch(() => setActivities([]))
+  }, [projectId])
 
   const reload = useCallback(async () => {
     if (!projectId) return
@@ -159,7 +169,12 @@ export default function RaBills() {
         <Stagger className="space-y-3">
           {shown.map((b) => (
             <RevealItem key={b.id}>
-              <BillCard bill={b} role={role} onChanged={reload} />
+              <BillCard
+                bill={b}
+                role={role}
+                activities={activities}
+                onChanged={reload}
+              />
             </RevealItem>
           ))}
         </Stagger>
@@ -224,12 +239,15 @@ function PayablesStrip({ rows }: { rows: RaPayable[] }) {
 function BillCard({
   bill: b,
   role,
+  activities,
   onChanged,
 }: {
   bill: RaBillRow
   role: UserRole | null
+  activities: ScheduleActivity[]
   onChanged: () => Promise<void>
 }) {
+  const [retagging, setRetagging] = useState(false)
   const [open, setOpen] = useState(false)
   const [lines, setLines] = useState<RaBillLine[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -239,6 +257,28 @@ function BillCard({
 
   const mayCertify = canCertifyRaBill(role)
   const editable = b.status === 'submitted' || b.status === 'under_review'
+
+  /**
+   * Which activity this bill's certified value counts against.
+   *
+   * Allowed even after certification: 032 freezes the bill's VALUE, and the
+   * activity tag is not a value — a certified bill measured against the wrong
+   * line is precisely the thing that needs correcting.
+   */
+  async function retag(activityId: string) {
+    setRetagging(true)
+    try {
+      await retagRaBill(b.id, activityId || null)
+      toast.success('Activity updated', {
+        description: 'Earned value recalculates; the certified figures do not move.',
+      })
+      await onChanged()
+    } catch (err) {
+      toast.error('Could not change the activity', { description: errText(err) })
+    } finally {
+      setRetagging(false)
+    }
+  }
 
   const loadLines = useCallback(async () => {
     try {
@@ -401,6 +441,31 @@ function BillCard({
               b.claimed_amount > b.net_certified ? 'less' : 'more'
             } certified`}
         </p>
+      )}
+
+      {b.status !== 'cancelled' && activities.length > 0 && (
+        <div className="mt-3 flex items-center gap-2">
+          <label
+            htmlFor={`bill-act-${b.id}`}
+            className="shrink-0 text-xs text-muted-foreground"
+          >
+            Activity
+          </label>
+          <Select
+            id={`bill-act-${b.id}`}
+            value={b.activity_id ?? ''}
+            disabled={retagging}
+            onChange={(e) => void retag(e.target.value)}
+            className="h-9 flex-1 text-xs"
+          >
+            <option value="">Not tied to an activity</option>
+            {activities.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} {a.name}
+              </option>
+            ))}
+          </Select>
+        </div>
       )}
 
       {b.status === 'rejected' && b.reject_reason && (
@@ -721,7 +786,15 @@ function NewBillForm({
   const [claimed, setClaimed] = useState('')
   const [retention, setRetention] = useState('5')
   const [notes, setNotes] = useState('')
+  const [activityId, setActivityId] = useState('')
+  const [activities, setActivities] = useState<ScheduleActivity[]>([])
   const [busy, setBusy] = useState(false)
+
+  // Optional, and hidden entirely on a project with no programme.
+  useEffect(() => {
+    if (!projectId) return
+    fetchActivities(projectId).then(setActivities).catch(() => setActivities([]))
+  }, [projectId])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -743,6 +816,7 @@ function NewBillForm({
         claimed_amount: claimed === '' ? null : Number(claimed),
         retention_pct: Number(retention) || 0,
         notes,
+        activity_id: activityId || null,
       }
       await createRaBill(payload)
       toast.success('Bill recorded', {
@@ -766,6 +840,27 @@ function NewBillForm({
       >
         <VendorField id="ra-vendor" value={vendor} onChange={setVendor} />
       </FieldRow>
+
+      {activities.length > 0 && (
+        <FieldRow
+          label="Schedule activity"
+          htmlFor="ra-activity"
+          hint="Optional. Once certified, this bill's value counts as actual cost against that activity's earned value."
+        >
+          <Select
+            id="ra-activity"
+            value={activityId}
+            onChange={(e) => setActivityId(e.target.value)}
+          >
+            <option value="">Not tied to an activity</option>
+            {activities.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} {a.name}
+              </option>
+            ))}
+          </Select>
+        </FieldRow>
+      )}
 
       <FieldRow
         label="Their bill number"

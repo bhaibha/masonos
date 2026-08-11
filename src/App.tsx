@@ -42,6 +42,7 @@ import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
 import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
+import Schedule from '@/pages/tasks/Schedule'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
 import Snags from '@/pages/tasks/Snags'
@@ -83,6 +84,11 @@ export default function App() {
               <Route index element={<TaskList />} />
               <Route path="new" element={<TaskForm />} />
               <Route path="log" element={<SiteLog />} />
+              {/* B1 Schedule + EVM. No role guard: every project member reads
+                  the programme. The cost half is closed off inside Postgres —
+                  budget_amount is revoked from authenticated and the EVM
+                  functions return a supervisor zero rows. */}
+              <Route path="schedule" element={<Schedule />} />
               {/* Task history across a date range, with CSV export. Its own
                   from/to dates, so it ignores the layout's day picker. */}
               <Route path="history" element={<TaskHistory />} />

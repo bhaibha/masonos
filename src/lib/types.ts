@@ -81,6 +81,16 @@ export interface NewProjectInput {
   status: ProjectStatus
   contract_value: number | null
   management_fee_pct: number | null
+  /**
+   * Build parameters (042). Present here so a founder can set out the whole
+   * programme while creating the project, which is when they actually know
+   * these numbers — going back to fill them in later is how a project ends up
+   * with no schedule at all.
+   */
+  start_date: string | null
+  target_end_date: string | null
+  floors: number | null
+  plot_area_sqft: number | null
 }
 
 export interface NewUserInput {
@@ -1171,6 +1181,8 @@ export interface RaBillRow {
   cancelled_at: string | null
   cancel_reason: string | null
   created_at: string
+  /** schedule activity this bill is measured against (042), or null */
+  activity_id: string | null
 }
 
 export interface RaBillLine {
@@ -1196,6 +1208,8 @@ export interface NewRaBillInput {
   claimed_amount: number | null
   retention_pct: number
   notes: string
+  /** Optional schedule activity (042) — what earned value counts this against. */
+  activity_id?: string | null
 }
 
 export interface NewRaLineInput {
@@ -1534,6 +1548,150 @@ export interface CompanyPnl {
 /** Same three roles as every money module; supervisors see nothing. */
 export function canSeePnl(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+// ---------- Schedule + earned value (B1 / M02, migration 042) ----------
+
+export interface ScheduleActivity {
+  id: string
+  project_id: string
+  code: string
+  name: string
+  planned_start: string
+  planned_end: string
+  planned_qty: number | null
+  qty_unit: string | null
+  pct_complete: number
+  actual_start: string | null
+  actual_end: string | null
+  notes: string | null
+  sort_order: number
+  /** grouping label for the screen only — never a parent row */
+  phase: string | null
+}
+
+export interface NewActivityInput {
+  code: string
+  name: string
+  planned_start: string
+  planned_end: string
+  /** BAC. Write-only for everyone but founder/PM — 042 revoked the column. */
+  budget_amount: number
+  planned_qty: number | null
+  qty_unit: string
+  notes: string
+  /** which group it appears under; blank lands it in "Other activities" */
+  phase: string
+}
+
+export interface ActivityDependency {
+  id: string
+  predecessor_id: string
+  successor_id: string
+  lag_days: number
+}
+
+/** Dates and float, no money — a supervisor is entitled to all of it. */
+export interface ActivityFloat {
+  activity_id: string
+  early_start: string
+  early_finish: string
+  late_start: string
+  late_finish: string
+  total_float: number
+  is_critical: boolean
+}
+
+/**
+ * Every ratio is nullable on purpose. PV = 0 (not started), AC = 0 (nothing
+ * spent) and EV = 0 with money spent are all real states with no defined
+ * index — 042 returns null rather than zero or infinity, and the UI prints
+ * "n/a".
+ */
+export interface ActivityEvm {
+  activity_id: string
+  code: string
+  name: string
+  planned_start: string
+  planned_end: string
+  pct_complete: number
+  bac: number
+  planned_pct: number
+  pv: number
+  ev: number
+  ac: number
+  sv: number
+  cv: number
+  spi: number | null
+  cpi: number | null
+  eac: number | null
+  etc: number | null
+  vac: number | null
+}
+
+export interface ProjectEvm {
+  data_date: string
+  activity_count: number
+  bac: number
+  pv: number
+  ev: number
+  ac: number
+  sv: number
+  cv: number
+  spi: number | null
+  cpi: number | null
+  eac: number | null
+  etc: number | null
+  vac: number | null
+  /** EV / BAC — physical progress weighted by budget, not an average of % */
+  pct_complete: number | null
+}
+
+/** The four inputs the whole programme is generated from. */
+export interface GenerateScheduleInput {
+  start: string
+  end: string
+  floors: number
+  plot_area_sqft: number
+  /** true wipes an existing programme — refused if money is tagged to it */
+  replace?: boolean
+}
+
+export interface GenerateScheduleResult {
+  activities_created: number
+  links_created: number
+  /** how long the method says this build takes at this size */
+  natural_days: number
+  /** how long the requested dates allow */
+  target_days: number
+  /** target ÷ natural. Below ~0.7 the programme is aggressive. */
+  compression: number
+}
+
+/**
+ * Below this, the requested end date demands a build materially faster than
+ * the template's durations. The schedule still generates — it is the founder's
+ * call — but the screen says so plainly first.
+ */
+export const SCHEDULE_TIGHT_BELOW = 0.7
+
+/** Cost performance is a money surface. Supervisors see the schedule only. */
+export function canSeeEvm(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+/** Who may add activities, set budgets and draw dependencies. */
+export function canEditSchedule(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/**
+ * Who may move the progress slider. Supervisors included — they are the ones
+ * standing in front of the slab. `fn_set_activity_progress` writes three
+ * columns and cannot reach the budget.
+ */
+export function canLogProgress(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
 }
 
 // ---------- Company overheads (M29 part 2, migrations 040 + 041) ----------
@@ -2108,6 +2266,8 @@ export interface ExpenseRow extends VoidFields {
   vendor_display: string | null
   /** false = free-text vendor (vendor_id null but a name was typed) */
   vendor_registered: boolean
+  /** schedule activity this cost is measured against (042), or null */
+  activity_id: string | null
 }
 
 export interface NewExpense {
@@ -2122,6 +2282,12 @@ export interface NewExpense {
   source: ExpenseSource
   invoice_no: string
   receipt_path: string | null
+  /**
+   * Optional schedule activity (042). Untagged spend still hits the ledger and
+   * the P&L — it just doesn't reach earned value, because AC has to be the cost
+   * of a specific piece of work to mean anything.
+   */
+  activity_id?: string | null
 }
 
 export interface ExpenseFilters {

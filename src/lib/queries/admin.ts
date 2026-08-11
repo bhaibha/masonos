@@ -40,6 +40,10 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
       status: input.status,
       contract_value: input.contract_value,
       management_fee_pct: input.management_fee_pct,
+      start_date: input.start_date,
+      target_end_date: input.target_end_date,
+      floors: input.floors,
+      plot_area_sqft: input.plot_area_sqft,
     })
     .select(WRITE_RETURN)
     .single()
@@ -60,6 +64,14 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
   }
 }
 
+/**
+ * Deliberately does NOT write the build parameters (start/end/floors/area).
+ *
+ * 010 revoked SELECT on some project columns and the edit form cannot read
+ * these four back, so it would post nulls and silently wipe what generated the
+ * programme. They are set once at creation, and afterwards through the
+ * Schedule tab's rebuild, which writes them as part of generating.
+ */
 export async function updateProject(
   id: string,
   input: NewProjectInput,

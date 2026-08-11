@@ -7,11 +7,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
 import { createExpense, fetchCategories } from '@/lib/queries/expenses'
+import { fetchActivities } from '@/lib/queries/schedule'
 import { compressReceipt, uploadReceipt } from '@/lib/storage'
 import {
   EXPENSE_SOURCES,
   type ExpenseCategory,
   type ExpenseSource,
+  type ScheduleActivity,
 } from '@/lib/types'
 import type { MoneyContext } from './MoneyLayout'
 
@@ -30,9 +32,11 @@ export default function ExpenseForm() {
   const navigate = useNavigate()
 
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
+  const [activities, setActivities] = useState<ScheduleActivity[]>([])
 
   const [expenseDate, setExpenseDate] = useState(today())
   const [categoryId, setCategoryId] = useState('')
+  const [activityId, setActivityId] = useState('')
   const [vendor, setVendor] = useState<VendorValue>(EMPTY_VENDOR)
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
@@ -51,6 +55,12 @@ export default function ExpenseForm() {
   useEffect(() => {
     fetchCategories().then(setCategories).catch(() => setCategories([]))
   }, [])
+
+  // Optional. A project with no programme simply doesn't show the field —
+  // better than an empty select nobody can explain.
+  useEffect(() => {
+    fetchActivities(projectId).then(setActivities).catch(() => setActivities([]))
+  }, [projectId])
 
   useEffect(() => {
     return () => {
@@ -122,6 +132,7 @@ export default function ExpenseForm() {
         source,
         invoice_no: invoiceNo,
         receipt_path: receiptPath,
+        activity_id: activityId || null,
       })
 
       navigate('/money')
@@ -160,6 +171,27 @@ export default function ExpenseForm() {
           ))}
         </Select>
       </FieldRow>
+
+      {activities.length > 0 && (
+        <FieldRow
+          label="Schedule activity"
+          htmlFor="activity"
+          hint="Optional. Tagging it is what lets this spend count towards earned value — untagged, it still hits the ledger and the P&L."
+        >
+          <Select
+            id="activity"
+            value={activityId}
+            onChange={(e) => setActivityId(e.target.value)}
+          >
+            <option value="">Not tied to an activity</option>
+            {activities.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.code} {a.name}
+              </option>
+            ))}
+          </Select>
+        </FieldRow>
+      )}
 
       <FieldRow
         label="Vendor"
