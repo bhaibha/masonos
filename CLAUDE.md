@@ -121,7 +121,37 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_schedule_template`, `fn_generate_schedule`, `fn_retag_expense`,
   `fn_retag_ra_bill`, plus the column grant that withholds
   `schedule_activities.budget_amount`).
-  So: **001–042 ALL APPLIED.** Next migration = 043.
+  So: **001–042 ALL APPLIED.**
+  **043 WRITTEN, NOT YET APPLIED** — B2 QA/QC (`itp_templates`,
+  `itp_template_items`, `itp_items`, `inspections`, `ncrs`,
+  `itp_type`/`itp_status`/`inspection_result`/`ncr_severity`/`ncr_status`,
+  `fn_apply_itp_template`, `fn_save_itp_template`, `fn_request_inspection`,
+  `fn_record_inspection`, `fn_set_ncr_status`, `fn_blocking_holds`,
+  `fn_qa_summary`, `fn_delete_itp_item`, plus **`fn_set_activity_progress`
+  re-emitted with the hold-point block**). Ask before building on it.
+  **044 WRITTEN, NOT YET APPLIED** — five seeded IS-referenced ITP templates
+  (structural/RCC, masonry and plaster, waterproofing, finishes, MEP), 52
+  points. Run AFTER 043 — it seeds tables 043 creates.
+  **045 WRITTEN, NOT YET APPLIED** — checklist depth (`itp_template_checks`,
+  `itp_checks`, `inspection_checks`, `check_result`, `fn_inspection_checks`,
+  plus `fn_apply_itp_template` / `fn_save_itp_template` re-emitted carrying
+  checklists and **`fn_record_inspection` re-emitted with a new arity — the old
+  one is dropped first**). Seeds 127 questions across 20 of 044's points.
+  **043–047 ALL APPLIED** (confirmed 2026-08-12). 045 aborted first time at
+  `fn_inspection_checks` — `create or replace` cannot widen a return type and
+  046 adds a column to it — leaving TWO arities of `fn_record_inspection` and
+  the 127 seeded questions unrun; **047 repaired both** and 045's file is
+  corrected in the repo for future rebuilds.
+  Verified 2026-08-12: one arity each of `fn_record_inspection` and
+  `fn_inspection_checks`; 8 templates / 72 points / 627 questions (127 on the
+  five IS plans, 500 on the firm's own twenty sheets).
+  So: **001–047 ALL APPLIED.** Next migration = 048.
+  *(043/044/046, for the record:)*
+  **046 APPLIED** — the firm's OWN twenty on-site checklists
+  transcribed verbatim (500 questions, 3 discipline templates, 20 points),
+  `section` on template/live/answer checks, `inspections.location`, plus
+  `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
+  `fn_inspection_checks` re-emitted. Next migration = 047.
 - **Owner-run views cannot be verified from the SQL editor (038).** The dashboard connects as
   `postgres`, so `auth.uid()` is NULL, `my_role()` is NULL and `is_founder()` is false — every
   is_member/role-gated view returns ZERO rows there, and an aggregate over that empty set returns
@@ -141,6 +171,51 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   row, and each of them would be one edit away from silently including it again. A separate table
   keeps `expenses` meaning exactly what it has always meant: money spent ON A SITE. Reach for a new
   table whenever a record would be a member of a set that every query already filters on.
+- **`create or replace function` cannot widen a return type (045→046, found in production).** It
+  fails with 42P13 "cannot change return type of existing function", and in a multi-statement script
+  that abort leaves everything AFTER it unrun — in this case the seed data — while everything before
+  it stands. Any function a later migration might extend must be written `drop function if exists`
+  then `create`, not `create or replace`. The verify block that counts arities is what caught it;
+  keep writing that check.
+- **Take the client's own form, do not improve it (046).** The founder's twenty site checklists went
+  in verbatim — their wording, their spellings, their section headings, their order. An app that
+  quietly tidies the phrasing leaves the paper copy and the phone copy saying different things, and
+  the site trusts the paper. Same rule for labels: their sheet reads YES / NO / N/A, so the screen
+  does, while the stored enum stays pass/fail/na. Relabelling is a screen decision; re-cutting an
+  enum that already has answers stored against it is not.
+- **A summary must not be able to contradict its own evidence (045).** An inspection's headline
+  result is DERIVED from the checklist answers inside `fn_record_inspection`, and an inspector who
+  fails a check and then selects "pass" is overruled. The sub-answers are what somebody points at in
+  two years; the headline is a convenience. Anywhere a record has both a detail level and a summary,
+  compute the summary — do not accept it as input.
+- **Snapshot the question, not just the answer (045).** `inspection_checks.question` stores the
+  wording AS ASKED alongside the FK to the live check. Edit or delete the question next month and
+  every completed inspection still reads correctly. Same family as 032's certified-bill snapshot: a
+  record that restates itself when its source is edited is not a record.
+- **Cite a standard, never transcribe it (044).** IS codes are copyrighted and sold by BIS. The
+  seeded ITP templates carry each standard's NUMBER and TITLE — facts, and the normal way an ITP
+  states its basis — plus acceptance criteria written from scratch, phrased "as specified" or "per
+  drawing" wherever the real limit lives in the code or the project spec. That is not a workaround;
+  it is how a working ITP reads, because the binding number is on the drawing. Any future seeded
+  content follows the same line, and anything unverified is left BLANK rather than guessed.
+- **Don't add a fifth role to solve one module (043).** B2 asked for "founder/PM or a QA role".
+  `profiles.role` is the four-value enum EVERY policy since 001 checks, and `designation` is
+  display-only by rule — a fifth value would mean re-auditing every policy in the database for one
+  feature. A quality engineer gets the `pm` access role with the "Quality Engineer" job title, which
+  is exactly what the designation→role mapping exists for. Reach for the existing mapping before
+  reaching for the enum; if QA ever genuinely needs separating, that is its own migration with its
+  own audit, not a side effect.
+- **A hold point with an override is a checklist (043).** `fn_set_activity_progress` refuses to
+  raise progress on an activity whose predecessor carries an unsigned hold, names the point, and has
+  no bypass — the difference between a hold point and a checklist is precisely that you cannot walk
+  past it. What it blocks is RECORDING, not the work: the app cannot stop a pour, but it can refuse
+  to accept a claim of progress past an unsigned hold. Reducing progress stays allowed, or the block
+  would prevent correcting a mistake.
+- **One act, one transaction, one code path (043).** `fn_record_inspection` writes the inspection,
+  moves the ITP status AND raises the NCR on a fail. `inspections` deliberately has NO insert policy
+  at all, so that function is the only way an inspection can exist — two paths would eventually
+  produce a failed inspection whose NCR was never raised, which is exactly how a defect gets
+  forgotten.
 - **`create table if not exists` does NOT add a column you added later (042, found in testing).** A
   migration that is edited after someone has already run it will silently skip the new column, and
   the first statement that names it — a column grant, an insert, a view — aborts the whole script.

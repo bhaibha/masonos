@@ -1,6 +1,7 @@
 import {
   Archive,
   ArrowLeft,
+  BadgeCheck,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -27,6 +28,7 @@ import {
   fetchRecentActivity,
 } from '@/lib/queries/projectDetail'
 import { fetchSafetySummary } from '@/lib/queries/safety'
+import { fetchQaSummary } from '@/lib/queries/qa'
 import { fetchSnagSummary } from '@/lib/queries/snags'
 import { fetchProjectContract } from '@/lib/queries/variations'
 import {
@@ -50,6 +52,7 @@ import {
   type SafetySummary,
   DLP_WARN_DAYS,
   SNAG_SEVERITY_LABEL,
+  type QaSummary,
   type SnagSummary,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -70,6 +73,7 @@ export default function ProjectDetail() {
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
   const [safety, setSafety] = useState<SafetySummary | null>(null)
   const [snags, setSnags] = useState<SnagSummary | null>(null)
+  const [qa, setQa] = useState<QaSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
 
   // Scope every tab to this project the moment the screen opens.
@@ -128,6 +132,10 @@ export default function ProjectDetail() {
 
     // Counts and DLP position both come from fn_project_snag_summary — no
     // tallying here.
+    // Same shape as the snag summary: one server-side function, so the card
+    // and the QA screen can never disagree about how many NCRs are open.
+    fetchQaSummary(id).then(setQa).catch(() => setQa(null))
+
     fetchSnagSummary(id)
       .then((s) => {
         if (!cancelled) setSnags(s)
@@ -212,6 +220,10 @@ export default function ProjectDetail() {
 
         <RevealItem className="h-full">
           <SnagsCard snags={snags} onOpen={() => navigate('/tasks/snags')} />
+        </RevealItem>
+
+        <RevealItem className="h-full">
+          <QaCard qa={qa} onOpen={() => navigate('/tasks/qa')} />
         </RevealItem>
 
         <RevealItem className="h-full sm:col-span-2">
@@ -708,6 +720,70 @@ function ArchiveCard({
         </p>
       </section>
     </FadeUp>
+  )
+}
+
+/**
+ * Quality at a glance.
+ *
+ * Blocking hold points come first and in danger colour, because that is the
+ * only line on this whole screen that means work has stopped. Everything else
+ * on the card is a number; that one is an instruction.
+ */
+function QaCard({
+  qa: q,
+  onOpen,
+}: {
+  qa: QaSummary | null
+  onOpen: () => void
+}) {
+  return (
+    <SectionCard
+      icon={BadgeCheck}
+      title="Quality"
+      action="View QA"
+      onAction={onOpen}
+    >
+      {q === null ? (
+        <Skeleton className="h-8 w-40" />
+      ) : (
+        <>
+          {q.holds_blocking > 0 && (
+            <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
+              {q.holds_blocking} hold point{q.holds_blocking === 1 ? '' : 's'}{' '}
+              blocking work
+            </p>
+          )}
+
+          <div className="flex gap-8">
+            <Stat
+              label="Open NCRs"
+              value={String(q.open_ncrs)}
+              tone={
+                q.ncr_critical > 0
+                  ? 'danger'
+                  : q.open_ncrs > 0
+                    ? 'warning'
+                    : undefined
+              }
+            />
+            <Stat
+              label="Pass rate"
+              value={q.pass_rate === null ? 'n/a' : `${q.pass_rate}%`}
+            />
+          </div>
+
+          <p className="mt-4 text-xs text-muted-foreground">
+            {q.itp_total === 0
+              ? 'No inspection plan set for this project yet.'
+              : `${q.itp_passed} of ${q.itp_total} inspection points passed` +
+                (q.holds_pending > 0
+                  ? ` · ${q.holds_pending} hold${q.holds_pending === 1 ? '' : 's'} pending`
+                  : '')}
+          </p>
+        </>
+      )}
+    </SectionCard>
   )
 }
 

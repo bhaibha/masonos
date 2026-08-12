@@ -2234,3 +2234,319 @@ refuse bad input have not been exercised. What remains before it can be ticked:
    the Indian number format.
 5. **Re-tagging**: move an expense between two activities and watch AC move on both without any
    ledger or P&L figure changing.
+
+---
+
+## Session — B2 QA/QC (Module 17), migration 043
+
+Confirmed at start: **001–042 ALL APPLIED**, next = 043.
+
+- [x] **Migration 043** — five tables (`itp_templates`, `itp_template_items`, `itp_items`,
+      `inspections`, `ncrs`), five enums, RLS, audit triggers on all three live tables, and eight
+      functions plus a re-emitted `fn_set_activity_progress`.
+- [x] `src/lib/queries/qa.ts`, `src/pages/tasks/Qa.tsx` (three tabs: inspection plan, NCRs,
+      templates), `src/lib/ncrPdf.ts`, a QA tab in TasksLayout and a Quality card on Project Detail.
+
+### The five decisions
+
+**No fifth role.** The brief asked for "founder/PM or a QA role". `profiles.role` is the four-value
+enum EVERY policy since 001 checks, and CLAUDE.md is explicit that `designation` must never become
+load-bearing. A fifth value means re-auditing every policy in the database for one module. A quality
+engineer gets the `pm` access role with the "Quality Engineer" job title — precisely what the
+designation→role mapping exists for. Recorded in CLAUDE.md so it isn't relitigated.
+
+**A hold point with an override is a checklist.** `fn_set_activity_progress` refuses to RAISE
+progress on an activity whose predecessor carries an unsigned hold, and names the point in the
+refusal so the way out is obvious. There is no bypass. What it blocks is RECORDING, not the work —
+the app cannot stop a pour, but it can refuse to accept a claim of progress past an unsigned hold.
+Reducing progress stays allowed, or the block would prevent correcting a mistake.
+
+**One act, one transaction, one code path.** `fn_record_inspection` writes the inspection, moves the
+ITP status AND raises the NCR. `inspections` has no INSERT policy at all, so that function is the
+only way an inspection can come into existence — a second path would eventually produce a failed
+inspection whose NCR was never raised, which is exactly how a defect gets forgotten.
+
+**Supervisors request, they do not sign off.** Not distrust: an inspection record IS the approval,
+the row somebody points at in two years when a slab cracks. `fn_request_inspection` makes the
+request a real timestamped act against their name, visible to the PM. Same reasoning as 042's
+progress RPC — a policy loose enough to let them set `status` would let them set it to `passed`.
+
+**Templates copy, they do not link.** `fn_apply_itp_template` inserts rows and records the template
+id as provenance only. Editing a template next year must never restate an inspection signed off last
+year. It refuses a second application of the same template, because the duplicate would look
+identical to the original until somebody signed off the wrong one. `fn_save_itp_template` runs the
+other way, turning a project's worked-out plan into the firm standard.
+
+### Smaller calls
+
+Conditional pass raises an NCR **and** passes the point — that is what conditional means on site:
+the next stage may proceed and something still has to be put right. Treating it as a fail would stop
+the job; as a clean pass would lose the defect. A failed inspection writes NO signatory, because
+nothing was signed off. A hold that fails auto-raises its NCR as **major**, since it stopped the
+job by definition. The pass rate counts INSPECTIONS rather than current ITP status, so a point that
+failed, was corrected and passed shows as one pass and one fail — counting status would hide every
+defect ever fixed. `holds_blocking` counts only holds whose activity actually has a successor: a
+hold on the last activity in a chain stops nothing, and reporting it as blocking would cry wolf.
+
+`npx tsc -b --force` clean.
+
+**Run migration 043 before testing.**
+
+### Addendum — NCRs file to the document vault (no migration)
+
+Asked where an NCR ends up in Docs. It didn't — the first cut only downloaded the PDF, unlike the
+SI/PO/VO which file themselves. Fixed: every NCR card now has **PDF** (download) and **File to Docs**,
+landing in **Docs → QC Certificates**, the folder that already existed for exactly this.
+
+Filed **not confidential**, deliberately and for the same reason as the Site Instruction: an NCR
+carries no rupee figure by design, and the people who most need to read one are the supervisor and
+the trades doing the correction.
+
+Filing is a **snapshot**, as with every other document in this app — the PDF reads as the NCR stood
+when it was filed. File it again after the correction and you get a second, later copy; both stay,
+which is the record. The live status is always on the QA screen.
+
+---
+
+## Addendum — five seeded IS-referenced ITP templates, migration 044
+
+Asked to "fetch the inspection plan from IS standard", and for **separate templates per discipline**.
+
+| Template | Points | Holds |
+|---|---|---|
+| IS — Structural / RCC | 15 | 4 |
+| IS — Masonry and plaster | 9 | 3 |
+| IS — Waterproofing | 7 | 4 |
+| IS — Finishes | 9 | 2 |
+| IS — MEP services | 12 | 6 |
+| **Total** | **52** | **19** |
+
+Separate rather than one plan, as asked: a job where a consultant owns the MEP applies the other
+four and leaves that one alone. Apply several and their points sit side by side in one plan, ordered
+by the sort_order bands (10xx structural, 20xx masonry, 30xx waterproofing, 40xx finishes, 50xx MEP).
+
+### What is and is not in these templates
+
+**Nothing is transcribed from any standard.** IS codes are copyrighted and sold by BIS. Each point
+carries the standard's NUMBER and TITLE — facts, and the normal way an ITP states its basis — plus
+an acceptance criterion written from scratch, phrased "as specified" or "per drawing" wherever the
+actual limit lives in the code or the project specification. That is not a workaround; it is how a
+working ITP reads, because the binding number is on the drawing, not in the plan. **The site
+engineer still needs the firm's copies of the codes** — these points say what to check and where the
+requirement comes from, not what value to accept.
+
+**Every number and title was verified** against BIS listings and public sources on 2026-08-11:
+IS 456:2000, IS 269:2015, IS 1786:2008, IS 2502:1963, IS 383:2016, IS 2386, IS 10262, IS 1199 Part
+1:2018, IS 516 Part 1:2021, IS 13920:2016, IS 6313 Part 2:2022, IS 2185 Parts 1 and 3, IS 2212:1991,
+IS 1905:1987, IS 1661, IS 3067:1988, IS 1346:1991, IS 2645:2003, IS 15622:2017, IS 2571:1970,
+IS 2395 Part 2:1994, IS 732:2019, IS 3043, IS 2065:1983, IS 5329:1983.
+
+**Five points carry NO standard reference** — door and window frames, shutters and hardware, false
+ceilings, and the two HVAC points. Nothing was verified for them in that pass, so the field is blank
+rather than guessed. A wrong IS number printed on an NCR shown to a client is worse than none.
+
+### The hold points
+
+Nineteen of the 52, and only where the next stage buries the evidence: reinforcement and formwork
+before a pour, deshuttering, both ponding tests, the concealed-water pressure test, earthing, wall
+junctions and plaster preparation, tiling setting-out, paint preparation. Everything else is a
+witness or a review. A plan where everything is a hold stops being a plan and becomes an obstacle,
+and site teams route around obstacles.
+
+### Two mechanical notes
+
+`itp_templates.created_by` is now nullable — a seeded template has no author, and `auth.uid()` is
+NULL in the SQL editor so the seed would otherwise fail the NOT NULL.
+
+Re-runnable: the template insert is `on conflict do nothing` on the normalised-name index, and the
+points seed only when the template has none. A second run neither duplicates them nor overwrites a
+founder's edits.
+
+**Run migration 043 first, then 044** — 044 seeds tables that 043 creates.
+
+### Fix — templates could not be opened
+
+Reported: "I am not able to open the templates." Correct — `TemplatesTab` rendered each template as
+a static line with its name and point count, and `fetchTemplateItems` sat in `qa.ts` with no caller.
+There was no way in.
+
+Templates are now expandable cards. Tapping one loads its points and shows, for each: the type badge
+(hold / witness / review), the stage, the point, the acceptance criterion, the standard reference and
+the required-by stage. Points load lazily on first open — five seeded plans hold 52 points between
+them, and fetching all of them to draw five collapsed rows is work nobody asked for.
+
+**Read-only by design.** A template is changed by applying it to a project, editing the points there
+and saving it back as a new standard. Editing in place would restate plans already applied to live
+jobs — the same reason `fn_apply_itp_template` copies rather than links.
+
+A point with no verified standard now prints "No standard reference — add your own" rather than
+leaving a silent gap, so the five deliberate blanks read as a decision instead of an oversight.
+
+The empty state also now names the likely cause: if the seeded IS plans are missing, migration 044
+has not been run.
+
+---
+
+## Session — checklist depth in QA/QC, migration 045
+
+Additive, so it lands safely whether or not 043/044 have been run — but it needs 043's tables, so
+the order is **043 → 044 → 045**.
+
+- [x] **Migration 045** — `itp_template_checks`, `itp_checks`, `inspection_checks`, the
+      `check_result` enum, `fn_inspection_checks`, `fn_apply_itp_template` and
+      `fn_save_itp_template` re-emitted carrying checklists, and `fn_record_inspection` re-emitted
+      with a new arity (the 043 arity is dropped first — the 035 overload trap).
+- [x] **127 seeded questions across 20 of 044's points**: reinforcement, formwork, excavation,
+      deshuttering, cube sampling, wall junctions, plaster preparation, masonry first course, both
+      ponding tests, substrate and penetrations, tiling setting-out and bedding, paint preparation,
+      the concealed-water pressure test, earthing, conduiting, insulation testing, drainage flow.
+- [x] Mobile-first runner, the checklist editor on each point, the answers on each history entry,
+      and the checks visible inside each template.
+
+### The decisions
+
+**The result is derived, not declared.** All answers pass or n/a → pass; any fail → fail, or
+conditional if the inspector says so. An inspector who fails a check and then selects "pass" is
+overruled by `fn_record_inspection`. The sub-answers are the evidence somebody points at in two
+years; the headline is a summary of them, and **a summary that can contradict its own evidence is
+worse than no summary.** The screen shows the same derivation live, so the banner never disagrees
+with the outcome.
+
+**Unanswered questions are refused.** A checklist with blanks records an interruption, not an
+inspection.
+
+**One NCR per failed check**, naming the exact question — "Failed check on 'Reinforcement before
+concreting': Cover blocks of the correct thickness are fixed at the required spacing". Three
+failures are three defects, each with its own correction, re-inspection and closing date. A single
+lumped NCR would close the moment the easiest of them was fixed.
+
+**The question text is snapshotted** on the answer alongside the FK to the live check. Edit or
+delete the question next month and every completed inspection still reads correctly. Same family as
+032's certified-bill snapshot. The FK is ON DELETE SET NULL for the same reason — removing a
+question from the plan must not delete the answer somebody gave to it on site.
+
+**N/A is not a soft pass.** A question that did not apply to this pour is a different fact from one
+that was checked and found good, and the pass rate must not conflate them.
+
+**`inspection_checks` has no write policy at all** — `fn_record_inspection` is the only writer, the
+same rule 043 applied to `inspections`. An answer cannot exist without its inspection, and a failed
+answer cannot exist without its NCR.
+
+### Mobile-first, specifically
+
+One question per full-width row, three 48px targets (Pass / Fail / N/A), the whole thing in a single
+scrolling column. Tapping **Fail** opens that question's remark box automatically — the moment
+somebody fails a check is the moment they have something to say about it, and that remark becomes
+the NCR text. Photos attach per question, not just per inspection, so the picture sits with the
+defect it shows. A progress bar counts answered questions and turns red the moment one fails.
+
+`npx tsc -b --force` clean.
+
+**Run migrations 043, 044 and 045 in that order before testing.**
+
+---
+
+## Session — the firm's own checklists, in their own format (migration 046)
+
+The founder sent the twenty **"CHECKLIST FOR ON-SITE INSPECTION"** sheets Your Masons already uses,
+with the note that the checklist should be a fill-in form where the person checking just ticks the
+box next to the point. It is now exactly that.
+
+### Getting the content out of the PDFs
+
+`pdftotext -layout` looked right and was wrong: on a wrapped row the SL.NO sits on the middle line of
+its own description block, so a line-based parser attached each fragment to the row above. A
+word-coordinate pass was no better — words on one visual row differ by fractions of a point and
+naive rounding split them.
+
+The sheets have ruled table borders, so **`pdfplumber.extract_tables()`** reads them as tables and
+the wrapping problem disappears. **500 questions and 59 section headings** across the 20 sheets,
+verified against the source counts.
+
+- [x] **Migration 046** — three discipline templates carrying all twenty sheets as ITP points:
+      *Your Masons — Earthworks & substructure* (4), *— RCC* (12), *— Masonry & plaster* (4).
+      `section` added to template checks, live checks and stored answers; `inspections.location`;
+      `fn_apply_itp_template`, `fn_save_itp_template`, `fn_record_inspection` and
+      `fn_inspection_checks` re-emitted to carry both.
+
+### Decisions
+
+**Nothing was reworded.** All 500 questions are transcribed as written — their spellings, their IS
+references, their "as per drawing" phrasing, their order, their headings. An app that quietly tidies
+the wording leaves the paper copy and the phone copy saying different things, and on site the paper
+wins. Recorded in CLAUDE.md.
+
+**YES / NO / N/A on screen, pass / fail / na in the database.** Their sheet reads YES / NO / N/A and
+every question is phrased so YES is the compliant answer, which makes the mapping exact. Only the
+labels changed. Re-cutting an enum that already has answers stored against it, to chase a caption,
+would be the wrong trade.
+
+**Sections are printed where the form prints them** — a band across the row when the heading changes:
+PRE EXECUTION CHECKS, CHECKS DURING EXECUTION, POST EXECUTION CHECKS, and the BEAM / SLAB
+sub-headings on the reinforcement sheets. Without them a 32-row list is a wall.
+
+**LOCATION joins date on the header.** Project and date the app already knows; location is the field
+that distinguishes two inspections of the same activity — "Block A, first floor" against "Block B,
+ground floor" — and it now also becomes the NCR's area, which is where somebody looks first.
+
+**One sheet = one ITP point.** That is what the paper form is: one activity, one list, one signature.
+Reinforcement, formwork, excavation and masonry marking are hold points because the next operation
+buries the evidence; concreting and the finishing trades are witness.
+
+`npx tsc -b --force` clean.
+
+**Run migrations 043, 044, 045 and 046 in that order before testing.**
+
+---
+
+## Migration 045 aborted in production — repaired by 047 (2026-08-12)
+
+043, 044 and 046 applied. **045 failed at its last function:**
+
+    ERROR: 42P13: cannot change return type of existing function
+    HINT:  Use DROP FUNCTION fn_inspection_checks(uuid) first.
+
+My bug. `fn_inspection_checks` was written `create or replace`, and 046 widens its return type by
+one column (`section`). `create or replace` cannot change a return type at all.
+
+### What the abort left behind
+
+**Two arities of `fn_record_inspection`** — 046's verify block reported it, which is precisely why
+that check goes into every migration that re-emits a function (the 035 lesson). With two overloads a
+PostgREST call by name is ambiguous and fails at run time, so **the app could not record an
+inspection at all** until one was dropped. The verify block earned its place here.
+
+**045's 127 seeded questions never ran** — the seed block sits after the statement that failed.
+
+### The repair
+
+- [x] **047** — drops the 043 `(uuid,text,date,text,text[])` and 045
+      `(uuid,text,date,text,text[],jsonb)` signatures, leaving 046's 7-argument one; redefines
+      `fn_inspection_checks` drop-then-create at its 046 shape; re-seeds the 127 questions, skipping
+      any point that already has some. Idempotent.
+- [x] **045's file corrected in the repo** — `drop function if exists` before the create — so a
+      rebuild from scratch never hits this.
+
+### The lesson, now in CLAUDE.md
+
+`create or replace function` cannot widen a return type. Any function a later migration might extend
+must be drop-then-create from the start. And in a multi-statement script an abort leaves everything
+before it applied and everything after it unrun — which is why the arity check belongs at the bottom
+of every migration that touches a function signature.
+
+**Run migration 047.**
+
+### 047 applied — QA/QC schema is clean (2026-08-12)
+
+Verified from the founder's run:
+
+* `fn_record_inspection` → **1 arity**, `fn_inspection_checks` → **1**. The ambiguity that stopped
+  inspections being recorded is gone.
+* **127** questions across the five IS plans — Structural/RCC 34, Masonry 17, Waterproofing 25,
+  Finishes 18, MEP 33 — which is exactly the seed 045 never reached.
+* **500** across the firm's own twenty sheets — Earthworks & substructure 73, RCC 314,
+  Masonry & plaster 113.
+* **8 templates, 72 inspection points, 627 questions** in total.
+
+**001–047 all applied.** B2 stays `[~]`: the schema is right, nothing has been exercised in the app
+yet.

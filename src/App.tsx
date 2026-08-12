@@ -42,6 +42,7 @@ import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
 import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
+import Qa from '@/pages/tasks/Qa'
 import Schedule from '@/pages/tasks/Schedule'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
@@ -89,6 +90,11 @@ export default function App() {
                   budget_amount is revoked from authenticated and the EVM
                   functions return a supervisor zero rows. */}
               <Route path="schedule" element={<Schedule />} />
+              {/* B2 QA/QC. No role guard: every project member reads the
+                  inspection plan and raises NCRs. Sign-off and closure are
+                  founder/PM, enforced inside fn_record_inspection and
+                  fn_set_ncr_status rather than by hiding a button. */}
+              <Route path="qa" element={<Qa />} />
               {/* Task history across a date range, with CSV export. Its own
                   from/to dates, so it ignores the layout's day picker. */}
               <Route path="history" element={<TaskHistory />} />

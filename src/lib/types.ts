@@ -1550,6 +1550,264 @@ export function canSeePnl(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm', 'accounts'].includes(role)
 }
 
+// ---------- QA/QC — ITP, hold points, NCRs (B2 / M17, migration 043) ----------
+
+export type ItpType = 'witness' | 'hold' | 'review'
+export type ItpStatus = 'pending' | 'requested' | 'passed' | 'failed'
+export type InspectionResult = 'pass' | 'fail' | 'conditional'
+export type NcrSeverity = 'minor' | 'major' | 'critical'
+export type NcrStatus =
+  | 'open'
+  | 'corrected'
+  | 'closed'
+  | 'rejected'
+  | 'cancelled'
+
+export const ITP_TYPES: { value: ItpType; label: string; hint: string }[] = [
+  {
+    value: 'hold',
+    label: 'Hold',
+    hint: 'Blocks the next stage until it passes',
+  },
+  {
+    value: 'witness',
+    label: 'Witness',
+    hint: 'Someone attends; work continues',
+  },
+  { value: 'review', label: 'Review', hint: 'Records and documents checked' },
+]
+
+export const ITP_TYPE_LABEL = Object.fromEntries(
+  ITP_TYPES.map((t) => [t.value, t.label]),
+) as Record<ItpType, string>
+
+export const ITP_STATUS_LABEL: Record<ItpStatus, string> = {
+  pending: 'Not yet inspected',
+  requested: 'Inspection requested',
+  passed: 'Passed',
+  failed: 'Failed',
+}
+
+export const NCR_SEVERITIES: { value: NcrSeverity; label: string }[] = [
+  { value: 'minor', label: 'Minor' },
+  { value: 'major', label: 'Major' },
+  { value: 'critical', label: 'Critical' },
+]
+
+export const NCR_SEVERITY_LABEL = Object.fromEntries(
+  NCR_SEVERITIES.map((s) => [s.value, s.label]),
+) as Record<NcrSeverity, string>
+
+export const NCR_STATUS_LABEL: Record<NcrStatus, string> = {
+  open: 'Open',
+  corrected: 'Corrected — awaiting re-inspection',
+  closed: 'Closed',
+  rejected: 'Correction rejected',
+  cancelled: 'Cancelled',
+}
+
+export interface ItpTemplate {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  item_count: number
+}
+
+export interface ItpTemplateItem {
+  id: string
+  template_id: string
+  stage: string
+  description: string
+  acceptance_criteria: string | null
+  inspection_type: ItpType
+  reference_standard: string | null
+  required_by_stage: string | null
+  sort_order: number
+}
+
+export interface ItpItem {
+  id: string
+  project_id: string
+  activity_id: string | null
+  activity_label: string | null
+  stage: string
+  description: string
+  acceptance_criteria: string | null
+  inspection_type: ItpType
+  reference_standard: string | null
+  required_by_stage: string | null
+  status: ItpStatus
+  template_id: string | null
+  sort_order: number
+  notes: string | null
+  requested_at: string | null
+  requested_by: string | null
+  signed_off_at: string | null
+  signed_off_by: string | null
+}
+
+export interface NewItpItemInput {
+  activity_id: string | null
+  stage: string
+  description: string
+  acceptance_criteria: string
+  inspection_type: ItpType
+  reference_standard: string
+  required_by_stage: string
+  notes: string
+}
+
+/* ---- checklist depth (migration 045) ---- */
+
+/** Three values, and n/a is not a soft pass — see 045's header. */
+export type CheckResult = 'pass' | 'fail' | 'na'
+
+/**
+ * The firm's sheets read YES / NO / N/A, so that is what the app says.
+ *
+ * The stored enum stays pass / fail / na — every question on those sheets is
+ * phrased so YES is the compliant answer, which makes the mapping exact.
+ * Relabelling is a screen decision; re-cutting an enum that already has
+ * answers stored against it is not.
+ */
+export const CHECK_RESULTS: { value: CheckResult; label: string }[] = [
+  { value: 'pass', label: 'YES' },
+  { value: 'fail', label: 'NO' },
+  { value: 'na', label: 'N/A' },
+]
+
+export const CHECK_LABEL = Object.fromEntries(
+  CHECK_RESULTS.map((c) => [c.value, c.label]),
+) as Record<CheckResult, string>
+
+export interface ItpCheck {
+  id: string
+  itp_item_id: string
+  question: string
+  guidance: string | null
+  /** the paper form's PRE / DURING / POST heading this question sits under */
+  section: string | null
+  sort_order: number
+}
+
+export interface ItpTemplateCheck {
+  id: string
+  template_item_id: string
+  question: string
+  guidance: string | null
+  section: string | null
+  sort_order: number
+}
+
+/** One answer, as it is sent to `fn_record_inspection`. */
+export interface CheckAnswer {
+  check_id: string | null
+  question: string
+  section: string | null
+  result: CheckResult | null
+  remark: string
+  photos: string[]
+}
+
+/** One answer, as it reads back on a completed inspection. */
+export interface InspectionCheckRow {
+  id: string
+  question: string
+  section: string | null
+  result: CheckResult
+  remark: string | null
+  photos: string[]
+  /** set when this specific failure raised an NCR */
+  ncr_no: string | null
+}
+
+export interface InspectionRow {
+  id: string
+  itp_item_id: string
+  inspected_on: string
+  /** the form's LOCATION field — "Block A, first floor" */
+  location: string | null
+  result: InspectionResult
+  remarks: string | null
+  photos: string[]
+  inspector: string
+  inspector_name: string | null
+  created_at: string
+}
+
+export interface NcrRow {
+  id: string
+  ncr_no: string
+  project_id: string
+  itp_item_id: string | null
+  inspection_id: string | null
+  area: string
+  description: string
+  severity: NcrSeverity
+  standard_ref: string | null
+  photos: string[]
+  status: NcrStatus
+  assigned_to: string | null
+  corrective_action: string | null
+  corrected_at: string | null
+  closed_at: string | null
+  reject_reason: string | null
+  cancelled_at: string | null
+  cancel_reason: string | null
+  raised_by: string
+  created_at: string
+}
+
+export interface NewNcrInput {
+  area: string
+  description: string
+  severity: NcrSeverity
+  standard_ref: string
+  photos: string[]
+  itp_item_id: string | null
+  assigned_to: string | null
+}
+
+export interface QaSummary {
+  open_ncrs: number
+  ncr_minor: number
+  ncr_major: number
+  ncr_critical: number
+  corrected_ncrs: number
+  closed_ncrs: number
+  itp_total: number
+  itp_passed: number
+  itp_failed: number
+  holds_pending: number
+  holds_blocking: number
+  inspections_done: number
+  /** null until at least one inspection exists — never a misleading 0% */
+  pass_rate: number | null
+}
+
+/**
+ * Who signs off an inspection and closes an NCR.
+ *
+ * NOT a new role. `profiles.role` is the four-value enum every policy checks,
+ * and CLAUDE.md forbids making `designation` load-bearing — so a quality
+ * engineer is given the `pm` access role with the "Quality Engineer" job
+ * title, which is precisely what that mapping is for.
+ */
+export function canSignOffInspection(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Who may write the inspection plan itself. */
+export function canEditItp(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Supervisors included — they find the defects and they do the corrections. */
+export function canRaiseNcr(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
 // ---------- Schedule + earned value (B1 / M02, migration 042) ----------
 
 export interface ScheduleActivity {

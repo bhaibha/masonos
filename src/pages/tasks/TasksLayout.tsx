@@ -27,7 +27,8 @@ export default function TasksLayout() {
   // that isn't there.
   const showDayPicker =
     !pathname.startsWith('/tasks/history') &&
-    !pathname.startsWith('/tasks/schedule')
+    !pathname.startsWith('/tasks/schedule') &&
+    !pathname.startsWith('/tasks/qa')
 
   useEffect(() => {
     void load()
@@ -42,6 +43,7 @@ export default function TasksLayout() {
     { to: '/tasks/new', label: 'Add task' },
     { to: '/tasks/history', label: 'History' },
     { to: '/tasks/schedule', label: 'Schedule' },
+    { to: '/tasks/qa', label: 'QA / ITP' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },
