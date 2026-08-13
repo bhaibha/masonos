@@ -43,7 +43,7 @@ export default function TasksLayout() {
     { to: '/tasks/new', label: 'Add task' },
     { to: '/tasks/history', label: 'History' },
     { to: '/tasks/schedule', label: 'Schedule' },
-    { to: '/tasks/qa', label: 'QA / ITP' },
+    { to: '/tasks/qa', label: 'Quality' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },

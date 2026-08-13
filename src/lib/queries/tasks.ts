@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { NewTask, TaskRow, TaskStatus } from '@/lib/types'
 
 const COLUMNS =
-  'id, project_id, title, trade, work_area, planned_date, target_qty, qty_unit, status, done_qty, not_done_reason, rolled_from'
+  'id, project_id, title, trade, work_area, planned_date, target_qty, qty_unit, status, done_qty, not_done_reason, rolled_from, priority, assigned_to'
 
 type RawTask = Omit<TaskRow, 'rolled_from_date'>
 
@@ -16,6 +16,9 @@ export async function fetchTasks(
     .select(COLUMNS)
     .eq('project_id', projectId)
     .eq('planned_date', date)
+    // Urgent first. The enum's declaration order is low → urgent, so descending
+    // puts the loud ones at the top of a phone screen where they belong.
+    .order('priority', { ascending: false })
     .order('created_at')
 
   if (error) throw error

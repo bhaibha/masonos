@@ -2550,3 +2550,105 @@ Verified from the founder's run:
 
 **001–047 all applied.** B2 stays `[~]`: the schema is right, nothing has been exercised in the app
 yet.
+
+---
+
+## Session — the ITP is replaced by inspection comments, migration 048
+
+The founder looked at 043–047 against how Your Masons actually works and asked for something else.
+The right response is to delete cleanly, not to keep the machinery "in case":
+
+**a site walk produces OBSERVATIONS, not thirty-question forms.**
+
+Somebody — the PM, the founder, or the client walking their own house — sees something wrong, writes
+it down, photographs it, says how urgent it is, and it becomes work for a named person. That is the
+whole loop. Everything else was ceremony.
+
+### What went
+
+`itp_templates`, `itp_template_items`, `itp_items`, `itp_checks`, `inspections`, `inspection_checks`,
+four enums and nine functions — dropped outright, and with them all 8 templates, 72 points and 627
+questions.
+
+**Two real losses, named so nobody is surprised later.** The HOLD-POINT BLOCK is gone:
+`fn_set_activity_progress` is re-emitted without it, because there are no hold points left to check,
+so nothing now stops progress being recorded past an uninspected stage. And the 500 transcribed
+questions from the firm's own sheets go with the tables — they are still in migration 046 in the
+repo and can be brought back by re-running it.
+
+### What replaced it
+
+**Inspection comments.** Where, what is wrong, priority, photos, optionally who raised it (free text,
+because a client walking their own house is not a user of this app and never will be).
+
+**A comment has no status of its own.** The task it creates carries that, and closing the task is
+the closure. Two competing status fields on one observation is how a list stops being believed.
+
+**One act, one transaction.** `fn_raise_inspection_comment` writes the comment AND the task together,
+and there is no direct-insert policy on `inspection_comments`, so a comment cannot exist without the
+task that tells somebody. An observation that never reached anybody is the exact failure this
+feature exists to fix.
+
+**Priority is four levels, not five** — a scale people can hold in their head is a scale they use.
+On the form it is four tap targets rather than a dropdown, because it is the field most likely to be
+set one-handed while standing in the room. Only urgent and high get a badge on the task list; normal
+is the default and silent, since a badge on every row is a badge on none. Urgent tasks sort first
+and carry a red edge.
+
+**NCRs stay**, untouched. A comment is an observation that becomes a task; an NCR is the formal
+non-conformance with its number, corrective action and close-out — the thing you show a client or a
+consultant.
+
+**QA plan docs** is the third tab: upload a PDF straight into **Docs → QC Certificates**. No new
+table — these are ordinary documents in the folder that already existed for exactly this, so a plan
+uploaded here is the same file the Docs module lists. Filed not confidential: a QA plan carries no
+rupee figure and the people who must work to it are the site team.
+
+The Tasks tab is renamed **Quality**.
+
+`npx tsc -b --force` clean.
+
+**Run migration 048 before testing.**
+
+### Fix — a filed NCR appeared in the QA plan list too (migration 049)
+
+Reported: NCRs should be stored in QC Certificates and nowhere else. They were — but the QA plan
+docs tab lists everything in that folder, so a filed NCR showed up in both places.
+
+**`documents.doc_kind`**, set to `qa_plan` on upload from the QA tab and `ncr` when an NCR is filed.
+The QA plan list filters on it; the NCR still lives in QC Certificates, where it belongs and where
+the Docs module lists it.
+
+**Not a title match.** Hiding anything starting "NCR-" works until somebody renames a file, or writes
+a QA plan called "NCR response procedure" — then a document vanishes from a list with no way to work
+out why. What a row IS should be stored, not inferred from how it happens to be spelled. The one
+title match in 049 is a one-off backfill for NCRs filed before the column existed, over rows nobody
+has had a chance to rename.
+
+Open text rather than an enum: PO, SI, VO and the handover archive all file documents too and will
+want labelling eventually, and an enum would mean a migration each time. NULL means "uploaded by
+hand", which is what every existing row is — so they keep showing in the QA list, which is right.
+
+`fn_qa_summary`'s QA-documents count now counts plans only.
+
+`npx tsc -b --force` clean.
+
+**Run migration 048, then 049.**
+
+## Migrations 048 + 049 APPLIED — 2026-08-12
+
+Confirmed by the founder: both ran clean and the Quality screen works.
+
+`001–049 ALL APPLIED.` Next migration = 050. `APPLY_pending.sql` is empty again.
+
+The structured ITP is gone from the database — 8 templates, 72 points and 627 questions deleted
+along with `itp_templates`, `itp_template_items`, `itp_items`, `itp_checks`,
+`itp_template_checks`, `inspections`, `inspection_checks` and nine functions. `fn_set_activity_progress`
+no longer blocks on hold points, so the Schedule screen's progress control is back to
+042 behaviour. What replaced it: `inspection_comments` + `fn_raise_inspection_comment`,
+`tasks.priority` / `tasks.assigned_to`, `documents.doc_kind`, and a rebuilt `fn_qa_summary`.
+
+**Still unexercised in the app** (the migrations running is not the same as the flow working):
+raising a comment and watching it appear in Tasks with its priority; filing an NCR to Docs and
+confirming it stays out of the QA plan list; and the supervisor pass — no delete on a comment, no
+NCR close, no QA plan upload.

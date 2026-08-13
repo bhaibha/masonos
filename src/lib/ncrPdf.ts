@@ -3,7 +3,6 @@ import { COMPANY } from '@/lib/company'
 import {
   NCR_SEVERITY_LABEL,
   NCR_STATUS_LABEL,
-  type ItpItem,
   type NcrRow,
 } from '@/lib/types'
 
@@ -21,8 +20,6 @@ export interface NcrPdfOpts {
   projectName: string
   siteAddress: string | null
   clientName: string | null
-  /** the inspection point it was raised against, when there is one */
-  item?: ItpItem | null
   raisedByName?: string | null
   assignedToName?: string | null
 }
@@ -38,7 +35,7 @@ export interface NcrPdfOpts {
  * amount.
  */
 function buildNcrDoc(opts: NcrPdfOpts): jsPDF {
-  const { ncr, projectName, siteAddress, clientName, item } = opts
+  const { ncr, projectName, siteAddress, clientName } = opts
   const doc = new jsPDF({ unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
   const H = doc.internal.pageSize.getHeight()
@@ -146,35 +143,6 @@ function buildNcrDoc(opts: NcrPdfOpts): jsPDF {
   doc.setLineWidth(0.5)
   doc.line(M, y, W - M, y)
   y += 22
-
-  // ---------- Against which inspection point ----------
-  if (item) {
-    doc.setFontSize(8)
-    doc.setTextColor(...muted)
-    doc.text('RAISED AGAINST', M, y)
-    y += 14
-    doc.setFontSize(10)
-    doc.setTextColor(...ink)
-    for (const l of doc.splitTextToSize(
-      `${item.stage} — ${item.description}`,
-      W - 2 * M,
-    )) {
-      doc.text(l as string, M, y)
-      y += 13
-    }
-    if (item.acceptance_criteria) {
-      doc.setFontSize(9)
-      doc.setTextColor(...muted)
-      for (const l of doc.splitTextToSize(
-        `Acceptance criteria: ${item.acceptance_criteria}`,
-        W - 2 * M,
-      )) {
-        doc.text(l as string, M, y)
-        y += 12
-      }
-    }
-    y += 10
-  }
 
   // ---------- The non-conformance ----------
   doc.setFontSize(8)

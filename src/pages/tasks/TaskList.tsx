@@ -19,6 +19,8 @@ import { errText } from '@/lib/errText'
 import { fetchTasks, rolloverTasks, updateTaskStatus } from '@/lib/queries/tasks'
 import {
   canWriteTasks,
+  PRIORITY_LABEL,
+  PRIORITY_TONE,
   TASK_STATUS_LABEL,
   type TaskRow,
   type TaskStatus,
@@ -204,9 +206,28 @@ function TaskCard({
   }
 
   return (
-    <div className="paper p-5">
+    <div
+      className={cn(
+        'paper p-5',
+        task.priority === 'urgent' &&
+          task.status !== 'done' &&
+          'border-l-[3px] border-l-destructive',
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
+          {/* Only urgent and high get a badge. Normal is the default and
+              silent — a badge on every row is a badge on none. */}
+          {(task.priority === 'urgent' || task.priority === 'high') && (
+            <span
+              className={cn(
+                'mb-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase',
+                PRIORITY_TONE[task.priority],
+              )}
+            >
+              {PRIORITY_LABEL[task.priority]}
+            </span>
+          )}
           <p className="font-medium">{task.title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {[task.trade, task.work_area].filter(Boolean).join(' · ') || '—'}

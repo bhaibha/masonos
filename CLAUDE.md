@@ -145,7 +145,17 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified 2026-08-12: one arity each of `fn_record_inspection` and
   `fn_inspection_checks`; 8 templates / 72 points / 627 questions (127 on the
   five IS plans, 500 on the firm's own twenty sheets).
-  So: **001–047 ALL APPLIED.** Next migration = 048.
+  So: **001–047 ALL APPLIED.**
+  **048 + 049 APPLIED** (confirmed 2026-08-12). 048 = the structured ITP is
+  REPLACED by inspection comments: drops `itp_templates`/`itp_template_items`/
+  `itp_items`/`itp_checks`/`inspections`/`inspection_checks` + nine functions +
+  all seeded content, drops the hold-point block from
+  `fn_set_activity_progress`, adds `tasks.priority`/`tasks.assigned_to`,
+  `inspection_comments`, `fn_raise_inspection_comment` and a rebuilt
+  `fn_qa_summary`. NCRs stay. 049 = `documents.doc_kind` so a filed NCR stays in
+  QC Certificates without also showing in the QA plan docs list, plus
+  `fn_qa_summary` re-emitted to count plans only.
+  So: **001–049 ALL APPLIED.** Next migration = 050.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
@@ -171,6 +181,18 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   row, and each of them would be one edit away from silently including it again. A separate table
   keeps `expenses` meaning exactly what it has always meant: money spent ON A SITE. Reach for a new
   table whenever a record would be a member of a set that every query already filters on.
+- **Store what a row IS, don't infer it from the title (049).** A filed NCR and an uploaded QA plan
+  share the QC Certificates folder, and the shortcut for telling them apart is hiding titles matching
+  "NCR-%". That works until somebody renames a file, or writes a plan called "NCR response
+  procedure" — then a document silently vanishes from a list with no way to work out why.
+  `documents.doc_kind` records the source instead. Open text rather than an enum, because PO, SI and
+  VO will all want labelling later and an enum means a migration each time.
+- **Build the thing the site will actually use (048).** 043–047 built a full ITP: templates, hold
+  points, 627 checklist questions, derived results. The founder looked at it against how the firm
+  works and replaced it with a comment, a photo and a priority. That is not wasted work being
+  admitted — it is the client seeing their own process clearly, and the right response is to delete
+  cleanly rather than keep the machinery "in case". A site walk produces OBSERVATIONS, not
+  thirty-question forms.
 - **`create or replace function` cannot widen a return type (045→046, found in production).** It
   fails with 42P13 "cannot change return type of existing function", and in a multi-statement script
   that abort leaves everything AFTER it unrun — in this case the seed data — while everything before

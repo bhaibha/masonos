@@ -268,59 +268,45 @@ Order within group:
        /tasks/schedule (no budget, PV, EV, AC, CPI or EAC anywhere; progress still writable), the
        double-generate and money-tagged regenerate refusals, the dependency cycle refusal, an EVM
        reading checked against a hand calculation, and the Excel export opened in real Excel.
-- [~] **B2. M17 QA/QC — migrations 043–047 APPLIED; not yet exercised in the app.**
-       `itp_items` per project (stage, description, acceptance criteria, witness/hold/review,
-       reference standard, required-by stage), `inspections` (append-only), `ncrs` with an NCR-0001
-       series and a letterhead PDF carrying the CANCELLED watermark.
-       **Reusable firm templates:** `itp_templates` + `itp_template_items`, `fn_apply_itp_template`
-       COPIES points onto a project (never links — editing a template must not restate an inspection
-       already signed off) and refuses a second application of the same template;
-       `fn_save_itp_template` turns a project's plan into the firm standard, so a plan worked out
-       once on site stops being retyped slightly differently.
-       **Hold points really block.** `fn_set_activity_progress` (re-emitted from 042) refuses to
-       RAISE progress on any activity whose predecessor carries an unsigned hold, and names the
-       point. No override — a hold point you can walk past is a checklist. Reducing progress stays
-       allowed so a mistake can still be corrected.
-       **One act, one transaction.** `fn_record_inspection` writes the inspection, moves the ITP
-       status and raises the NCR on fail or conditional. `inspections` has NO insert policy at all,
-       so that function is the only way one can exist — two paths would eventually produce a failed
-       inspection whose NCR was never raised. Conditional passes the point AND raises an NCR, which
-       is what conditional means on site.
+- [x] **B2. M17 QA/QC — 043–049 ALL APPLIED. Inspection comments, NCRs, QA plan docs.**
+       **Built as a structured ITP (043–047), then replaced (048).** 043–047 shipped templates,
+       hold points, 627 checklist questions and derived results. The founder looked at it against
+       how the firm actually works and asked for a comment, a photo and a priority instead. 048
+       deletes the machinery cleanly rather than keeping it "in case" — a site walk produces
+       OBSERVATIONS, not thirty-question forms. Dropped: `itp_templates`, `itp_template_items`,
+       `itp_items`, `itp_checks`, `itp_template_checks`, `inspections`, `inspection_checks`, nine
+       functions, all seeded content, and the hold-point block on `fn_set_activity_progress`.
+       **Inspection comments.** Somebody on a site walk — the team or the client — records what
+       they saw: location, the observation, a priority (urgent / high / normal / low), photos, and
+       who it is for. `fn_raise_inspection_comment` writes the comment AND its task in one
+       transaction; `inspection_comments` has no insert policy at all, so a comment without a task
+       cannot exist — a note nobody was told about is the exact failure the feature exists to fix.
+       The comment carries no status of its own: the task holds it, and the list reads it through
+       the join. One source of truth for "is it done".
+       `tasks.priority` and `tasks.assigned_to` are new; the task list sorts urgent first, badges
+       urgent/high, and puts a red edge on urgent.
+       **NCRs stay** — the formal non-conformance with its NCR-0001 series, corrective action,
+       close-out and letterhead PDF. That is what a client or consultant is shown; a comment is not.
+       **QA plan docs** is the third tab: upload a PDF straight into Docs → QC Certificates. No new
+       table — the folder already existed for exactly this, so a plan uploaded here is the same file
+       the Docs module lists.
+       **Migration 049 — `documents.doc_kind`.** A filed NCR lives in QC Certificates and belongs
+       there, but it was also appearing in the QA plan list. `doc_kind` records what a row IS
+       (`qa_plan` / `ncr`) instead of inferring it from the title: matching "NCR-%" breaks the
+       moment a file is renamed or a plan is called "NCR response procedure". Open text, not an
+       enum, because PO/SI/VO and the handover archive will want labelling later. `fn_qa_summary`
+       counts plans only.
        **No fifth role.** The brief's "QA role" is the `pm` access role with a "Quality Engineer"
        job title: `profiles.role` is the four-value enum every policy checks and `designation` is
        display-only by rule.
-       Access: every project member reads the plan and raises NCRs (site people find the defects);
-       supervisors REQUEST inspections and record corrective actions; only founder/PM record an
-       inspection, close or reject an NCR, or cancel one. All at RLS and inside the RPCs.
-       QA card on Project Detail: blocking holds first and in danger colour, open NCRs by severity,
-       pass rate over inspections (not over current status — a point that failed, was fixed and
-       passed is one of each, which is the honest number).
-       **Migration 044** seeds five IS-referenced templates, one per discipline — structural/RCC
-       (15 points), masonry and plaster (9), waterproofing (7), finishes (9), MEP (12); 52 in all,
-       19 of them holds. Standard numbers and titles verified against BIS listings 2026-08-11; five
-       points deliberately carry no reference because none was verified. No clause text is
-       reproduced anywhere — IS codes are copyrighted, and an ITP cites its basis rather than
-       transcribing it.
-       **Migration 045 — checklist depth.** Every ITP point carries a list of individual questions
-       (`itp_checks`), templates carry them too (`itp_template_checks`) and `fn_apply_itp_template`
-       copies them down, and every answer is stored per inspection (`inspection_checks`) with its
-       photos and remark. The inspection result is DERIVED from the answers — all pass or n/a →
-       pass, any fail → fail unless the inspector marks it conditional — and a contradictory claim
-       is overruled server-side. Unanswered questions are refused. **One NCR per failed check**,
-       naming the exact question, rather than one lumped NCR per inspection. The question wording is
-       snapshotted on the answer, so editing the plan never rewrites what an inspector was asked.
-       Seeds 127 questions across 20 of 044's points — reinforcement, formwork, excavation,
-       deshuttering, cube sampling, wall junctions, plaster preparation, first course, both ponding
-       tests, substrate and penetrations, tiling setting-out and bedding, paint preparation, the
-       water pressure test, earthing, conduiting, insulation testing and the drainage flow test.
-       Mobile-first runner: one full-width row per question with three 48px targets, a live derived
-       verdict, and a per-question remark and photo that opens automatically on a fail.
-       **Migrations 043–047 applied and verified 2026-08-12** — 8 templates, 72 points, 627
-       questions; one arity each of `fn_record_inspection` and `fn_inspection_checks`.
-       **Not yet exercised in the app:** applying a template, running a checklist end to end, the
-       derived result overruling a contradictory claim, one NCR per failed check, the hold-point
-       block on the Schedule screen, and the supervisor pass (no Record-inspection button, no NCR
-       close).
+       Access: every project member raises comments and NCRs (site people find the defects);
+       supervisors record corrective actions; only founder/PM delete a comment, close or reject an
+       NCR, cancel one, or upload a QA plan. All at RLS and inside the RPCs.
+       QA card on Project Detail: open comments with urgent/high split, open NCRs by severity, total
+       observations logged.
+       **Not yet exercised in the app:** raising a comment end to end and seeing it land in Tasks
+       with its priority, filing an NCR to Docs and confirming it stays out of the QA plan list, and
+       the supervisor pass (no delete, no NCR close, no plan upload).
 - [ ] B3. M05 Material Procurement full (indent → rate compare → order, ties into M22)
 - [ ] B4. M13 Estimation / BOQ / BBS generator (BOQ, bar-bending schedule per IS-2502 — reinforcement math)
 - [ ] B5. M24 Contract Labour (BOCW registers: Form XIII/XVI/XVII as data, gang attendance)

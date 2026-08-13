@@ -748,14 +748,25 @@ function QaCard({
         <Skeleton className="h-8 w-40" />
       ) : (
         <>
-          {q.holds_blocking > 0 && (
+          {q.urgent_comments > 0 && (
             <p className="mb-3 rounded-lg bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
-              {q.holds_blocking} hold point{q.holds_blocking === 1 ? '' : 's'}{' '}
-              blocking work
+              {q.urgent_comments} urgent observation
+              {q.urgent_comments === 1 ? '' : 's'} open
             </p>
           )}
 
           <div className="flex gap-8">
+            <Stat
+              label="Open comments"
+              value={String(q.open_comments)}
+              tone={
+                q.urgent_comments > 0
+                  ? 'danger'
+                  : q.open_comments > 0
+                    ? 'warning'
+                    : undefined
+              }
+            />
             <Stat
               label="Open NCRs"
               value={String(q.open_ncrs)}
@@ -767,19 +778,13 @@ function QaCard({
                     : undefined
               }
             />
-            <Stat
-              label="Pass rate"
-              value={q.pass_rate === null ? 'n/a' : `${q.pass_rate}%`}
-            />
           </div>
 
           <p className="mt-4 text-xs text-muted-foreground">
-            {q.itp_total === 0
-              ? 'No inspection plan set for this project yet.'
-              : `${q.itp_passed} of ${q.itp_total} inspection points passed` +
-                (q.holds_pending > 0
-                  ? ` · ${q.holds_pending} hold${q.holds_pending === 1 ? '' : 's'} pending`
-                  : '')}
+            {q.total_comments === 0
+              ? 'No site observations logged yet.'
+              : `${q.total_comments} observation${q.total_comments === 1 ? '' : 's'} logged`}
+            {q.qa_docs > 0 && ` · ${q.qa_docs} QA document${q.qa_docs === 1 ? '' : 's'}`}
           </p>
         </>
       )}

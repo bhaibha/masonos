@@ -480,6 +480,9 @@ export interface TaskRow {
   rolled_from: string | null
   /** planned_date of the task this one was rolled from, when known */
   rolled_from_date: string | null
+  /** 048 — set from an inspection comment, or by hand on the task form */
+  priority: TaskPriority
+  assigned_to: string | null
 }
 
 export interface NewTask {
@@ -627,6 +630,13 @@ export interface NewDocument {
   is_confidential: boolean
   po_id?: string | null
   subfolder_id?: string | null
+  /**
+   * What produced this document (049): 'qa_plan', 'ncr', and later po / si /
+   * vo. Omitted means somebody uploaded it by hand. Lets a folder be filtered
+   * by source without matching on the title, which breaks the moment a file
+   * is renamed.
+   */
+  doc_kind?: string | null
 }
 
 // ---------- Procurement ----------
@@ -1550,11 +1560,35 @@ export function canSeePnl(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm', 'accounts'].includes(role)
 }
 
-// ---------- QA/QC — ITP, hold points, NCRs (B2 / M17, migration 043) ----------
+// ---------- QA/QC — inspection comments + NCRs (M17, migration 048) ----------
 
-export type ItpType = 'witness' | 'hold' | 'review'
-export type ItpStatus = 'pending' | 'requested' | 'passed' | 'failed'
-export type InspectionResult = 'pass' | 'fail' | 'conditional'
+/**
+ * Four levels, not five.
+ *
+ * A scale people can hold in their head is a scale they use; "medium-high" is
+ * where a priority field starts meaning nothing.
+ */
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent'
+
+export const TASK_PRIORITIES: { value: TaskPriority; label: string }[] = [
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'high', label: 'High' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Low' },
+]
+
+export const PRIORITY_LABEL = Object.fromEntries(
+  TASK_PRIORITIES.map((p) => [p.value, p.label]),
+) as Record<TaskPriority, string>
+
+/** Urgent and high are the only two that shout. Normal is the default and silent. */
+export const PRIORITY_TONE: Record<TaskPriority, string> = {
+  urgent: 'bg-destructive text-white',
+  high: 'bg-destructive/10 text-destructive',
+  normal: 'bg-secondary text-muted-foreground',
+  low: 'bg-secondary text-muted-foreground',
+}
+
 export type NcrSeverity = 'minor' | 'major' | 'critical'
 export type NcrStatus =
   | 'open'
@@ -1562,31 +1596,6 @@ export type NcrStatus =
   | 'closed'
   | 'rejected'
   | 'cancelled'
-
-export const ITP_TYPES: { value: ItpType; label: string; hint: string }[] = [
-  {
-    value: 'hold',
-    label: 'Hold',
-    hint: 'Blocks the next stage until it passes',
-  },
-  {
-    value: 'witness',
-    label: 'Witness',
-    hint: 'Someone attends; work continues',
-  },
-  { value: 'review', label: 'Review', hint: 'Records and documents checked' },
-]
-
-export const ITP_TYPE_LABEL = Object.fromEntries(
-  ITP_TYPES.map((t) => [t.value, t.label]),
-) as Record<ItpType, string>
-
-export const ITP_STATUS_LABEL: Record<ItpStatus, string> = {
-  pending: 'Not yet inspected',
-  requested: 'Inspection requested',
-  passed: 'Passed',
-  failed: 'Failed',
-}
 
 export const NCR_SEVERITIES: { value: NcrSeverity; label: string }[] = [
   { value: 'minor', label: 'Minor' },
@@ -1606,142 +1615,47 @@ export const NCR_STATUS_LABEL: Record<NcrStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-export interface ItpTemplate {
-  id: string
-  name: string
-  description: string | null
-  is_active: boolean
-  item_count: number
-}
-
-export interface ItpTemplateItem {
-  id: string
-  template_id: string
-  stage: string
-  description: string
-  acceptance_criteria: string | null
-  inspection_type: ItpType
-  reference_standard: string | null
-  required_by_stage: string | null
-  sort_order: number
-}
-
-export interface ItpItem {
+/**
+ * One thing somebody saw on a walk.
+ *
+ * It has NO status of its own: the task it created is the status, and closing
+ * that task is the closure. Two competing status fields on one observation is
+ * how a list stops being believed.
+ */
+export interface InspectionComment {
   id: string
   project_id: string
-  activity_id: string | null
-  activity_label: string | null
-  stage: string
-  description: string
-  acceptance_criteria: string | null
-  inspection_type: ItpType
-  reference_standard: string | null
-  required_by_stage: string | null
-  status: ItpStatus
-  template_id: string | null
-  sort_order: number
-  notes: string | null
-  requested_at: string | null
-  requested_by: string | null
-  signed_off_at: string | null
-  signed_off_by: string | null
-}
-
-export interface NewItpItemInput {
-  activity_id: string | null
-  stage: string
-  description: string
-  acceptance_criteria: string
-  inspection_type: ItpType
-  reference_standard: string
-  required_by_stage: string
-  notes: string
-}
-
-/* ---- checklist depth (migration 045) ---- */
-
-/** Three values, and n/a is not a soft pass — see 045's header. */
-export type CheckResult = 'pass' | 'fail' | 'na'
-
-/**
- * The firm's sheets read YES / NO / N/A, so that is what the app says.
- *
- * The stored enum stays pass / fail / na — every question on those sheets is
- * phrased so YES is the compliant answer, which makes the mapping exact.
- * Relabelling is a screen decision; re-cutting an enum that already has
- * answers stored against it is not.
- */
-export const CHECK_RESULTS: { value: CheckResult; label: string }[] = [
-  { value: 'pass', label: 'YES' },
-  { value: 'fail', label: 'NO' },
-  { value: 'na', label: 'N/A' },
-]
-
-export const CHECK_LABEL = Object.fromEntries(
-  CHECK_RESULTS.map((c) => [c.value, c.label]),
-) as Record<CheckResult, string>
-
-export interface ItpCheck {
-  id: string
-  itp_item_id: string
-  question: string
-  guidance: string | null
-  /** the paper form's PRE / DURING / POST heading this question sits under */
-  section: string | null
-  sort_order: number
-}
-
-export interface ItpTemplateCheck {
-  id: string
-  template_item_id: string
-  question: string
-  guidance: string | null
-  section: string | null
-  sort_order: number
-}
-
-/** One answer, as it is sent to `fn_record_inspection`. */
-export interface CheckAnswer {
-  check_id: string | null
-  question: string
-  section: string | null
-  result: CheckResult | null
-  remark: string
+  observed_on: string
+  location: string
+  comment: string
+  priority: TaskPriority
   photos: string[]
-}
-
-/** One answer, as it reads back on a completed inspection. */
-export interface InspectionCheckRow {
-  id: string
-  question: string
-  section: string | null
-  result: CheckResult
-  remark: string | null
-  photos: string[]
-  /** set when this specific failure raised an NCR */
-  ncr_no: string | null
-}
-
-export interface InspectionRow {
-  id: string
-  itp_item_id: string
-  inspected_on: string
-  /** the form's LOCATION field — "Block A, first floor" */
-  location: string | null
-  result: InspectionResult
-  remarks: string | null
-  photos: string[]
-  inspector: string
-  inspector_name: string | null
+  /** free text — a client walking their own house is not a user of this app */
+  raised_for: string | null
+  task_id: string | null
+  /** from the linked task; null when the task was deleted */
+  task_status: string | null
+  task_done: boolean
+  raised_by: string
+  raised_by_name: string | null
   created_at: string
+}
+
+export interface NewInspectionComment {
+  location: string
+  comment: string
+  priority: TaskPriority
+  photos: string[]
+  raised_for: string
+  assigned_to: string | null
+  due_date: string | null
+  trade: string
 }
 
 export interface NcrRow {
   id: string
   ncr_no: string
   project_id: string
-  itp_item_id: string | null
-  inspection_id: string | null
   area: string
   description: string
   severity: NcrSeverity
@@ -1765,45 +1679,30 @@ export interface NewNcrInput {
   severity: NcrSeverity
   standard_ref: string
   photos: string[]
-  itp_item_id: string | null
   assigned_to: string | null
 }
 
 export interface QaSummary {
+  open_comments: number
+  urgent_comments: number
+  high_comments: number
+  total_comments: number
   open_ncrs: number
   ncr_minor: number
   ncr_major: number
   ncr_critical: number
   corrected_ncrs: number
   closed_ncrs: number
-  itp_total: number
-  itp_passed: number
-  itp_failed: number
-  holds_pending: number
-  holds_blocking: number
-  inspections_done: number
-  /** null until at least one inspection exists — never a misleading 0% */
-  pass_rate: number | null
+  /** PDFs filed in Docs → QC Certificates */
+  qa_docs: number
 }
 
-/**
- * Who signs off an inspection and closes an NCR.
- *
- * NOT a new role. `profiles.role` is the four-value enum every policy checks,
- * and CLAUDE.md forbids making `designation` load-bearing — so a quality
- * engineer is given the `pm` access role with the "Quality Engineer" job
- * title, which is precisely what that mapping is for.
- */
+/** Who closes an NCR. Nobody closes their own. */
 export function canSignOffInspection(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm'].includes(role)
 }
 
-/** Who may write the inspection plan itself. */
-export function canEditItp(role: UserRole | null): boolean {
-  return role !== null && ['founder', 'pm'].includes(role)
-}
-
-/** Supervisors included — they find the defects and they do the corrections. */
+/** Everyone on the project raises observations — site people see the most. */
 export function canRaiseNcr(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
 }

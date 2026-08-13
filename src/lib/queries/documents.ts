@@ -119,6 +119,7 @@ export async function createDocument(input: NewDocument): Promise<void> {
     is_confidential: input.is_confidential,
     po_id: input.po_id ?? null,
     subfolder_id: input.subfolder_id ?? null,
+    doc_kind: input.doc_kind ?? null,
   })
   if (error) throw error
 }

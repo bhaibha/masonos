@@ -1,9 +1,21 @@
 -- ==============================================================
 -- MASON OS — pending migrations.
 --
--- NOTHING IS PENDING. 001–047 are all APPLIED (047 confirmed 2026-08-12).
+-- 001–049 are all APPLIED (048 + 049 confirmed 2026-08-12).
 --
--- The next migration written will replace this file's contents.
--- Individual migrations remain in supabase/migrations/ and are all
--- re-runnable if a database ever needs rebuilding from scratch.
+-- NOTHING IS PENDING. The next migration is 050; when it is written, this
+-- file becomes its full runnable text (and the text of every migration after
+-- it that has not yet been confirmed, in order).
+--
+-- Every migration must stay idempotent/re-runnable:
+--   * enums          -> alter type ... add value if not exists
+--   * tables         -> create table if not exists, PLUS an explicit
+--                       alter table ... add column if not exists for every
+--                       column added after the create block first shipped
+--   * views          -> drop view if exists ... cascade, then create
+--   * functions      -> drop function if exists (full signature), then create
+--                       (create or replace CANNOT widen a return type)
+--   * policies       -> drop policy if exists, then create
+-- Cast enum assignments explicitly (::po_status). End every migration with a
+-- verify block that counts arities and names the objects it created.
 -- ==============================================================
