@@ -39,6 +39,7 @@ export default function MoneyLayout() {
       ? [{ to: '/money/budget/edit', label: 'Set budgets' }]
       : []),
     { to: '/money/orders', label: 'Orders' },
+    { to: '/money/compare', label: 'Rate compare' },
     { to: '/money/variations', label: 'Variations' },
     // Founder/accounts only — the invoices table's RLS enforces it; the tab is
     // hidden for a PM so they don't hit an empty screen.

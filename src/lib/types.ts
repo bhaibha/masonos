@@ -764,6 +764,134 @@ export interface PoInvoiceRow extends VoidFields {
   approved: boolean
 }
 
+// ---------- Rate comparison / comparative statement (B3, migration 050) ----------
+
+export type RcStatus = 'draft' | 'decided' | 'ordered'
+
+export const RC_STATUS_LABEL: Record<RcStatus, string> = {
+  draft: 'Collecting quotes',
+  decided: 'Awarded',
+  ordered: 'Ordered',
+}
+
+/**
+ * A comparison is entirely made of rates, so there is no supervisor half of it
+ * the way a PO has one. RLS returns them zero rows; this is the matching guard
+ * on the screen so they get an explanation rather than an empty list.
+ */
+export function canSeeComparisons(role: UserRole | null): boolean {
+  return role !== null && MONEY_ROLES.includes(role)
+}
+
+/**
+ * Awarding is the same decision as approving a PO's rates, so it is founder/PM
+ * — accounts build comparisons and chase quotes, but do not choose. Mirrors
+ * the role check inside fn_rc_award.
+ */
+export function canAwardComparison(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Row of v_rc_summary. */
+export interface ComparisonSummary {
+  comparison_id: string
+  project_id: string
+  comparison_no: string
+  title: string
+  status: RcStatus
+  need_by: string | null
+  source_po_id: string | null
+  created_at: string
+  item_count: number
+  vendor_count: number
+  items_awarded: number
+  /** cheapest vendor who priced EVERY item; null until one has */
+  lowest_total: number | null
+  highest_total: number | null
+  awarded_subtotal: number
+  /** lines that went to somebody other than the cheapest quote */
+  awarded_off_lowest: number
+}
+
+export interface ComparisonItem {
+  id: string
+  comparison_id: string
+  material_id: string | null
+  description: string
+  unit: string
+  qty: number
+  spec: string | null
+  awarded_quote_id: string | null
+  award_reason: string | null
+  sort_order: number
+}
+
+export interface ComparisonVendor {
+  id: string
+  comparison_id: string
+  vendor_id: string | null
+  vendor_display: string
+  quote_ref: string | null
+  quote_date: string | null
+  terms: string | null
+  payment_terms: string | null
+  delivery_days: number | null
+  gst_pct: number
+  /** set once fn_rc_to_po has raised this vendor's order */
+  po_id: string | null
+  sort_order: number
+}
+
+/** One cell of v_rc_matrix. `rate` null means the vendor did not quote. */
+export interface ComparisonCell {
+  item_id: string
+  vendor_col_id: string
+  quote_id: string | null
+  rate: number | null
+  line_total: number | null
+  remark: string | null
+  /** computed by a window function in Postgres, never in the browser */
+  is_lowest: boolean
+  is_awarded: boolean
+}
+
+/** Row of v_rc_vendor_totals. */
+export interface ComparisonVendorTotal {
+  comparison_id: string
+  vendor_col_id: string
+  vendor_display: string
+  vendor_id: string | null
+  gst_pct: number
+  delivery_days: number | null
+  terms: string | null
+  payment_terms: string | null
+  quote_ref: string | null
+  items_quoted: number
+  /** items this vendor left unpriced — a total built on these isn't comparable */
+  items_missing: number
+  subtotal: number
+  gst_amount: number
+  grand_total: number
+  awarded_value: number
+  is_lowest_total: boolean
+}
+
+export interface NewComparisonItem {
+  material_id: string | null
+  description: string
+  unit: string
+  qty: number
+  spec: string | null
+}
+
+export interface NewComparison {
+  project_id: string
+  title: string
+  need_by: string | null
+  notes: string
+  items: NewComparisonItem[]
+}
+
 // ---------- Variation Orders ----------
 
 export type VoStatus = 'submitted' | 'approved' | 'rejected' | 'cancelled'

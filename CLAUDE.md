@@ -155,13 +155,60 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_qa_summary`. NCRs stay. 049 = `documents.doc_kind` so a filed NCR stays in
   QC Certificates without also showing in the QA plan docs list, plus
   `fn_qa_summary` re-emitted to count plans only.
-  So: **001–049 ALL APPLIED.** Next migration = 050.
+  So: **001–050 ALL APPLIED.**
+  **050 APPLIED** (confirmed 2026-08-12) — B3 rate comparison / comparative statement
+  (`rate_comparisons`, `rc_items`, `rc_vendors`, `rc_quotes`, `rc_status`,
+  `v_rc_matrix`, `v_rc_vendor_totals`, `v_rc_summary`, `rc_may_read`,
+  `rc_may_write`, `fn_rc_from_pr`, `fn_rc_award_item`, `fn_rc_award`,
+  `fn_rc_clear_award`, `fn_rc_to_po`, `fn_delete_comparison`, three
+  BEFORE UPDATE guard triggers, audit triggers on all four tables).
+  Next migration = 051.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
   `section` on template/live/answer checks, `inspections.location`, plus
   `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
   `fn_inspection_checks` re-emitted. Next migration = 047.
+- **Gate at the row when there is no innocent half (050).** 012 revoked `po_lines.rate` column by
+  column because site genuinely needs the rest of a PO — quantities, delivery dates, the material
+  list. A rate comparison has no such half: every row of it exists to say what somebody would
+  charge. So the whole record is gated in the RLS policy and a supervisor gets zero rows rather
+  than blanked cells. The reward is that none of the column-grant traps apply — no 027 invisible
+  new column, no 042 "the create block is not the source of truth". Reach for column grants only
+  when a shared row has ONE secret; reach for a row policy when the row itself is the secret.
+- **An RLS UPDATE policy cannot say WHICH columns (050).** The policy that lets somebody fix a
+  typo in a title also lets a PATCH stamp `awarded_quote_id` with no reason and no audit row —
+  the same hole 021 found on `purchase_orders`, where a CHECK constraint had to stand behind the
+  RPC. Here the discriminator is `current_user`: PostgREST is `authenticated`, every RPC is
+  SECURITY DEFINER and runs as the owner, so a BEFORE UPDATE trigger can refuse the decision
+  columns from the client and allow them from the functions. It RAISES rather than quietly
+  restoring the old value — a PATCH only sends changed columns, so the trigger fires only when
+  somebody meant it, and swallowing that would hide the bug.
+- **The justification belongs in the database, not the form (050).** `fn_rc_award` refuses an
+  award above the lowest quote unless a reason comes with it. A form-only check is a check that
+  disappears the first time anything talks to the API directly, and this particular sentence is
+  the one an Open Book client reads. Same family as 020's mandatory void reason, which is a CHECK
+  constraint for exactly the same reason.
+- **A convenience must write the same rows as the long way round (050).** "Award everything to
+  Vendor B" does not get its own column on the comparison; it writes one `rc_items.awarded_quote_id`
+  per line, exactly as the per-line path does. Two representations of one decision eventually
+  disagree, and here the split award — steel from one vendor, cement from another — is the normal
+  case, so the per-line shape had to exist anyway.
+- **A total is only comparable if it priced everything (050).** A vendor who skips two of ten items
+  has the cheapest subtotal for a reason that has nothing to do with being cheap.
+  `v_rc_vendor_totals` therefore computes `is_lowest_total` only over vendors with
+  `items_missing = 0`, and `fn_rc_award` refuses a whole-comparison award to anyone who left a line
+  blank, pointing at the per-line award instead. A missing quote is also a DELETED row rather than
+  a zero — "did not quote" and "quoted nothing" are different facts.
+- **Evidence must freeze when it starts being cited (050).** Once a comparison has produced a PO,
+  every write policy on it refuses. If the quotes could still be edited afterwards, the statement
+  would restate itself and stop being evidence of how the order was decided. Same rule as the
+  certified-bill snapshot (032) and the snapshotted question wording (045).
+- **Don't invent master data to make a conversion work (050).** `po_lines.material_id` is NOT NULL
+  because a PO feeds stock and stock is per material, so a free-text comparison line cannot become
+  a PO line. `fn_rc_to_po` names the offending lines and stops, rather than silently creating
+  material records nobody asked for. The refusal also draws a real distinction worth keeping:
+  materials are things you stock, free text is things you only ever price.
 - **Owner-run views cannot be verified from the SQL editor (038).** The dashboard connects as
   `postgres`, so `auth.uid()` is NULL, `my_role()` is NULL and `is_founder()` is false — every
   is_member/role-gated view returns ZERO rows there, and an aggregate over that empty set returns

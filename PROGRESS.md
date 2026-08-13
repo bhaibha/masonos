@@ -2652,3 +2652,124 @@ no longer blocks on hold points, so the Schedule screen's progress control is ba
 raising a comment and watching it appear in Tasks with its priority; filing an NCR to Docs and
 confirming it stays out of the QA plan list; and the supervisor pass — no delete on a comment, no
 NCR close, no QA plan upload.
+
+## Session — B3 Rate comparison / comparative statement (migration 050)
+
+Confirmed at the start of the session: **001–049 all applied** (the founder ran 048 + 049 and the
+Quality screen works). This session's migration is **050**, and it is the only pending one.
+
+A3 already covered PR → PO → GRN → 3-way match. What it never had was the step in between: getting
+two or three vendors to price the same list, laying the quotes side by side, choosing, and being
+able to SHOW a client why that choice was made. That is all this is.
+
+### Why the privacy is at the row and not the column
+
+012 revoked `po_lines.rate` column by column, because a PO has a half site genuinely needs —
+quantities, delivery dates, the material list — and a half it must not see. A rate comparison has no
+such half. Every row of it exists to state what somebody would charge; strip the rates and there is
+nothing left. So all four tables are gated in the RLS policy itself
+(`is_member(project) and my_role() in ('founder','pm','accounts')`) and a supervisor gets **zero
+rows**, not blanked cells.
+
+The reward is that none of the column-grant traps apply here: no 027 invisible-new-column, no 042
+"the create block is not the source of truth once the table exists". And because nothing is revoked,
+the three views are `security_invoker = true` — RLS on the base tables IS the access control, so
+there is no owner-run WHERE clause that a later edit could drop and silently leak the table.
+
+### Everything on the screen is computed in Postgres
+
+- `v_rc_matrix` — one row per (item, vendor). Line total, and `is_lowest` from a window function
+  partitioned by item. `min()` ignores nulls, so a vendor who did not quote cannot accidentally
+  become the cheapest.
+- `v_rc_vendor_totals` — items quoted, items missing, subtotal, GST at each vendor's own rate,
+  grand total, awarded value, and `is_lowest_total`.
+- `v_rc_summary` — the card figures, including how many lines went to somebody other than the
+  cheapest.
+
+`is_lowest_total` counts **only vendors who priced every item**. A total built from eight of ten
+lines is cheaper for a reason that has nothing to do with being cheap, and calling it the lowest
+would be the single most misleading thing this module could do. `fn_rc_award` refuses a
+whole-comparison award to such a vendor and points at the per-line award instead.
+
+A missing quote is a **deleted row**, not a stored zero. "Did not quote" and "quoted nothing" are
+different facts and only the first one should keep a vendor out of the lowest-rate comparison.
+
+### The award is always per item
+
+`rc_items.awarded_quote_id` is the only representation of a decision. "Award everything to Vendor B"
+is a convenience that writes one row per line — not a second column recording the same fact. Two
+representations eventually disagree, and the split award (steel from one vendor, cement from
+another) is the normal case here anyway, so the per-line shape had to exist regardless.
+
+### The reason is enforced in the database
+
+`fn_rc_award` and `fn_rc_award_item` refuse an award above the lowest quote unless a reason comes
+with it, and the message names the vendor, their rate and the lowest. The field is CLEARED when the
+chosen quote *is* the cheapest, because a reason on the lowest rate is noise and the column means
+"why not the lowest".
+
+This is the sentence an Open Book client reads. A form-only check is a check that disappears the
+first time anything talks to the API directly — same argument as the mandatory void reason in 020,
+which is a CHECK constraint for exactly this reason.
+
+### Three guard triggers, because an RLS policy cannot restrict columns
+
+The UPDATE policy that lets somebody fix a typo in the title would also let a PostgREST PATCH stamp
+`awarded_quote_id` with no reason and no audit row, or set `status` to 'decided' with nothing
+awarded. That is the hole 021 found on `purchase_orders`, where the RPC alone was not enough.
+
+The discriminator is `current_user`: PostgREST runs as `authenticated`, every RPC here is
+SECURITY DEFINER and runs as the table owner. So a BEFORE UPDATE trigger refuses `status` /
+`decided_*`, the four award columns, and `rc_vendors.po_id` from the client and allows them from the
+functions. It RAISES rather than silently restoring the old value — a PATCH only sends changed
+columns, so it fires only when somebody meant it.
+
+### Convert to PO reuses A3 untouched
+
+`fn_rc_to_po` raises one `purchase_orders` row per winning vendor at status `approved` with rated
+`po_lines`. Receiving, the GRN trigger, the 3-way match, the PO PDF and cancellation all work on
+them exactly as they do on any other PO — nothing was special-cased.
+
+`rc_vendors.po_id` is what makes it idempotent: its presence is the refusal, so there is no separate
+"already converted" flag to fall out of step with reality.
+
+Free-text lines are **refused by name** rather than having a material invented for them.
+`po_lines.material_id` is NOT NULL because a PO feeds stock through the GRN trigger and stock is
+kept per material. The refusal draws a distinction worth keeping: materials are things you stock,
+free text is for things you only ever price — a labour rate, a hire charge.
+
+### It freezes once ordered
+
+Every write policy refuses on a comparison whose status is `ordered`. It is the evidence of how that
+order was decided; if the quotes could still be edited it would restate itself and stop being
+evidence. Same rule as the certified-bill snapshot (032) and the snapshotted question wording (045).
+
+No cancel mechanism, by decision. Before conversion a comparison affects nothing — no money posted,
+no stock, no number in a vendor's hands — so it is a hard delete via `fn_delete_comparison`, refused
+once a PO exists. After conversion the thing to cancel is the PO, which already has
+`fn_cancel_document`. A third state would give two places to look for one fact.
+
+### Screen
+
+`/money/compare` — deliberately NOT mirrored under `/materials` the way Orders is, for the same
+reason the privacy is row-level.
+
+Two readings of the same server-computed numbers: **Lines** (one card per item, every vendor's rate
+on its own row with a 48px input, awarded with one tap) and **Statement** (the real items × vendors
+grid, horizontally scrolled with a sticky first column, cheapest cell tinted, grand-total footer).
+The grid is not a second calculation — both read `v_rc_matrix`.
+
+**Comparative-statement PDF** on the letterhead, LANDSCAPE because the document widens with the
+vendor count and a portrait page would either clip the fourth column or shrink the type past
+reading size on something somebody signs. It prints the losing quotes as prominently as the winner
+— that is the point of it — bolds the cheapest cell, ticks the awarded one, and prints every "why
+not the lowest" reason verbatim. Files to Docs → Purchase Orders, marked confidential (it carries
+every vendor's rates), `doc_kind = 'comparative_statement'`.
+
+`npx tsc -b --force` clean. Migration parses clean under pglast.
+
+**Run migration 050 before testing.**
+
+## Migration 050 APPLIED — 2026-08-12
+
+`001–050 ALL APPLIED.` Next migration = 051. `APPLY_pending.sql` is empty again.

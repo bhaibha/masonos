@@ -1,9 +1,9 @@
 -- ==============================================================
 -- MASON OS — pending migrations.
 --
--- 001–049 are all APPLIED (048 + 049 confirmed 2026-08-12).
+-- 001–050 are all APPLIED (050 confirmed 2026-08-12).
 --
--- NOTHING IS PENDING. The next migration is 050; when it is written, this
+-- NOTHING IS PENDING. The next migration is 051; when it is written, this
 -- file becomes its full runnable text (and the text of every migration after
 -- it that has not yet been confirmed, in order).
 --

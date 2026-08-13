@@ -307,7 +307,55 @@ Order within group:
        **Not yet exercised in the app:** raising a comment end to end and seeing it land in Tasks
        with its priority, filing an NCR to Docs and confirming it stays out of the QA plan list, and
        the supervisor pass (no delete, no NCR close, no plan upload).
-- [ ] B3. M05 Material Procurement full (indent → rate compare → order, ties into M22)
+- [x] **B3. M05 Rate comparison / comparative statement — migration 050. Run it before testing.**
+       The piece A3 left out: the step between the requisition and the order. Items as rows,
+       vendors as columns, the cheapest quote per line flagged, a decision recorded with a reason,
+       and a PO raised from it without retyping a single rate.
+       **The whole record is money, so the gate is at the ROW.** A PO has a rate-free half site
+       genuinely needs, which is why 012 revoked `po_lines.rate` column by column. A comparison has
+       none — every row of it says what somebody would charge. RLS on all four tables is
+       `is_member(project) and my_role() in (founder, pm, accounts)`, so a supervisor gets zero
+       rows, not blanked cells. Nothing is column-revoked, so the views are `security_invoker` and
+       RLS is the only access control in play — no owner-run WHERE clause to lose in a later edit.
+       **Every figure is computed in Postgres.** `v_rc_matrix` flags the lowest rate per item with a
+       window function and derives each line total; `v_rc_vendor_totals` gives subtotal, GST at each
+       vendor's own rate, grand total, and how many items that vendor left unpriced;
+       `v_rc_summary` gives the card figures. `is_lowest_total` counts only vendors who priced EVERY
+       item — a total built from eight of ten lines is cheaper for the wrong reason.
+       **A missing quote is a missing row**, not a zero: "did not quote" and "quoted nothing" are
+       different facts and only the first should keep a vendor out of the comparison.
+       **The award is always per item.** `rc_items.awarded_quote_id` is the only representation;
+       "award all to Vendor B" writes one row per line rather than a second way of storing the same
+       fact. Split awards are the normal case here, not the exception.
+       **The reason is enforced in the database.** `fn_rc_award` / `fn_rc_award_item` refuse an
+       award above the lowest quote without one, name the vendor and both figures in the message,
+       and clear the field when it does not apply. That sentence prints on the statement — it is
+       the Open Book justification, so a form-only check would not do.
+       **Three BEFORE UPDATE guard triggers**, because an RLS update policy cannot restrict WHICH
+       columns are written: `status`, the award columns and the generated-PO link are writable from
+       the SECURITY DEFINER RPCs (`current_user` = owner) and refused from PostgREST
+       (`current_user` = authenticated). The 021 hole, closed the same way.
+       **Convert to PO reuses A3 untouched.** `fn_rc_to_po` raises one `purchase_orders` row per
+       winning vendor at status `approved` with rated `po_lines`, so receiving, the 3-way match,
+       the PO PDF and cancellation all work on them as usual. `rc_vendors.po_id` is what makes it
+       idempotent — no separate "converted" flag to fall out of step. Free-text lines are refused
+       BY NAME rather than having a material invented for them: `po_lines.material_id` is NOT NULL
+       because a PO feeds stock.
+       **It freezes once ordered.** Every write policy refuses on a comparison whose status is
+       `ordered` — it is the evidence of how that order was decided, and evidence that can still be
+       edited is not evidence. No cancel mechanism: delete while unconverted
+       (`fn_delete_comparison`, refused once a PO exists), cancel the PO afterwards.
+       **Comparative-statement PDF** on the letterhead, LANDSCAPE because the grid widens with the
+       vendor count. Prints the losing quotes as prominently as the winner, ticks the awarded cell,
+       bolds the cheapest, and prints every "why not the lowest" reason verbatim. Files to
+       Docs → Purchase Orders marked confidential, `doc_kind = 'comparative_statement'`.
+       Screen: `/money/compare` only — deliberately not mirrored under `/materials` the way Orders
+       is. Two readings of the same server-computed numbers: Lines (one card per item, rates
+       entered one-handed) and Statement (the real items × vendors grid, sticky first column).
+       **Not yet exercised in the app:** building from a requisition, entering a full grid, the
+       refusal when a whole-comparison award is aimed at a vendor with a missing line, the
+       reason-required refusal, conversion producing two POs on a split award, the frozen state
+       afterwards, and the supervisor pass (no Rate compare tab, zero rows if the URL is typed).
 - [ ] B4. M13 Estimation / BOQ / BBS generator (BOQ, bar-bending schedule per IS-2502 — reinforcement math)
 - [ ] B5. M24 Contract Labour (BOCW registers: Form XIII/XVI/XVII as data, gang attendance)
 - [x] **B6. M29 Company P&L & Project Profitability — 038–041 ALL APPLIED and working.**

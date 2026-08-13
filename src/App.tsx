@@ -38,6 +38,7 @@ import MaterialMaster from '@/pages/materials/MaterialMaster'
 import MaterialsLayout from '@/pages/materials/MaterialsLayout'
 import Movements from '@/pages/materials/Movements'
 import StockRegister from '@/pages/materials/StockRegister'
+import Comparisons from '@/pages/procurement/Comparisons'
 import Orders from '@/pages/procurement/Orders'
 import Incidents from '@/pages/tasks/Incidents'
 import Rfis from '@/pages/tasks/Rfis'
@@ -121,6 +122,12 @@ export default function App() {
                     MONEY_ROLES, so the parent guard already covers it. */}
                 <Route path="vendors" element={<Vendors />} />
                 <Route path="orders" element={<Orders />} />
+                {/* B3 rate comparison. Deliberately NOT mirrored under
+                    /materials the way Orders is: a PO has a rate-free half a
+                    supervisor needs, and a comparison has none — it is rates
+                    end to end. The MONEY_ROLES guard here and the RLS on
+                    rate_comparisons say the same thing twice. */}
+                <Route path="compare" element={<Comparisons />} />
                 <Route path="variations" element={<Variations />} />
                 {/* A4 Invoices. RLS restricts the table to founder/accounts,
                     so the parent MONEY_ROLES guard is the outer layer only. */}
