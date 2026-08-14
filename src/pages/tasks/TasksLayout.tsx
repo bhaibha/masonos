@@ -25,9 +25,12 @@ export default function TasksLayout() {
   // History spans a range; Schedule spans the whole programme and carries its
   // own data date. A single-day picker above either would suggest a connection
   // that isn't there.
+  // The bar schedule belongs to the drawing, not to a day — it is the same
+  // document in March as in June.
   const showDayPicker =
     !pathname.startsWith('/tasks/history') &&
     !pathname.startsWith('/tasks/schedule') &&
+    !pathname.startsWith('/tasks/bbs') &&
     !pathname.startsWith('/tasks/qa')
 
   useEffect(() => {
@@ -44,6 +47,7 @@ export default function TasksLayout() {
     { to: '/tasks/history', label: 'History' },
     { to: '/tasks/schedule', label: 'Schedule' },
     { to: '/tasks/qa', label: 'Quality' },
+    { to: '/tasks/bbs', label: 'Bar schedule' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },

@@ -40,6 +40,7 @@ import Movements from '@/pages/materials/Movements'
 import StockRegister from '@/pages/materials/StockRegister'
 import Comparisons from '@/pages/procurement/Comparisons'
 import Orders from '@/pages/procurement/Orders'
+import Bbs from '@/pages/tasks/Bbs'
 import Incidents from '@/pages/tasks/Incidents'
 import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
@@ -96,6 +97,10 @@ export default function App() {
                   founder/PM, enforced inside fn_record_inspection and
                   fn_set_ncr_status rather than by hiding a button. */}
               <Route path="qa" element={<Qa />} />
+              {/* B4 bar bending schedule. No role guard: the bar bender is the
+                  audience, and a BBS carries no rates. Authoring is founder/PM
+                  at RLS, and the IS constants are founder-only. */}
+              <Route path="bbs" element={<Bbs />} />
               {/* Task history across a date range, with CSV export. Its own
                   from/to dates, so it ignores the layout's day picker. */}
               <Route path="history" element={<TaskHistory />} />

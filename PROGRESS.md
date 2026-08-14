@@ -2773,3 +2773,218 @@ every vendor's rates), `doc_kind = 'comparative_statement'`.
 ## Migration 050 APPLIED — 2026-08-12
 
 `001–050 ALL APPLIED.` Next migration = 051. `APPLY_pending.sql` is empty again.
+
+## Session — B4 Bar Bending Schedule per IS 2502 (migration 051)
+
+Confirmed at the start: **001–050 all applied**. This session's migration is **051**.
+
+This module tells a bar bender how long to cut a piece of steel. Get it wrong and either the bar is
+short — a structural defect nobody sees again once the concrete is poured — or it is long, which is
+money in the scrap bin. So the whole thing is arranged around being CHECKABLE rather than merely
+correct.
+
+### The constants are a table, not code
+
+`bbs_constants` holds one labelled row per IS figure, each with its reference, units and a note:
+
+| code | label | value | unit |
+|---|---|---|---|
+| bend_45 | Bend deduction — 45° | 1 | × bar dia |
+| bend_90 | Bend deduction — 90° | 2 | × bar dia |
+| bend_135 | Bend deduction — 135° | 3 | × bar dia |
+| hook_standard | Standard hook allowance (180°) | 9 | × bar dia |
+| stirrup_hook_factor | Stirrup hook — multiple of dia | 10 | × bar dia |
+| stirrup_hook_min_mm | Stirrup hook — minimum | 75 | mm |
+| crank_factor | Extra length per crank | 0.42 | × crank rise |
+| unit_weight_divisor | Unit weight divisor | 162 | — |
+
+A structural engineer can audit the entire engine by reading that table. Founder-only write,
+audited, and `on conflict do nothing` on re-run so a deliberate change is never silently reset.
+
+The shapes are data too: `bbs_shapes` carries leg multipliers (a rectangular stirrup is
+mult_a = mult_b = 2) plus the count of 45°/90°/135° bends and of each hook type, so one row is the
+whole formula for a shape.
+
+### One implementation, answer and working together
+
+`fn_bbs_cutting_length` returns `{cutting_length_mm, straight_mm, hooks_mm, deductions_mm, working,
+warning}` in one jsonb. The arithmetic shown under each bar on screen is therefore a by-product of
+the calculation rather than a second one — an explanation that can disagree with its own number is
+not expressible. The live preview while typing is a server round trip on a 250 ms debounce for the
+same reason: a TypeScript copy of a safety-critical formula is the copy nobody re-checks after a
+constant changes.
+
+An impossible input (a stirrup whose deductions exceed its perimeter) returns a NEGATIVE length
+with a warning. It is never clamped and the row is never dropped — a schedule that quietly loses a
+bad line is worse than one that shows a problem in red.
+
+### Verified against a real PostgreSQL, not just parsed
+
+`pip install pgserver` gives a full PostgreSQL inside the sandbox with no root. With `auth.uid()`,
+`my_role()`, `is_member()`, `is_founder()` and `fn_audit()` stubbed, the migration was executed for
+real. `fn_bbs_selftest()` returned **8 of 8 passing at 0.00 mm**, and a worked beam (4 no. B1, 3-Y16
++ 2-Y12 + 26 stirrups each) matched an independent Python hand-calculation exactly at 186.415 kg.
+
+That run found two bugs a read-through and a pglast parse had both missed:
+
+1. **`fn_audit` assumes an `id` column.** It does `coalesce(new.id::text, old.id::text)`, and
+   `bbs_constants` / `bbs_shapes` are keyed by `code`. The trigger raised
+   `record "new" has no field "id"` and ABORTED the write — so a founder editing a constant would
+   have seen the edit apparently succeed with the value unchanged. Fixed with `fn_audit_by_code()`.
+2. **The migration was not re-runnable.** The views depend on the two functions, so on a second run
+   `drop function` was refused and the following `create function` failed with "already exists",
+   leaving the OLD function in place. Fixed by moving the view drops above the function drops. The
+   script now runs clean three times under `ON_ERROR_STOP=1`.
+
+Both lessons are in CLAUDE.md.
+
+### Access
+
+Founder/PM author; every project member reads, including supervisors — the bar bender is the
+audience and a BBS carries no rates. The brief's "site engineer creates" is met by adding a
+`Structural Engineer` job title mapped to the `pm` access role: a TS-only change that can never
+widen data access, which is exactly what the designation→role mapping exists for (the 043
+decision, unchanged).
+
+### Screen
+
+`/tasks/bbs` — member cards with expandable bar marks and a per-bar "show working", a
+steel-by-diameter table, an IS rules tab carrying the constants and the self-test button, and a
+landscape printable BBS on the letterhead whose footer states which constants it was cut to. A
+schedule that does not say its hook allowance cannot be checked a year later.
+
+`npx tsc -b --force` clean.
+
+**Run migration 051 before testing.**
+
+## Addendum — callout expansion (migration 052)
+
+Asked for: upload a structural drawing and have it read out the schedule automatically.
+
+**What was built instead, and why.** Extracting reinforcement from a drawing image needs a vision
+model. It would be confidently wrong some of the time, it is a paid API (which the stack rules
+exclude), and — the real objection — a plausible-looking bar schedule that nobody checks is the
+single worst artefact this module could produce, because the error stops being visible the moment
+the concrete is poured. The founder chose callout expansion over AI vision after that was put to
+them; drawings here are a mixture of CAD PDFs and scans, and whether they carry schedule tables is
+still to be checked.
+
+**Callout expansion.** Record the member once — 300 × 450, 5000 long, 25 cover — then type what the
+section says:
+
+```
+4-Y16 BOTTOM
+2-Y12 TOP
+2-Y16 CRANK
+Y8 @150 STIRRUP
+```
+
+and get four bar marks with dimensions, counts, cutting lengths and weights. The machine does only
+the counting and the geometry: stirrup count from the spacing, stirrup size from the section minus
+cover, crank rise from depth minus cover minus the bar itself. Nothing is inferred that the
+engineer did not write down.
+
+Verified end to end on a real Postgres — that beam produces 299.490 kg across Ø8 / Ø12 / Ø16, every
+figure from the 051 engine.
+
+**Anchorage defaults to ZERO.** Development length depends on steel grade, concrete grade, bond
+condition and the designer's detail, and it is on the drawing. A "sensible" default would be the
+app quietly designing the joint.
+
+**It refuses rather than guesses.** One unreadable line fails the whole expansion, naming the line:
+a partial apply would leave the schedule short of steel with nothing on screen to say which bar is
+missing. Ø7 is refused as not a rolled size, not rounded to 8. Confirmed in testing — a failed
+apply left the four existing bars untouched.
+
+**Re-running is safe.** The callout text is stored on the member; re-applying replaces only rows
+flagged `from_callout`, so an extra bar added by hand at a support survives a correction to an
+unrelated line.
+
+**The parser self-test caught a real bug immediately.** `(\d+)\s*CRANK` — which reads correctly and
+looks right — matches the DIAMETER in "2-Y16 CRANK", giving 16 cranks and a bar 1810 mm too long.
+`fn_bbs_callout_selftest()` failed case 3 on the first run. The crank count now needs an
+unambiguous form (`CRANK x2`, `CRANK(2)`) and defaults to 2.
+
+`fn_bbs_callout_selftest()` 5/5, `fn_bbs_selftest()` still 8/8, 051+052 run clean three times under
+`ON_ERROR_STOP=1`. `npx tsc -b --force` clean.
+
+**Still open:** whether the drawings carry beam/column schedule TABLES. If they do, importing that
+table from a CAD PDF is the next reliable step and is deterministic — no vision model needed.
+
+**Run migration 051, then 052.**
+
+## Addendum — the firm's own BBS sheet layout (migration 053)
+
+The founder supplied their existing BBS sheet and asked for output in that format, plus the beam
+number. Also asked, directly: does this read the drawing? **No — it does not, and by design.**
+Nothing in the module opens a PDF or an image; the engineer types the callouts and the machine does
+the counting and the geometry.
+
+### Three things the sheet told us
+
+**1. Their unit weights are not d²/162.** The sheet's header reads φ8 0.395, φ10 0.616, φ12 0.888,
+φ16 1.579, φ20 2.466. d²/162 gives 0.3951 / 0.6173 / 0.8889 / 1.5802 / 2.4691 — matching none of
+them. d²/162.2 gives 0.3946 / 0.6165 / 0.8878 / 1.5783 / 2.4661 — matching four of five at three
+decimals. 162.2 is also the exact figure (π/4 × d² × 7850 = d²/162.28). The constant was moved,
+guarded on the seeded 162 so a deliberate change is never overwritten, audited, reversible in one
+tap.
+
+**φ16 still differs** — their 1.579 against a computed 1.578. Their five figures do not all come
+from one divisor; they look like conventional table values rounded by hand. That gap is named in
+the migration header rather than papered over: 0.06%, and a per-diameter override table is a small
+migration if the last gram matters.
+
+**2. The printed factor must be the factor used.** Their sheet computes 103.6 m × 0.395 = 40.92 kg.
+The app was printing 0.395 and multiplying by 0.3951 — so a checker adding a column up by hand
+would have got a different number and would have been right to distrust the app.
+`unit_weight_decimals` (3) now rounds the factor to what appears in the heading. With that,
+the app reproduces the supplied sheet: φ8 40.922 (sheet 40.92), φ12 288.586 (sheet 288.59),
+pieces 9 / 28 / 18 exactly, last bar mark 08, omitted 04 — all confirmed on a real Postgres by
+rebuilding their seven rows.
+
+**3. Pieces per 12 m length.** ceil(total length ÷ stock length), server-side, with `stock_length_m`
+a constant because some suppliers deliver 11 m or 9 m. Explicitly NOT a cutting optimisation — two
+4 m bars and a 5 m bar do not come out of one 12 m length without offcuts — and both the screen and
+the PDF footer say so. A figure that pretended to nest would under-order.
+
+**Last / omitted bar mark** (`fn_bbs_mark_audit`) fills the two boxes at the head of the sheet. A
+gap in the sequence is usually a bar somebody deleted and forgot to re-issue. It only applies where
+marks are plain numbers as on their sheet; where they are member-prefixed (B1-1) it returns null
+rather than inventing a sequence out of trailing digits.
+
+### The PDF
+
+Rebuilt to their layout: S/No · **Member** · Bar Mark · No of bars · No of members · Shape · Length ·
+Total Length, then one column per diameter carrying that bar's weight, then TOTAL (kg),
+TOTAL (tonnes) and No of pieces required. The Member column is the addition they asked for — their
+sheet has none, and a bar mark alone does not say which beam it belongs to.
+
+The Shape column draws the schematic the way their sheet does — a rectangle for a stirrup, a circle
+for a tie, turned-down legs with their dimensions for a U-bar, a dog-leg for a crank. Not to scale,
+because a 4950 mm bar and its 150 mm hooks cannot both be readable at scale.
+
+Rule 046 applied throughout: take the client's own form, do not improve it.
+
+`npx tsc -b --force` clean. 051+052+053 run clean three times under `ON_ERROR_STOP=1`;
+`fn_bbs_selftest()` 8/8 and `fn_bbs_callout_selftest()` 5/5 afterwards.
+
+**Run migration 051, then 052, then 053.**
+
+## Migrations 051 + 052 + 053 APPLIED — 2026-08-14
+
+Confirmed by the founder: all three ran and the Bar schedule screen works.
+
+`001–053 ALL APPLIED.` Next migration = 054. `APPLY_pending.sql` is empty again.
+
+**Still unexercised in the app** (migrations running is not the flow working): entering a real beam
+and column off a drawing, the callout panel end to end, the negative-length warning on screen, the
+founder editing a constant and the self-test catching it, the sheet-format PDF against the paper
+original, and the supervisor pass (schedule readable, no Add member, no callout panel, no constant
+edit).
+
+**Open for a future session:** automatic extraction from drawings. Scoped in chat — six stages, of
+which only schedule generation exists. Recommended order is notes-block extraction (cover and Ld
+tables) then schedule-table import, both deterministic from CAD PDFs, with vision only as a last
+resort for scans and only behind a draft-and-confirm review gate. Blocked on one question: are the
+firm's structural drawings text-selectable, and do they carry a notes block and a beam/column
+schedule table.

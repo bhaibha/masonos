@@ -155,20 +155,102 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_qa_summary`. NCRs stay. 049 = `documents.doc_kind` so a filed NCR stays in
   QC Certificates without also showing in the QA plan docs list, plus
   `fn_qa_summary` re-emitted to count plans only.
-  So: **001–050 ALL APPLIED.**
+  So: **001–053 ALL APPLIED.**
   **050 APPLIED** (confirmed 2026-08-12) — B3 rate comparison / comparative statement
   (`rate_comparisons`, `rc_items`, `rc_vendors`, `rc_quotes`, `rc_status`,
   `v_rc_matrix`, `v_rc_vendor_totals`, `v_rc_summary`, `rc_may_read`,
   `rc_may_write`, `fn_rc_from_pr`, `fn_rc_award_item`, `fn_rc_award`,
   `fn_rc_clear_award`, `fn_rc_to_po`, `fn_delete_comparison`, three
   BEFORE UPDATE guard triggers, audit triggers on all four tables).
-  Next migration = 051.
+  **051 APPLIED** (confirmed 2026-08-14) — B4 Bar Bending Schedule per IS 2502
+  (`bbs_constants`, `bbs_shapes`, `bbs_members`, `bbs_bars`,
+  `bbs_member_type`/`bbs_formula_kind`, `fn_bbs_cutting_length`,
+  `fn_bbs_unit_weight`, `v_bbs_bars`, `v_bbs_member_totals`,
+  `v_bbs_project_steel`, `fn_bbs_selftest`, `fn_audit_by_code`,
+  `fn_bbs_touch_constant`).
+  **052 APPLIED** (confirmed 2026-08-14) — callout expansion: member geometry on
+  `bbs_members` (length/width/depth/cover/anchorage/circular/diameter +
+  `callout_text`), `bbs_bars.from_callout`, `fn_bbs_parse_callouts` (pure),
+  `fn_bbs_preview_callouts`, `fn_bbs_apply_callouts` (all-or-nothing),
+  `fn_bbs_callout_selftest` (5/5). Run AFTER 051.
+  **053 APPLIED** (confirmed 2026-08-14) — the firm's own BBS sheet layout
+  (`stock_length_m`, `unit_weight_decimals`, `unit_weight_divisor` moved
+  162 -> 162.2 guarded on the seeded value, `fn_bbs_unit_weight` re-emitted to
+  round to the printed decimals, `v_bbs_bars`/`v_bbs_member_totals` recreated,
+  `v_bbs_project_steel` gaining `total_tonnes` + `pieces_required`,
+  `fn_bbs_mark_audit`). Run AFTER 052.
+  **Verified against a real PostgreSQL before shipping** (pgserver in the
+  sandbox, not just pglast): runs clean THREE times under `ON_ERROR_STOP=1`,
+  and `fn_bbs_selftest()` returns 8/8 passing at 0.00 mm. That run found two
+  bugs a read-through had missed — see the two lessons below.
+  Next migration = 054.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
   `section` on template/live/answer checks, `inspections.location`, plus
   `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
   `fn_inspection_checks` re-emitted. Next migration = 047.
+- **A regex that "looks right" is why the self-test exists (052).** `(\d+)\s*CRANK` reads the crank
+  count out of "2-Y16 CRANK" — and matches the DIAMETER, giving 16 cranks and a bar 1810 mm too
+  long. It survived writing and re-reading; `fn_bbs_callout_selftest()` caught it on the first run.
+  Any count parsed out of free text needs a form that cannot collide with the other numbers on the
+  line (`CRANK x2`, `CRANK(2)`), and any text parser ships with cases.
+- **Expand what was written; never infer what wasn't (052).** The founder asked for "upload a
+  drawing and it reads it". A vision model would be confidently wrong sometimes, and a plausible
+  bar schedule nobody checks is invisible from the moment the concrete is poured. Callout expansion
+  does only the counting and the geometry — stirrups from a spacing, stirrup size from the section
+  minus cover, crank rise from depth minus cover minus the bar. Anchorage length defaults to ZERO
+  rather than something sensible, because a sensible default would be the app designing the joint.
+- **All-or-nothing, and only replace what you generated (052).** One unreadable callout refuses the
+  WHOLE expansion, naming the line: a partial apply leaves the schedule short of steel with nothing
+  on screen to say which bar is missing. And a re-run deletes only rows flagged `from_callout`, so
+  the extra bar somebody added at a support survives a correction to an unrelated line.
+- **The printed factor and the computed total must reconcile (053).** The firm's sheet prints
+  φ8 = 0.395 and multiplies by it. The app was printing 0.395 and multiplying by 0.3951, so a
+  checker adding a column up by hand would get a different answer and would be right to distrust
+  the app. `unit_weight_decimals` rounds the factor to what actually appears in the heading. Any
+  figure shown as a multiplier must BE the multiplier.
+- **The client's own sheet is the authority on the client's own constants (053).** Their BBS is
+  printed to d²/162.2; 051 seeded the textbook 162. 162.2 is also the exact value. Changed —
+  guarded on the seeded number so a deliberate choice is never overwritten, audited, reversible in
+  one tap. Same rule as taking their twenty site checklists verbatim in 046.
+- **Say which figure still doesn't match (053).** Four of the five unit weights on their sheet come
+  from 162.2; φ16 does not (they print 1.579, it computes 1.578). Rather than quietly pick the
+  divisor that fits best and imply an exact match, the migration header names the gap, sizes it
+  (0.06%), and says what a per-diameter override table would cost. A reconciliation that hides its
+  one mismatch is worse than none.
+- **RUN THE MIGRATION BEFORE SHIPPING IT — pglast is not enough (051).** `pip install pgserver`
+  gives a real PostgreSQL inside the sandbox with no root needed; stub `auth.uid()`, `my_role()`,
+  `is_member()`, `is_founder()`, `fn_audit()` and the four core tables, then execute the migration
+  with `psql -v ON_ERROR_STOP=1 -f` **three times**. 051 parsed clean under pglast and still had two
+  real bugs (below), both of which would have reached production. Do this for anything with
+  arithmetic in it, and for anything that adds a view over a function.
+- **`fn_audit` assumes an `id` column (051).** It does `coalesce(new.id::text, old.id::text)`, so
+  attaching it to a table keyed by anything else raises `record "new" has no field "id"` — and
+  because the trigger is in the same transaction, the WRITE IS ABORTED. The symptom is vile: the
+  edit looks like it succeeded and the value is unchanged. `fn_audit_by_code()` is the version for
+  code-keyed tables. Check the PK before adding an audit trigger.
+- **Drop a view BEFORE the function it calls (051).** `drop function` is refused while a view
+  depends on it, and the `create function` that follows then fails with "already exists" — leaving
+  the OLD function in place while the script reports an error. The migration works once and is
+  broken on every re-run, which is exactly when nobody is watching. View drops go above the
+  function drops, not next to the view creates.
+- **Put the constants in a table, and ship a self-test (051).** A cutting-length engine whose
+  numbers are buried in a function body cannot be audited by the structural engineer who is
+  actually responsible for it. `bbs_constants` is one labelled row per IS figure, and
+  `fn_bbs_selftest()` re-derives eight worked examples with known answers. Editing a constant
+  restates every schedule in the database — the self-test is what makes that safe, and it earned
+  its place immediately: changing the stirrup hook to 12d flipped three cases to FAIL.
+- **Compute the working in the same call as the answer (051).** `fn_bbs_cutting_length` returns
+  `{cutting_length_mm, working}` together, so the explanation on screen is a by-product of the
+  calculation rather than a second one. An explanation assembled separately eventually describes
+  arithmetic the system is no longer doing — which is worse than showing nothing.
+- **Report an impossible input, never clamp it (051).** A stirrup whose deductions exceed its
+  perimeter returns a negative length WITH a warning, and the PDF prints the row in red. Silently
+  clamping to zero, or dropping the line, produces a schedule that looks fine and is missing a bar.
+- **Don't reimplement a safety-critical formula in the browser (051).** The live preview in the bar
+  form is a server round trip on a 250 ms debounce. A TypeScript copy would be faster and would be
+  the copy nobody re-checks after a constant changes.
 - **Gate at the row when there is no innocent half (050).** 012 revoked `po_lines.rate` column by
   column because site genuinely needs the rest of a PO — quantities, delivery dates, the material
   list. A rate comparison has no such half: every row of it exists to say what somebody would

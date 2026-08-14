@@ -1,21 +1,25 @@
 -- ==============================================================
 -- MASON OS — pending migrations.
 --
--- 001–050 are all APPLIED (050 confirmed 2026-08-12).
+-- 001–053 are all APPLIED (051 + 052 + 053 confirmed 2026-08-14).
 --
--- NOTHING IS PENDING. The next migration is 051; when it is written, this
--- file becomes its full runnable text (and the text of every migration after
--- it that has not yet been confirmed, in order).
+-- NOTHING IS PENDING. The next migration is 054; when it is written, this
+-- file becomes its full runnable text (and every migration after it that
+-- has not yet been confirmed, in order).
 --
 -- Every migration must stay idempotent/re-runnable:
 --   * enums          -> alter type ... add value if not exists
 --   * tables         -> create table if not exists, PLUS an explicit
 --                       alter table ... add column if not exists for every
 --                       column added after the create block first shipped
---   * views          -> drop view if exists ... cascade, then create
+--   * views          -> drop view if exists ... cascade, then create,
+--                       AND drop them BEFORE any function they call
 --   * functions      -> drop function if exists (full signature), then create
 --                       (create or replace CANNOT widen a return type)
 --   * policies       -> drop policy if exists, then create
--- Cast enum assignments explicitly (::po_status). End every migration with a
--- verify block that counts arities and names the objects it created.
+--
+-- And for anything with arithmetic in it: RUN IT against a real Postgres
+-- before shipping (pip install pgserver), three times, under
+-- ON_ERROR_STOP=1. Parsing is not running — 051 parsed clean and still had
+-- two production bugs in it.
 -- ==============================================================

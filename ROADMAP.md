@@ -356,7 +356,67 @@ Order within group:
        refusal when a whole-comparison award is aimed at a vendor with a missing line, the
        reason-required refusal, conversion producing two POs on a split award, the frozen state
        afterwards, and the supervisor pass (no Rate compare tab, zero rows if the URL is typed).
-- [ ] B4. M13 Estimation / BOQ / BBS generator (BOQ, bar-bending schedule per IS-2502 — reinforcement math)
+- [x] **B4. M13-C Bar Bending Schedule per IS 2502 — migration 051. Run it before testing.**
+       Cutting lengths and steel weights from what the structural drawing says. Arranged around
+       being CHECKABLE rather than merely correct, because a short bar is a defect nobody sees
+       again once the concrete is poured.
+       **The constants are a TABLE, not code.** `bbs_constants` holds one labelled row per IS
+       figure — 45°=1d, 90°=2d, 135°=3d, standard hook 9d, stirrup hook max(10d, 75 mm), crank
+       0.42, weight divisor 162 — each with its IS reference, its units and a note. A structural
+       engineer can audit the whole engine by reading that table. Founder-only write, audited,
+       and `on conflict do nothing` on re-run so a deliberate change is never reset.
+       **The shapes are DATA too.** `bbs_shapes` carries leg multipliers (a rectangular stirrup is
+       simply mult_a = mult_b = 2) plus the count of 45°/90°/135° bends and of each hook type, so
+       one row is the whole formula. Eight seeded: straight, hooked, L-bend, U-bar, crank,
+       rectangular stirrup, circular tie, spiral. Four formula kinds cover them; anything genuinely
+       new gets a kind, not an if-branch.
+       **One implementation, answer and working together.** `fn_bbs_cutting_length` returns
+       `{cutting_length_mm, straight_mm, hooks_mm, deductions_mm, working, warning}` in one jsonb,
+       so the arithmetic printed under each bar is a by-product of the calculation, not a second
+       one that could drift. The live preview in the form is a server round trip on a debounce for
+       the same reason — a TypeScript copy is the copy nobody re-checks after a constant changes.
+       **An impossible input is reported, never clamped.** A stirrup whose deductions exceed its
+       perimeter returns a negative length with a warning; the row goes red on screen and prints
+       red on the PDF. A schedule that quietly drops a bad line is worse than one that shows it.
+       **Self-test in the database.** `fn_bbs_selftest()` re-derives eight worked examples with
+       known IS-2502 answers, using the same function the schedule uses, and reports pass/fail with
+       the hand working alongside so the EXPECTATION can be checked as well as the result. Exposed
+       on the IS rules tab. It earned its place immediately: changing the stirrup hook to 12d
+       flipped three cases to FAIL.
+       **VERIFIED AGAINST A REAL POSTGRES before shipping** — 8/8 at 0.00 mm difference, roll-ups
+       checked against an independent hand calculation, and the script run three times under
+       `ON_ERROR_STOP=1`. That found two bugs pglast could not: `fn_audit` assumes an `id` column
+       and ABORTS the write on a code-keyed table, and a view must be dropped before the function
+       it calls or every re-run fails while leaving the old function in place.
+       **Deliberately not done:** it does not decide how many bars a member needs, their diameter,
+       or where the cranks go. That is design, it comes off a drawing, and software guessing at it
+       would be doing engineering it is not qualified to do.
+       Access: founder/PM author, EVERY project member reads including supervisors — the bar bender
+       is the audience and there are no rates on a BBS. The brief's "site engineer creates" is met
+       by adding a `Structural Engineer` job title mapped to the `pm` access role, a TS-only change
+       that cannot widen data access (the 043 decision, unchanged).
+       Screen `/tasks/bbs`: member cards with expandable bar marks and a per-bar "show working",
+       steel-by-diameter table, IS rules tab with the constants and the self-test, and a landscape
+       printable BBS on the letterhead that states in its footer which constants it was cut to.
+       **Migration 052 — callout expansion.** Record the member's geometry once, then type what the
+       section says (`4-Y16 BOTTOM` / `Y8 @150 STIRRUP` / `2-Y16 CRANK`) and get bar marks with
+       dimensions, counts, cutting lengths and weights. The machine does the counting and the
+       geometry only — stirrup count from the spacing, stirrup size from the section minus cover,
+       crank rise from depth minus cover minus the bar. NOT "read the drawing": a vision model
+       would be confidently wrong sometimes, and a plausible schedule nobody checks is invisible
+       once the concrete is poured. Anchorage defaults to ZERO because development length is the
+       designer's, not the app's. One unreadable line refuses the WHOLE expansion by name; a re-run
+       replaces only rows flagged `from_callout`, so a bar added by hand at a support survives.
+       `fn_bbs_callout_selftest()` 5/5 — and it caught a real bug on its first run, `(\d+)\s*CRANK`
+       matching the DIAMETER in "2-Y16 CRANK" and producing a bar 1810 mm too long.
+       **Not yet exercised in the app:** entering a real beam and column off a drawing, the negative
+       -length warning appearing on screen, the founder editing a constant and the self-test
+       catching it, the callout panel end to end, and the supervisor pass (schedule readable, no Add
+       member, no callout panel, no constant edit).
+       **Open question for next session:** whether the firm's drawings carry beam/column SCHEDULE
+       TABLES. If they do, importing that table from a CAD PDF is deterministic and is the next
+       reliable step — no vision model needed.
+- [ ] B4b. M13-A/B Estimation / BOQ generator (quantity take-off — the other half of Module 13)
 - [ ] B5. M24 Contract Labour (BOCW registers: Form XIII/XVI/XVII as data, gang attendance)
 - [x] **B6. M29 Company P&L & Project Profitability — 038–041 ALL APPLIED and working.**
        `v_project_pnl` per project: revenue (contract + APPROVED variations only — pending shown

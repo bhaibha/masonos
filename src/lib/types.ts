@@ -34,6 +34,10 @@ export const DESIGNATIONS: {
   { title: 'Quantity Surveyor', role: 'pm', note: 'All modules, assigned projects' },
   { title: 'Billing Engineer', role: 'accounts', note: 'Money modules, all projects' },
   { title: 'Accountant', role: 'accounts', note: 'Money modules, all projects' },
+  // Authors bar bending schedules, so it needs the pm access role. Exactly
+  // what the designation→role mapping exists for: a new job title is a TS-only
+  // change and can never widen anyone's data access (the 043 decision).
+  { title: 'Structural Engineer', role: 'pm', note: 'All modules, assigned projects' },
   { title: 'Site Engineer', role: 'supervisor', note: 'Site work only — no money' },
   { title: 'Site Supervisor', role: 'supervisor', note: 'Site work only — no money' },
   { title: 'Safety Officer', role: 'supervisor', note: 'Site work only — no money' },
@@ -890,6 +894,222 @@ export interface NewComparison {
   need_by: string | null
   notes: string
   items: NewComparisonItem[]
+}
+
+// ---------- Bar Bending Schedule, IS 2502 (B4, migration 051) ----------
+
+export type BbsMemberType =
+  | 'footing'
+  | 'pile_cap'
+  | 'column'
+  | 'beam'
+  | 'slab'
+  | 'wall'
+  | 'staircase'
+  | 'lintel'
+  | 'other'
+
+export const BBS_MEMBER_TYPES: { value: BbsMemberType; label: string }[] = [
+  { value: 'footing', label: 'Footing' },
+  { value: 'pile_cap', label: 'Pile cap' },
+  { value: 'column', label: 'Column' },
+  { value: 'beam', label: 'Beam' },
+  { value: 'slab', label: 'Slab' },
+  { value: 'wall', label: 'Wall' },
+  { value: 'staircase', label: 'Staircase' },
+  { value: 'lintel', label: 'Lintel' },
+  { value: 'other', label: 'Other' },
+]
+
+export const BBS_MEMBER_LABEL = Object.fromEntries(
+  BBS_MEMBER_TYPES.map((m) => [m.value, m.label]),
+) as Record<BbsMemberType, string>
+
+/** The rolled sizes. Matches the CHECK constraint on bbs_bars.dia_mm. */
+export const BAR_DIAMETERS = [6, 8, 10, 12, 16, 20, 25, 28, 32, 36, 40] as const
+
+/**
+ * Founder/PM author a schedule; every project member reads it — the person
+ * cutting the steel is the whole audience, and there are no rates on it.
+ * Mirrors bbs_member_write / bbs_member_read.
+ */
+export function canEditBbs(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Only the founder may edit an IS constant — it restates every schedule. */
+export function canEditBbsConstants(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
+export interface BbsConstant {
+  code: string
+  label: string
+  value: number
+  unit: string
+  is_ref: string | null
+  note: string | null
+  updated_at: string
+}
+
+export interface BbsShape {
+  code: string
+  name: string
+  formula_kind: 'linear' | 'crank' | 'circular' | 'spiral'
+  label_a: string | null
+  label_b: string | null
+  label_c: string | null
+  label_d: string | null
+  formula: string
+  sort_order: number
+}
+
+/** Row of v_bbs_bars — every figure computed in Postgres. */
+export interface BbsBar {
+  bar_id: string
+  member_id: string
+  bar_mark: string
+  dia_mm: number
+  shape_code: string
+  shape_name: string
+  a_mm: number
+  b_mm: number
+  c_mm: number
+  d_mm: number
+  n_cranks: number
+  qty_per_member: number
+  total_qty: number
+  cutting_length_mm: number
+  cutting_length_m: number
+  total_length_m: number
+  unit_weight_kg_m: number
+  total_weight_kg: number
+  /** the arithmetic, produced by the same call that produced the answer */
+  working: string | null
+  /** set when the inputs give an impossible length — shown, never hidden */
+  warning: string | null
+  remarks: string | null
+  sort_order: number
+}
+
+/** Row of v_bbs_member_totals. */
+export interface BbsMember {
+  member_id: string
+  project_id: string
+  member_type: BbsMemberType
+  mark: string
+  description: string | null
+  level: string | null
+  drawing_ref: string | null
+  member_count: number
+  bar_marks: number
+  total_bars: number
+  total_length_m: number
+  total_weight_kg: number
+  warnings: number
+  created_at: string
+}
+
+/** Row of v_bbs_project_steel — what actually gets ordered. */
+export interface BbsSteelByDia {
+  dia_mm: number
+  bar_marks: number
+  total_bars: number
+  total_length_m: number
+  /** the SAME rounded figure the weights were computed from (053) */
+  unit_weight_kg_m: number
+  total_weight_kg: number
+  total_tonnes: number
+  /** ceil(total length / stock length). Not a cutting optimisation. */
+  pieces_required: number
+}
+
+/** fn_bbs_mark_audit — the two boxes at the head of the firm's sheet. */
+export interface BbsMarkAudit {
+  numeric_marks: number
+  total_marks: number
+  /** null when bar marks aren't plain numbers — there is no sequence to audit */
+  last_mark: string | null
+  omitted: string | null
+}
+
+/** One row of fn_bbs_selftest(). */
+export interface BbsTestCase {
+  case_no: number
+  case_name: string
+  hand_working: string
+  expected_mm: number
+  computed_mm: number
+  diff_mm: number
+  passed: boolean
+}
+
+export interface NewBbsMember {
+  project_id: string
+  member_type: BbsMemberType
+  mark: string
+  description: string
+  level: string
+  drawing_ref: string
+  member_count: number
+  notes: string
+  /** geometry, migration 052 — what the callout expander measures from */
+  length_mm: number | null
+  width_mm: number | null
+  depth_mm: number | null
+  cover_mm: number
+  /** per end, from the drawing. Defaults to 0 — the app does not design this. */
+  anchorage_mm: number
+  is_circular: boolean
+  diameter_mm: number | null
+}
+
+export interface BbsGeometry {
+  length_mm: number | null
+  width_mm: number | null
+  depth_mm: number | null
+  cover_mm: number | null
+  anchorage_mm: number | null
+  is_circular: boolean
+  diameter_mm: number | null
+  callout_text: string | null
+}
+
+/**
+ * One line of fn_bbs_preview_callouts. `ok` false means the line was REFUSED,
+ * with `problem` saying why — never a best-effort row.
+ */
+export interface BbsCalloutLine {
+  line_no: number
+  source_line: string
+  ok: boolean
+  problem: string | null
+  bar_mark: string
+  dia_mm: number | null
+  shape_code: string
+  a_mm: number
+  b_mm: number
+  n_cranks: number
+  qty: number | null
+  remarks: string | null
+  cutting_length_mm: number | null
+  working: string | null
+  warning: string | null
+}
+
+export interface NewBbsBar {
+  member_id: string
+  bar_mark: string
+  dia_mm: number
+  shape_code: string
+  a_mm: number
+  b_mm: number
+  c_mm: number
+  d_mm: number
+  n_cranks: number
+  qty_per_member: number
+  remarks: string
+  sort_order: number
 }
 
 // ---------- Variation Orders ----------
