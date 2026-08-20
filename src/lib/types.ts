@@ -2827,3 +2827,207 @@ export interface BudgetRow {
   category_id: number
   amount: number
 }
+
+// ---------- Contract Labour, BOCW/CLRA (B5, migration 054) ----------
+
+/**
+ * Attendance is headcount and a work area — every project member reads it, and
+ * supervisors log it. That is the whole point of the module.
+ */
+export function canLogAttendance(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
+/** Wage rates and every derived cost figure. Mirrors labour_rates' RLS. */
+export function canSeeLabourCost(role: UserRole | null): boolean {
+  return role !== null && MONEY_ROLES.includes(role)
+}
+
+/** Posting labour to the ledger is the accounts act, like fn_post_invoice. */
+export function canPostLabour(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'accounts'].includes(role)
+}
+
+export interface LabourContractor {
+  id: string
+  name: string
+  contact_person: string | null
+  phone: string | null
+  licence_no: string | null
+  licence_authority: string | null
+  licence_valid_to: string | null
+  licensed_strength: number | null
+  pf_code: string | null
+  esi_code: string | null
+  gstin: string | null
+  trades: string[]
+  vendor_id: string | null
+  notes: string | null
+  is_active: boolean
+}
+
+export interface NewLabourContractor {
+  name: string
+  contact_person: string
+  phone: string
+  licence_no: string
+  licence_authority: string
+  licence_valid_to: string | null
+  licensed_strength: number | null
+  pf_code: string
+  esi_code: string
+  gstin: string
+  trades: string[]
+  notes: string
+}
+
+/** Row of v_labour_attendance — no money on it. */
+export interface AttendanceRow {
+  attendance_id: string
+  project_id: string
+  work_date: string
+  contractor_id: string
+  contractor_name: string
+  licence_no: string | null
+  licence_valid_to: string | null
+  trade: string
+  workers_present: number
+  overtime_hours: number
+  work_area: string | null
+  activity_id: string | null
+  remarks: string | null
+  voided_at: string | null
+  void_reason: string | null
+  created_by: string
+  /** more workers booked than the licence permits — flagged, never blocked */
+  over_licence: boolean
+}
+
+export interface NewAttendance {
+  project_id: string
+  work_date: string
+  contractor_id: string
+  trade: string
+  workers_present: number
+  overtime_hours: number
+  work_area: string
+  activity_id: string | null
+  remarks: string
+}
+
+/** Row of v_labour_cost. Founder/PM/accounts only — supervisors get none. */
+export interface LabourCostRow {
+  attendance_id: string
+  work_date: string
+  contractor_name: string
+  trade: string
+  workers_present: number
+  overtime_hours: number
+  daily_rate: number | null
+  rate_scope: string | null
+  mandays: number
+  wages: number
+  ot_amount: number
+  total_cost: number
+  /** no rate in force for that day — posting is refused until it is set */
+  rate_missing: boolean
+}
+
+export interface LabourRate {
+  id: string
+  project_id: string | null
+  contractor_id: string | null
+  trade: string
+  daily_rate: number
+  ot_multiplier: number
+  normal_hours: number
+  effective_from: string
+  effective_to: string | null
+  notes: string | null
+}
+
+export interface NewLabourRate {
+  project_id: string | null
+  contractor_id: string | null
+  trade: string
+  daily_rate: number
+  ot_multiplier: number
+  normal_hours: number
+  effective_from: string
+  effective_to: string | null
+  notes: string
+}
+
+/** Row of fn_wage_register — the Form XVII equivalent, at gang level. */
+export interface WageRegisterRow {
+  contractor_id: string
+  contractor_name: string
+  trade: string
+  days_worked: number
+  mandays: number
+  daily_rate: number | null
+  wages: number
+  ot_hours: number
+  ot_amount: number
+  total_payable: number
+  missing_rates: number
+}
+
+export interface OvertimeRow {
+  work_date: string
+  contractor_name: string
+  trade: string
+  workers_present: number
+  ot_hours: number
+  normal_hours: number
+  ot_multiplier: number
+  ot_rate_per_hr: number
+  ot_amount: number
+}
+
+export interface MusterRow {
+  work_date: string
+  contractor_id: string
+  contractor_name: string
+  trade: string
+  workers_present: number
+  overtime_hours: number
+  work_area: string | null
+}
+
+/**
+ * fn_labour_reconcile. `accrued` is what attendance says the labour was worth;
+ * `booked_ledger` is what has actually reached the P&L. They are deliberately
+ * separate figures — attendance never feeds the P&L on its own, or every rupee
+ * of labour would be counted twice.
+ */
+export interface LabourReconcile {
+  accrued: number
+  posted: number
+  booked_ledger: number
+  variance: number
+}
+
+export interface LicenceAlert {
+  contractor_id: string
+  name: string
+  licence_no: string | null
+  licence_valid_to: string
+  days_left: number
+  display_status: 'expired' | 'due_soon' | 'valid'
+}
+
+/**
+ * fn_labour_effort — the History roll-up. EFFORT only: no rate, no cost.
+ * History is readable by supervisors and its exports carry no money column;
+ * wages live at Money → Labour.
+ */
+export interface LabourEffortRow {
+  contractor_id: string
+  contractor_name: string
+  trade: string
+  days_worked: number
+  mandays: number
+  ot_hours: number
+  peak_workers: number
+}

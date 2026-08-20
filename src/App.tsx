@@ -17,6 +17,7 @@ import BudgetVsActual from '@/pages/money/BudgetVsActual'
 import ExpenseForm from '@/pages/money/ExpenseForm'
 import Insurance from '@/pages/money/Insurance'
 import Invoices from '@/pages/money/Invoices'
+import Labour from '@/pages/money/Labour'
 import Ledger from '@/pages/money/Ledger'
 import Overheads from '@/pages/money/Overheads'
 import Pnl from '@/pages/money/Pnl'
@@ -42,6 +43,7 @@ import Comparisons from '@/pages/procurement/Comparisons'
 import Orders from '@/pages/procurement/Orders'
 import Bbs from '@/pages/tasks/Bbs'
 import Incidents from '@/pages/tasks/Incidents'
+import LabourAttendance from '@/pages/tasks/LabourAttendance'
 import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import Qa from '@/pages/tasks/Qa'
@@ -101,6 +103,10 @@ export default function App() {
                   audience, and a BBS carries no rates. Authoring is founder/PM
                   at RLS, and the IS constants are founder-only. */}
               <Route path="bbs" element={<Bbs />} />
+              {/* B5 gang attendance. No role guard: supervisors log it, and
+                  there is no money on the screen — wage rates are a separate
+                  table they match no policy on. */}
+              <Route path="labour" element={<LabourAttendance />} />
               {/* Task history across a date range, with CSV export. Its own
                   from/to dates, so it ignores the layout's day picker. */}
               <Route path="history" element={<TaskHistory />} />
@@ -133,6 +139,11 @@ export default function App() {
                     end to end. The MONEY_ROLES guard here and the RLS on
                     rate_comparisons say the same thing twice. */}
                 <Route path="compare" element={<Comparisons />} />
+                {/* B5 contract labour — the money half. Wage rates, the
+                    register, and the deliberate act of posting a period to the
+                    ledger. Attendance itself is under Tasks, where the
+                    supervisor logs it and sees no figures. */}
+                <Route path="labour" element={<Labour />} />
                 <Route path="variations" element={<Variations />} />
                 {/* A4 Invoices. RLS restricts the table to founder/accounts,
                     so the parent MONEY_ROLES guard is the outer layer only. */}

@@ -2988,3 +2988,180 @@ tables) then schedule-table import, both deterministic from CAD PDFs, with visio
 resort for scans and only behind a draft-and-confirm review gate. Blocked on one question: are the
 firm's structural drawings text-selectable, and do they carry a notes block and a beam/column
 schedule table.
+
+## Session — B5 Contract Labour (Module 24), migration 054
+
+Confirmed at the start: **001–053 all applied**. This session's migration is **054**.
+
+### The decision that mattered most
+
+Attendance × rate is an ACCRUAL — what the labour on site is worth. `v_project_pnl` computes cost
+from expenses and certified RA bills — what was actually paid. Adding the accrual on top would have
+counted **every rupee of labour twice**, and on most jobs labour is the largest single line. Every
+project's margin would have been wrong.
+
+So attendance does not feed the P&L. Instead:
+
+- `fn_labour_reconcile` shows both figures and their difference — "attendance says ₹38,950 for
+  August, ₹38,950 is booked".
+- `fn_post_labour_expense` is a deliberate act by founder/accounts that turns a period into ordinary
+  expenses. Once posted, the P&L picks it up the normal way and there is still exactly ONE source of
+  cost.
+- Overlapping periods are refused by `labour_postings`, not by remembering not to. Voiding an
+  attendance day that has already been posted is refused too, or the two would stop agreeing.
+
+Posting writes one expense **per schedule activity** in the period, so the `activity_id` tagging
+earned value depends on survives.
+
+### Money split at the table
+
+`labour_attendance` is headcount and work area — every project member reads it, supervisors log it.
+`labour_rates` is founder/PM/accounts only, and `v_labour_cost` / `v_labour_project_cost` are
+owner-run with the role check in the WHERE clause. A supervisor gets **zero rows**, not blanked
+columns. Confirmed in testing: with `my_role()` returning 'supervisor', `v_labour_cost` returned 0
+rows and `fn_labour_rate` returned 0 rows, while `v_labour_attendance` still returned all 4 and the
+muster roll still worked.
+
+### Registers, named honestly
+
+A muster roll built from gang counts is **not** the named statutory Form XVI. The three functions
+are labelled EQUIVALENT and GANG LEVEL on screen and on paper. `labour_workers` (Form XIII) exists
+for contractors who supply a roster. Gang counts are the primary shape because that is what a
+supervisor can enter one-handed at a gate — the 048 lesson, learned by deleting a 627-question ITP.
+
+### The site-log overlap
+
+`site_logs` has carried `labour_mason` / `labour_helper` / `labour_other` since 001. Attendance
+records the same fact in more detail. Two records of one fact will disagree, and the trusted one
+will be whichever was typed last. `fn_labour_headcount_check` returns both and the variance, and the
+attendance screen shows a banner when they differ. The site log was NOT changed here — doing that
+silently inside a labour migration would be the wrong place for a UI decision.
+
+### Verified on a real PostgreSQL
+
+Three clean runs under `ON_ERROR_STOP=1`. A worked project — 14 masons at ₹850 (project+contractor
+rate), 6 helpers at ₹550 with 4 h OT, 22 masons, 5 tilers at ₹900 — produced ₹38,950, matching an
+independent hand calculation to the rupee. OT computed as 4 × (550 ÷ 8) × 2 = ₹550.
+
+Rate resolution confirmed: with four rates in force for Mason, the project+contractor rate (₹850)
+won on that project, and the contractor rate (₹750) won elsewhere.
+
+All four guards confirmed firing:
+
+| Guard | Result |
+|---|---|
+| Same gang twice on one day/area | refused by `labour_att_uk` |
+| Post a period with a missing rate | refused, named the count |
+| Post an overlapping period | refused, cited double counting |
+| Void a day already posted | refused |
+
+### Screens
+
+`/tasks/labour` — supervisor quick entry: contractor, trade, how many present, overtime, work area.
+No figures anywhere. Over-licence headcount flagged, never blocked; the app cannot send people home.
+
+`/money/labour` — wage register (Form XVII equivalent), overtime register, rates with their four
+scopes, the contractor register with licence expiry warnings, and the reconcile-and-post block.
+
+`npx tsc -b --force` clean.
+
+**Run migration 054 before testing.**
+
+### Fix — the attendance screen was a dead end with no contractors
+
+Reported: could not add a labour log. The screen was working; the flow was not. Attendance is logged
+AGAINST a contractor, there were none on file, and the empty state told the founder to go to
+Money → Labour — a different screen, in a different section, with no way back to what they were
+doing. Accurate and useless.
+
+Now a founder/PM/accounts user adds the contractor **where they are**: a "+ Add a new contractor"
+option in the picker, and a short form asking for a name (licence number and licensed strength
+optional, because they should never block recording who was on site). The new contractor is selected
+automatically and the gang form continues. Same inline-create pattern the expense form already uses
+for vendors.
+
+A supervisor still cannot create one — `labour_contractors` is founder/PM/accounts at RLS — so they
+get the honest version: "ask the office to add the contractor". The button is hidden rather than
+shown-and-refused.
+
+Also: the reference-table load errors are no longer swallowed. `fetchContractors` and
+`fetchLabourTrades` used to `.catch(() => [])`, which made "migration 054 has not been run" look
+identical to "no contractors yet". The reason is now kept and shown, naming 054 — the standing
+lesson that 0 items usually means a migration that never ran.
+
+### Addendum — labour report in History (migration 055)
+
+Asked for: a labour report in the History section.
+
+History → **Labour**, sitting between Site logs and Safety, sharing the same date range and export
+button as everything else there. Two tables:
+
+1. **Summary by contractor and trade** — days worked, mandays, overtime hours, peak workers in a
+   day. Mandays is the figure that gets checked against a contractor's invoice.
+2. **Muster roll** — the day-by-day gang detail, labelled a Form XVI *equivalent* at gang level, with
+   voided entries excluded.
+
+Export produces two files, matching the Safety section's pattern: the muster roll and the summary.
+
+**It carries no money, deliberately.** History is readable by supervisors, and the standing property
+of that screen — confirmed in the supervisor pass on 2026-08-06 — is that its CSVs hold no money
+column. Wages already have a home at Money → Labour behind `fn_wage_register`, gated to money roles.
+Putting them here as well would break that property AND create a second place to look for one figure.
+
+**Why a migration for a report.** Summing mandays in the browser would have been three lines, but
+rule 2 says every quantity total is computed in Postgres. A manday total is exactly that kind of
+figure — it is what the wage register is read in and what somebody compares against an invoice — so
+`fn_labour_effort` computes it once, server-side, with the voided-entry exclusion in the same place
+as every other total in the app.
+
+The two labour calls in History `.catch(() => [])` on purpose: labour arrived at 054/055, and the
+rest of History must keep working if they have not been run. Until 055 is applied the section shows
+the muster roll without the summary table rather than taking the screen down.
+
+Verified on a real PostgreSQL: three clean runs under `ON_ERROR_STOP=1`, and a voided entry
+confirmed dropping out of the roll-up (Helper's 6 mandays and 4 OT hours disappeared, Mason and
+Tiler unchanged).
+
+`npx tsc -b --force` clean.
+
+**Run migration 055 before testing.**
+
+### Addendum — several trades per gang in one entry
+
+Asked for: a contractor often supplies more than one trade, so allow multiple trades when logging.
+
+The database shape was already right and did not change. `labour_attendance` is one row per
+(contractor, trade) because **wage rates are per trade** — a row that lumped masons and helpers
+together could not be priced. So this is a form change only: pick the contractor once, enter counts
+against as many trades as turned up, and it writes one row each. A convenience over the existing
+shape, never a second representation of it (the 050 rule).
+
+- Picking a contractor **seeds one line per trade their record says they supply**, so the common
+  case is typing three numbers rather than pick-trade-type-tap-repeat. Only while nothing has been
+  entered yet — re-seeding over typed counts would throw work away, and a supervisor may deliberately
+  be logging a trade the contractor's record does not list.
+- Overtime is per trade: masons may work late when helpers do not.
+- Work area and remarks apply to the whole gang, because a contractor's trades are normally in the
+  same place. Anything genuinely elsewhere gets its own entry.
+- A running "24 workers across 3 trades" line, which turns red when the total exceeds the
+  contractor's licensed strength.
+- The same trade twice in one entry is caught in the form before it reaches the unique index.
+
+**The insert is a single statement with an array, so it is all-or-nothing.** If one trade collides
+with something already logged for that day and area, nothing is written — and the toast says so
+explicitly, because a supervisor who does not know whether half of it saved will either re-enter and
+double the day or skip it and lose it.
+
+`npx tsc -b --force` clean. No migration — 055 is still the only pending one.
+
+## Migrations 054 + 055 APPLIED — 2026-08-14
+
+Confirmed by the founder: both ran and the labour module works end to end —
+attendance entry, the multi-trade form, and History → Labour.
+
+`001–055 ALL APPLIED.` Next migration = 056. `APPLY_pending.sql` is empty again.
+
+**Still unexercised:** setting a wage rate and watching the wage register pick it up; posting a
+period to the ledger and seeing it reach the P&L; the overlap refusal on a second post; the
+site-log variance banner; and the supervisor pass (attendance visible and loggable, /money/labour
+blocked, zero rows if the URL is typed, no money column in the History labour CSVs).

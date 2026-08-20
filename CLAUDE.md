@@ -156,6 +156,17 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   QC Certificates without also showing in the QA plan docs list, plus
   `fn_qa_summary` re-emitted to count plans only.
   So: **001–053 ALL APPLIED.**
+  **054 APPLIED** (confirmed 2026-08-14) — B5 Contract Labour (`labour_trades`,
+  `labour_contractors`, `labour_workers`, `labour_rates`, `labour_attendance`,
+  `labour_postings`, `fn_labour_rate`, `v_labour_attendance`, `v_labour_cost`,
+  `v_labour_project_cost`, `fn_muster_roll`, `fn_wage_register`,
+  `fn_overtime_register`, `fn_void_attendance`, `fn_labour_licence_alert`,
+  `fn_labour_headcount_check`, `fn_labour_reconcile`, `fn_post_labour_expense`).
+  Verified on a real PostgreSQL: three clean runs, arithmetic checked by hand,
+  all four guards confirmed firing.
+  **055 APPLIED** (confirmed 2026-08-14) — `fn_labour_effort`, the no-money
+  labour roll-up behind History -> Labour. One read-only function.
+  So: **001–055 ALL APPLIED.**
   **050 APPLIED** (confirmed 2026-08-12) — B3 rate comparison / comparative statement
   (`rate_comparisons`, `rc_items`, `rc_vendors`, `rc_quotes`, `rc_status`,
   `v_rc_matrix`, `v_rc_vendor_totals`, `v_rc_summary`, `rc_may_read`,
@@ -183,13 +194,36 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   sandbox, not just pglast): runs clean THREE times under `ON_ERROR_STOP=1`,
   and `fn_bbs_selftest()` returns 8/8 passing at 0.00 mm. That run found two
   bugs a read-through had missed — see the two lessons below.
-  Next migration = 054.
+  Next migration = 056.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
   `section` on template/live/answer checks, `inspections.location`, plus
   `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
   `fn_inspection_checks` re-emitted. Next migration = 047.
+- **An accrual must never be added to a total built from payments (054).** Attendance × rate is what
+  the labour on site is WORTH; `v_project_pnl` computes cost from expenses and certified RA bills,
+  which is what was PAID. Adding the accrual on top would count every rupee of labour twice and get
+  the biggest line on most jobs wrong. So attendance never reaches the P&L on its own:
+  `fn_labour_reconcile` shows both figures side by side, and `fn_post_labour_expense` is a
+  deliberate act that turns a period into ordinary expenses — refusing an overlapping period, so
+  there is still exactly one source of cost. Same family as the 038 retention rule.
+- **Post one expense per activity, not one lump (054).** A single lumped expense would flatten the
+  `activity_id` tagging that earned value depends on, and somebody would have to re-tag by hand
+  afterwards. Grouping the posting by activity keeps the link for free.
+- **Say when you are duplicating an existing fact (054).** `site_logs` has carried a labour
+  headcount since 001. Gang attendance records the same thing in more detail, so the two WILL
+  disagree and the one people trust will be whichever was typed last.
+  `fn_labour_headcount_check` returns both numbers and the variance, and the screen shows it. The
+  site log was deliberately not changed inside a labour migration — that is its own session.
+- **Name the register honestly (054).** A muster roll built from gang counts is NOT the named
+  statutory Form XVI. The registers are labelled "equivalent, gang level" on screen and on paper,
+  and `labour_workers` exists for contractors who supply a roster. A document that looks statutory
+  and is not is worse than no document — the same reasoning as citing an IS code rather than
+  transcribing it (044).
+- **A unique index is the cheapest protection against a double tap (054).** Without
+  `labour_att_uk`, one slow connection and a second tap doubles that day's wage bill with nothing
+  on screen to say so. Any table where a duplicate row means duplicated MONEY wants one.
 - **A regex that "looks right" is why the self-test exists (052).** `(\d+)\s*CRANK` reads the crank
   count out of "2-Y16 CRANK" — and matches the DIAMETER, giving 16 cranks and a bar 1810 mm too
   long. It survived writing and re-reading; `fn_bbs_callout_selftest()` caught it on the first run.

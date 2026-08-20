@@ -417,7 +417,55 @@ Order within group:
        TABLES. If they do, importing that table from a CAD PDF is deterministic and is the next
        reliable step — no vision model needed.
 - [ ] B4b. M13-A/B Estimation / BOQ generator (quantity take-off — the other half of Module 13)
-- [ ] B5. M24 Contract Labour (BOCW registers: Form XIII/XVI/XVII as data, gang attendance)
+- [x] **B5. M24 Contract Labour — migration 054. Run it before testing.**
+       Contractor register, daily gang attendance, the statutory registers as data, and a labour
+       cost figure that reaches the P&L exactly once.
+       **THE THING THAT WOULD HAVE BROKEN THE P&L.** Attendance × rate is an ACCRUAL — what the
+       labour on site is worth. `v_project_pnl` (038) computes cost from expenses and certified RA
+       bills — what was PAID. Adding the accrual on top would count every rupee of labour TWICE and
+       get the biggest line on most jobs wrong. So attendance never feeds the P&L. It produces a
+       figure shown alongside, plus `fn_labour_reconcile` ("attendance says ₹X, ₹Y is booked") and
+       `fn_post_labour_expense`, which the founder or accounts runs deliberately to turn a period
+       into ordinary expenses. Overlapping periods are REFUSED, so there is still exactly one
+       source of cost. Same family as the 038 retention rule.
+       Posting writes ONE EXPENSE PER SCHEDULE ACTIVITY in the period, so the `activity_id` tagging
+       earned value depends on survives the trip through the ledger.
+       **Money is split at the table, not the column.** `labour_attendance` is headcount and a work
+       area — every project member reads it, supervisors log it. `labour_rates` is founder/PM/
+       accounts only, and the cost views are owner-run with `is_member + my_role` in the WHERE
+       clause, so a supervisor gets ZERO ROWS rather than blanked columns (the 050 distinction:
+       a row policy when the row itself is the secret).
+       **Rate resolution, four scopes**: project + contractor, then project, then contractor, then
+       the firm standard — most specific in force on the day wins. `fn_labour_rate` returns zero
+       rows for a supervisor rather than raising, because it is called from inside views.
+       **Overtime** is `ot_hours × (daily_rate ÷ normal_hours) × ot_multiplier`, with the multiplier
+       (2, per the Minimum Wages Act) and the working day (8 h) as columns on the rate so they can
+       be seen and changed — the same reasoning as bbs_constants.
+       **The registers are named honestly.** A muster roll built from gang counts is NOT the named
+       statutory Form XVI. `fn_muster_roll` / `fn_wage_register` / `fn_overtime_register` are
+       labelled EQUIVALENT and GANG LEVEL on screen and on paper, and `labour_workers` (Form XIII)
+       exists for contractors who supply a roster. A document that looks statutory and is not is
+       worse than none — the 044 reasoning about citing an IS code rather than transcribing it.
+       Gang counts, not names, because that is what somebody can enter one-handed at a gate (the
+       048 lesson).
+       **It overlaps with the site log, and says so.** `site_logs` has carried a headcount since
+       001. `fn_labour_headcount_check` returns both numbers and the variance and the screen shows
+       it, rather than letting whichever was typed last quietly win. The site log is deliberately
+       unchanged — that is its own session.
+       Attendance is VOIDED, never deleted (it drives wages), with supervisor self-void of their own
+       entry; a unique index refuses the same gang twice on one day and area, because a double tap
+       on a slow connection would otherwise double that day's wage bill silently. Licence expiry
+       follows the 028/033/034 register shape. Over-licence headcount is FLAGGED, never blocked —
+       the app cannot send anyone home.
+       **VERIFIED ON A REAL POSTGRES**: three clean runs under `ON_ERROR_STOP=1`; rate resolution,
+       wages and overtime checked against an independent hand calculation to the rupee; and all four
+       guards confirmed firing — duplicate gang, missing rate, overlapping post, void after post.
+       Screens: `/tasks/labour` (supervisor quick entry, no figures anywhere) and `/money/labour`
+       (wage register, overtime register, rates, contractors, reconcile and post).
+       **Not yet exercised in the app:** logging a gang on a phone, the site-log variance banner,
+       posting a month and watching it land in the ledger and the P&L, the overlap refusal on a
+       second post, and the supervisor pass (attendance visible, /money/labour blocked, zero rows
+       if the URL is typed).
 - [x] **B6. M29 Company P&L & Project Profitability — 038–041 ALL APPLIED and working.**
        `v_project_pnl` per project: revenue (contract + APPROVED variations only — pending shown
        separately), cost (expenses excluding voids, plus certified RA bills, which deliberately never

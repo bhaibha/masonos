@@ -1,9 +1,9 @@
 -- ==============================================================
 -- MASON OS — pending migrations.
 --
--- 001–053 are all APPLIED (051 + 052 + 053 confirmed 2026-08-14).
+-- 001–055 are all APPLIED (054 + 055 confirmed 2026-08-14).
 --
--- NOTHING IS PENDING. The next migration is 054; when it is written, this
+-- NOTHING IS PENDING. The next migration is 056; when it is written, this
 -- file becomes its full runnable text (and every migration after it that
 -- has not yet been confirmed, in order).
 --
@@ -20,6 +20,5 @@
 --
 -- And for anything with arithmetic in it: RUN IT against a real Postgres
 -- before shipping (pip install pgserver), three times, under
--- ON_ERROR_STOP=1. Parsing is not running — 051 parsed clean and still had
--- two production bugs in it.
+-- ON_ERROR_STOP=1. Parsing is not running.
 -- ==============================================================

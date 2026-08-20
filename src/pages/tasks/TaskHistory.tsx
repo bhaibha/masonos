@@ -21,9 +21,12 @@ import {
   type IncidentHistoryRow,
   type SiteLogHistoryRow,
 } from '@/lib/queries/history'
+import { fetchAttendanceRange, fetchLabourEffort } from '@/lib/queries/labour'
 import { fetchTaskHistory } from '@/lib/queries/tasks'
 import {
+  type AttendanceRow,
   INCIDENT_TYPE_LABEL,
+  type LabourEffortRow,
   SAFETY_ITEMS,
   TASK_STATUS_LABEL,
   type TaskRow,
@@ -34,11 +37,19 @@ import { addDays, todayIst } from '@/lib/useSelectedDate'
 import { cn } from '@/lib/utils'
 import { useProjects } from '@/store/project'
 
-type Section = 'tasks' | 'logs' | 'safety' | 'instructions' | 'rfis' | 'snags'
+type Section =
+  | 'tasks'
+  | 'logs'
+  | 'labour'
+  | 'safety'
+  | 'instructions'
+  | 'rfis'
+  | 'snags'
 
 const SECTION_LABEL: Record<Section, string> = {
   tasks: 'Tasks',
   logs: 'Site logs',
+  labour: 'Labour',
   safety: 'Safety',
   instructions: 'Instructions',
   rfis: 'RFIs',
@@ -75,6 +86,10 @@ export default function TaskHistory() {
   const [sis, setSis] = useState<DocHistoryRow[] | null>(null)
   const [rfis, setRfis] = useState<DocHistoryRow[] | null>(null)
   const [snags, setSnags] = useState<DocHistoryRow[] | null>(null)
+  // Two shapes for one question: the roll-up somebody checks against a
+  // contractor's invoice, and the day-by-day muster roll behind it.
+  const [effort, setEffort] = useState<LabourEffortRow[] | null>(null)
+  const [muster, setMuster] = useState<AttendanceRow[] | null>(null)
 
   const [status, setStatus] = useState<TaskStatus | ''>('')
   const [trade, setTrade] = useState('')
@@ -93,9 +108,11 @@ export default function TaskHistory() {
     setSis(null)
     setRfis(null)
     setSnags(null)
+    setEffort(null)
+    setMuster(null)
 
     try {
-      const [t, l, c, i, s, r, g] = await Promise.all([
+      const [t, l, c, i, s, r, g, e, m] = await Promise.all([
         fetchTaskHistory(projectId, from, to),
         fetchSiteLogHistory(projectId, from, to),
         fetchChecklistHistory(projectId, from, to),
@@ -103,6 +120,11 @@ export default function TaskHistory() {
         fetchSiHistory(projectId, from, to),
         fetchRfiHistory(projectId, from, to),
         fetchSnagHistory(projectId, from, to),
+        // Labour arrived with migration 054/055. If they have not been run the
+        // rest of History must still work, so these two degrade to empty rather
+        // than taking the whole screen down with them.
+        fetchLabourEffort(projectId, from, to).catch(() => [] as LabourEffortRow[]),
+        fetchAttendanceRange(projectId, from, to).catch(() => [] as AttendanceRow[]),
       ])
       setTasks(t)
       setLogs(l)
@@ -111,6 +133,8 @@ export default function TaskHistory() {
       setSis(s)
       setRfis(r)
       setSnags(g)
+      setEffort(e)
+      setMuster(m.filter((x) => x.voided_at === null))
     } catch (err) {
       toast.error('Could not load history', { description: errText(err) })
       setTasks([])
@@ -120,6 +144,8 @@ export default function TaskHistory() {
       setSis([])
       setRfis([])
       setSnags([])
+      setEffort([])
+      setMuster([])
     }
   }, [projectId, from, to])
 
@@ -224,6 +250,46 @@ export default function TaskHistory() {
     })
   }
 
+  function exportLabour() {
+    if (!muster?.length) return toast.error('Nothing to export in this range')
+
+    // The muster roll — one row per gang per day, which is the register itself.
+    downloadCsv(
+      `${base}-muster-roll-${stamp}`,
+      toCsv(
+        ['Date', 'Contractor', 'Licence no', 'Trade', 'Workers present',
+         'Overtime hours', 'Work area', 'Remarks'],
+        muster.map((m) => [
+          m.work_date, m.contractor_name, m.licence_no ?? '', m.trade,
+          m.workers_present, m.overtime_hours, m.work_area ?? '',
+          m.remarks ?? '',
+        ]),
+      ),
+    )
+
+    // The roll-up, as a second file — the figure that gets checked against a
+    // contractor's invoice. Both carry effort only; no rate, no cost.
+    if (effort?.length) {
+      downloadCsv(
+        `${base}-labour-summary-${stamp}`,
+        toCsv(
+          ['Contractor', 'Trade', 'Days worked', 'Mandays', 'Overtime hours',
+           'Peak workers in a day'],
+          effort.map((e) => [
+            e.contractor_name, e.trade, e.days_worked, e.mandays, e.ot_hours,
+            e.peak_workers,
+          ]),
+        ),
+      )
+    }
+
+    toast.success('Exported', {
+      description: effort?.length
+        ? 'Two files — the muster roll and the summary.'
+        : undefined,
+    })
+  }
+
   /** The three document sections share a shape, so they share a renderer. */
   const docRows: DocHistoryRow[] | null =
     section === 'instructions'
@@ -253,6 +319,8 @@ export default function TaskHistory() {
   }
 
   const loading =
+    effort === null ||
+    muster === null ||
     tasks === null ||
     logs === null ||
     checks === null ||
@@ -266,7 +334,9 @@ export default function TaskHistory() {
       ? (shownTasks?.length ?? 0)
       : section === 'logs'
         ? (logs?.length ?? 0)
-        : section === 'safety'
+        : section === 'labour'
+          ? (muster?.length ?? 0)
+          : section === 'safety'
           ? (checks?.length ?? 0) + (incidents?.length ?? 0)
           : (docRows?.length ?? 0)
 
@@ -317,7 +387,15 @@ export default function TaskHistory() {
       {/* ---------- section ---------- */}
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
         {(
-          ['tasks', 'logs', 'safety', 'instructions', 'rfis', 'snags'] as Section[]
+          [
+            'tasks',
+            'logs',
+            'labour',
+            'safety',
+            'instructions',
+            'rfis',
+            'snags',
+          ] as Section[]
         ).map((s) => (
           <button
             key={s}
@@ -376,7 +454,9 @@ export default function TaskHistory() {
                 ? `task${count === 1 ? '' : 's'}`
                 : section === 'logs'
                   ? `day${count === 1 ? '' : 's'} logged`
-                  : section === 'safety'
+                  : section === 'labour'
+                    ? `gang entr${count === 1 ? 'y' : 'ies'}`
+                    : section === 'safety'
                     ? 'checks and incidents'
                     : SECTION_LABEL[section].toLowerCase()}
             </span>
@@ -389,9 +469,11 @@ export default function TaskHistory() {
                 ? exportTasks
                 : section === 'logs'
                   ? exportLogs
-                  : section === 'safety'
-                    ? exportSafety
-                    : exportDocs
+                  : section === 'labour'
+                    ? exportLabour
+                    : section === 'safety'
+                      ? exportSafety
+                      : exportDocs
             }
           >
             <Download className="size-4" aria-hidden="true" />
@@ -503,6 +585,11 @@ export default function TaskHistory() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* ---------- labour ---------- */}
+      {!loading && section === 'labour' && muster && muster.length > 0 && (
+        <LabourSection effort={effort ?? []} muster={muster} />
       )}
 
       {/* ---------- instructions / RFIs / snags ---------- */}
@@ -636,6 +723,129 @@ export default function TaskHistory() {
         </>
       )}
     </div>
+  )
+}
+
+/**
+ * Labour over the period: the roll-up first, then the day-by-day muster roll.
+ *
+ * EFFORT only — days, mandays, overtime hours. No rate and no cost anywhere,
+ * because History is readable by supervisors and its exports carry no money
+ * column. Wages are at Money → Labour, gated to money roles, and putting them
+ * here as well would create a second place to look for one figure.
+ *
+ * Every total comes from fn_labour_effort; nothing on this screen is added up
+ * in the browser.
+ */
+function LabourSection({
+  effort,
+  muster,
+}: {
+  effort: LabourEffortRow[]
+  muster: AttendanceRow[]
+}) {
+  return (
+    <>
+      {effort.length > 0 && (
+        <section className="space-y-2">
+          <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+            Summary by contractor and trade
+          </p>
+          <div className="paper overflow-x-auto">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <Th>Contractor</Th>
+                  <Th>Trade</Th>
+                  <Th right>Days</Th>
+                  <Th right>Mandays</Th>
+                  <Th right>Overtime h</Th>
+                  <Th right>Peak in a day</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {effort.map((e) => (
+                  <tr
+                    key={`${e.contractor_id}-${e.trade}`}
+                    className="border-b border-border last:border-0"
+                  >
+                    <Td>
+                      <span className="font-medium">{e.contractor_name}</span>
+                    </Td>
+                    <Td muted>{e.trade}</Td>
+                    <Td right muted>{e.days_worked}</Td>
+                    <Td right>
+                      <span className="font-medium">{e.mandays}</span>
+                    </Td>
+                    <Td right muted>{e.ot_hours || '—'}</Td>
+                    <Td right muted>{e.peak_workers}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Mandays is the figure to check against a contractor's invoice. What
+            it costs is under Money → Labour — this report carries no rates.
+          </p>
+        </section>
+      )}
+
+      <section className="space-y-2">
+        <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+          Muster roll · gang level
+        </p>
+        <div className="paper overflow-x-auto">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead>
+              <tr className="border-b border-border text-left">
+                <Th>Date</Th>
+                <Th>Contractor</Th>
+                <Th>Trade</Th>
+                <Th right>Present</Th>
+                <Th right>Overtime h</Th>
+                <Th>Work area</Th>
+                <Th>Remarks</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {muster.map((m) => (
+                <tr
+                  key={m.attendance_id}
+                  className="border-b border-border last:border-0"
+                >
+                  <Td>
+                    <span className="font-medium tabular-nums">
+                      {m.work_date}
+                    </span>
+                  </Td>
+                  <Td>{m.contractor_name}</Td>
+                  <Td muted>{m.trade}</Td>
+                  <Td right>
+                    <span
+                      className={cn(
+                        'font-medium',
+                        m.over_licence && 'text-destructive',
+                      )}
+                    >
+                      {m.workers_present}
+                    </span>
+                  </Td>
+                  <Td right muted>{m.overtime_hours || '—'}</Td>
+                  <Td muted>{m.work_area ?? '—'}</Td>
+                  <Td muted>{m.remarks ?? '—'}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          A Form XVI equivalent, built from gang counts. It is the firm's own
+          record — not the named statutory muster roll your contractor must
+          keep. Voided entries are excluded.
+        </p>
+      </section>
+    </>
   )
 }
 

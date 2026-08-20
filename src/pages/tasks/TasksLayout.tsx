@@ -48,6 +48,7 @@ export default function TasksLayout() {
     { to: '/tasks/schedule', label: 'Schedule' },
     { to: '/tasks/qa', label: 'Quality' },
     { to: '/tasks/bbs', label: 'Bar schedule' },
+    { to: '/tasks/labour', label: 'Labour' },
     { to: '/tasks/log', label: 'Site log' },
     { to: '/tasks/safety', label: 'Safety' },
     { to: '/tasks/incidents', label: 'Incidents' },
