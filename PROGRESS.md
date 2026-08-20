@@ -3165,3 +3165,109 @@ attendance entry, the multi-trade form, and History → Labour.
 period to the ledger and seeing it reach the P&L; the overlap refusal on a second post; the
 site-log variance banner; and the supervisor pass (attendance visible and loggable, /money/labour
 blocked, zero rows if the URL is typed, no money column in the History labour CSVs).
+
+## Session — B7 MIS Reports & KPI Dashboard (Module 37), migration 056
+
+Confirmed at the start: **001–055 all applied**. This session's migration is **056**, and it is
+read-only — one view, four functions, no tables and no triggers.
+
+### The access model was already there
+
+The brief asked for founder/accounts = everything, PM = assigned projects, supervisors = nothing.
+`v_project_pnl` has carried exactly that since 038:
+`where is_member(p.id) and my_role() in ('founder','pm','accounts')`. And `is_member()` returns true
+for a founder, true for accounts, and true for a PM's assigned projects.
+
+So every MIS view is `security_invoker = true` sitting on top of it, and the rule lives in ONE
+place. Restating it would create a second copy to drift — and a reporting screen that drifts does
+not leak one row, it leaks the whole company at once. Confirmed in testing: supervisor gets 0 rows
+from all five sources; a PM gets `overheads = null, sees_overheads = false` with margin intact.
+
+### Three things the brief asked for that could not be built honestly
+
+**"Cash position."** There is no bank balance, no receipts against issued invoices and no payment
+run anywhere in Mason OS. A cash figure could only be guessed. The card says **Net position**, and
+prints in words that it is project margin lifetime-to-date less overheads for the chosen period, and
+that it is not cash. Two spans in one figure, both named — the 040 rule.
+
+**"Margin trend."** That normally means margin earned per month. This app does not recognise revenue
+monthly, so the series would be invented. The chart shows margin TO DATE at each month end, and the
+caption says so.
+
+**"Audit trigger."** Nothing here writes. There is no table to attach a trigger to, and the audit
+trail for every number on the screen already exists on `expenses`, `ra_bills` and `budgets`.
+
+Saying no to three items and explaining why is the honest response; building a plausible cash figure
+would have been the damaging one.
+
+### One verdict, computed once
+
+`v_mis_projects.health` (critical / watch / ok) is computed in Postgres from margin, budget and the
+EVM indices. The screen, the CSV and the board PDF all print the same verdict, so nobody can be
+looking at a green project on a laptop and a red one on paper. Thresholds are the conventional index
+bands already in `format.ts`, documented as a convention rather than a truth — a CPI of 0.89 is not
+meaningfully worse than 0.91.
+
+Likewise the PDF's total row comes from `fn_mis_company`, not from adding the table it just drew.
+The fastest way for a dashboard to lose its reader is a headline that does not match the rows below.
+
+### Charts, hand-built
+
+recharts plus its d3 dependencies is ~400–500 KB on a PWA that loads on a site phone, and it arrives
+styled like a consumer product. The app already hand-draws its Gantt and spend rails, so
+`components/MiniChart.tsx` does the same in three components and gets the brand for free. Bar charts
+anchor at zero ALWAYS; the percentage line does not, and prints its range so the slope cannot be
+misread.
+
+### Verified on a real PostgreSQL
+
+Three clean runs under `ON_ERROR_STOP=1`. Three seeded projects gave:
+
+| | Server | Hand check |
+|---|---|---|
+| Revenue | ₹25,000,000 | ₹25,000,000 |
+| Cost | ₹19,200,000 | ₹19,200,000 |
+| Blended margin | 23.2% | 23.2% |
+| Net position | ₹5,525,000 | ₹5,525,000 |
+
+Category percentages summed to exactly 100.0. The exception panel returned 9 rows across seven
+sources, critical first. The trend returned four months with a correct cumulative curve.
+
+`npx tsc -b --force` clean.
+
+**Run migration 056 before testing.**
+
+### 056 failed twice on first paste — both times a bad test fixture
+
+`column pnl.project_name does not exist`, then `column e.expense_date does not exist`. Two different
+tables, one root cause: the sandbox stubs were hand-written and did not match production.
+
+- `v_project_pnl` selects `p.name` UNALIASED — the column is `name`. Now `pnl.name as project_name`.
+- `company_expenses.spend_date`, not `expense_date` (`expense_date` is the `expenses` column). The
+  overheads sum now also matches `fn_company_net`'s definition exactly — `amount + gst_amount`,
+  voided excluded — rather than being a third definition of the same figure.
+- The `company_expenses` alias is now `ce`. `e` meant `expenses` in three other places in the file,
+  and two tables behind one letter is how the wrong column gets typed.
+
+**The process fix, which matters more than the two lines.** The fixtures are now GENERATED from the
+migrations: the harness parses `v_project_pnl`'s real 18-column select list out of 038 and
+`company_expenses`' real column list out of 040, and builds the stubs from those. A checking script
+also resolves every `alias.column` in 056 against the repo's real create-table statements. Re-run
+after the fix: three clean runs under `ON_ERROR_STOP=1`, and this time the joins were actually
+exercised —
+
+| | Server | Hand check |
+|---|---|---|
+| Revenue | ₹20,000,000 | ₹20,000,000 |
+| Cost | ₹12,700,000 | ₹12,700,000 |
+| Blended margin | 36.5% | 36.5% |
+| Overheads (Aug) | ₹271,400 | ₹271,400 |
+| Net position | ₹7,028,600 | ₹7,028,600 |
+
+Category percentages 62.2 + 23.6 + 14.2 = 100.0. PM: `overheads = null, sees_overheads = false`,
+margin still visible. Supervisor: zero rows from all five sources.
+
+**Also fixed on the screen:** `Promise.all` rejects on the first failure, so one bad query blanked
+the whole MIS and reported "No projects visible" — a different and much more alarming claim than
+"one panel could not load". It is `Promise.allSettled` now, each panel standing on its own, with the
+failing ones named in the toast.

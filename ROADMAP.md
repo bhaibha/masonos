@@ -504,7 +504,47 @@ Order within group:
        **Tested:** overheads entered, headings added and managed, the net position reading through
        on the P&L. Still unexercised: copy-last-month's double-copy refusal and the PM/supervisor
        gates on the new screens.
-- [ ] B7. M37 MIS Reports & KPI Dashboard (cross-project KPIs, exportable reports)
+- [x] **B7. M37 MIS Reports & KPI Dashboard — migration 056. Run it before testing.**
+       The cross-project command view at `/money/mis`, first tab after the ledger. Read-only: one
+       view and four functions, no tables, no columns, no triggers.
+       **THE ACCESS MODEL IS INHERITED, NOT RESTATED.** `v_project_pnl` already carries
+       `is_member(p.id) and my_role() in ('founder','pm','accounts')`, so every MIS view is
+       `security_invoker` on top of it: founder and accounts get every project, a PM gets assigned
+       ones, a supervisor matches nothing and gets ZERO ROWS from all five calls. A second copy of
+       the rule would drift, and a reporting screen that drifts leaks the whole company at once.
+       **No audit trigger, because nothing writes.** The brief asked for one; there is no table and
+       no write here. "Who changed this figure" is answered on `expenses`, `ra_bills` and `budgets`,
+       where the audit triggers already are.
+       **"Cash position" is not called cash.** There is no bank balance, no receipts against issued
+       invoices and no payment run in this app, so a cash figure cannot be computed — only guessed.
+       The card says **Net position**, prints that it is margin LIFETIME TO DATE less overheads for
+       the CHOSEN PERIOD (the 040 two-spans rule), and states in words that it is not cash.
+       **No "margin earned this month" either.** The app does not recognise revenue monthly, so that
+       series would be fiction. The chart shows margin TO DATE at each month end, which is
+       defensible line by line, and the caption says which one it is.
+       `v_mis_projects` joins the P&L to the EVM engine and the open-item counts, and computes ONE
+       health verdict per project (critical / watch / ok) server-side, so the screen, the CSV and the
+       board PDF cannot disagree about which jobs are in trouble. Thresholds are the conventional
+       index bands already used in `format.ts`, and are documented as a convention rather than a
+       truth.
+       `fn_mis_exceptions` returns eight sources — over budget, negative margin, CPI, SPI, critical
+       NCRs, compliance, bank guarantees, insurance, contractor bills waiting, purchase requests
+       waiting — in ONE shape, sorted critical first. Eight separate warning boxes is a dashboard
+       where the eighth is never read.
+       **Charts are hand-built SVG** (`components/MiniChart.tsx`), not recharts: three charts did
+       not justify ~400–500 KB of chart library on a PWA that loads on a site phone, and the app
+       already draws its Gantt and spend rails this way. Bar charts anchor at zero always; the
+       percentage line does not and prints its range so the slope cannot be misread.
+       **Exports:** letterhead PDF board report (portrait — it is read in a room) and a projects CSV.
+       The PDF's total row comes from `fn_mis_company`, NOT from adding the table it just drew.
+       **VERIFIED ON A REAL POSTGRES:** three clean runs under `ON_ERROR_STOP=1`; KPI totals checked
+       against an independent hand calculation (₹25,000,000 revenue / ₹19,200,000 cost / 23.2%
+       blended margin / net position ₹5,525,000); category percentages summing to 100.0; a PM
+       confirmed getting `overheads = null, sees_overheads = false` with margin still visible; and a
+       supervisor confirmed getting zero rows from all five sources.
+       **Not yet exercised in the app:** the screen against real project data, the board PDF read on
+       paper, the CSV opened in Excel, and the supervisor pass (`/money/mis` blocked by the
+       MONEY_ROLES guard, and zero rows if the guard were removed).
 
 ## GROUP C — Content & internal workflow (build third) ~2–3 weeks
 - [ ] C1. M11 Mason Learn (IS codes, 115 method statements, 11-F Bengaluru regulatory bylaws, 11-G materials)

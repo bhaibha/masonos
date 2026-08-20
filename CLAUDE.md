@@ -167,6 +167,11 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   **055 APPLIED** (confirmed 2026-08-14) — `fn_labour_effort`, the no-money
   labour roll-up behind History -> Labour. One read-only function.
   So: **001–055 ALL APPLIED.**
+  **056 WRITTEN, NOT YET APPLIED** — B7 MIS reports & KPI dashboard
+  (`v_mis_projects`, `fn_mis_company`, `fn_mis_trend`, `fn_mis_by_category`,
+  `fn_mis_exceptions`). Read-only: one view, four functions, no tables and no
+  triggers. Verified on a real PostgreSQL — three clean runs, KPI totals hand
+  checked, PM overhead gate and supervisor zero-rows both confirmed.
   **050 APPLIED** (confirmed 2026-08-12) — B3 rate comparison / comparative statement
   (`rate_comparisons`, `rc_items`, `rc_vendors`, `rc_quotes`, `rc_status`,
   `v_rc_matrix`, `v_rc_vendor_totals`, `v_rc_summary`, `rc_may_read`,
@@ -194,13 +199,62 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   sandbox, not just pglast): runs clean THREE times under `ON_ERROR_STOP=1`,
   and `fn_bbs_selftest()` returns 8/8 passing at 0.00 mm. That run found two
   bugs a read-through had missed — see the two lessons below.
-  Next migration = 056.
+  Next migration = 057.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
   `section` on template/live/answer checks, `inspections.location`, plus
   `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
   `fn_inspection_checks` re-emitted. Next migration = 047.
+- **A STUB THAT DOES NOT MATCH PRODUCTION PROVES NOTHING (056, shipped broken TWICE).** 056 ran
+  clean three times in the sandbox and still failed on the founder's first paste, then failed again
+  on the second, both times for the same underlying reason — a hand-written fixture that did not
+  match the real object:
+    1. `column pnl.project_name does not exist` — the stub gave `v_project_pnl` a `project_name`
+       column; the real view selects `p.name` UNALIASED.
+    2. `column e.expense_date does not exist` — the stub gave `company_expenses` an `expense_date`;
+       its real column is `spend_date`. (`expense_date` belongs to `expenses`, a different table.)
+  Those runs verified the arithmetic and the role gates — everything the stubs modelled correctly —
+  and verified nothing at all about the joins, because the stubs WERE the things being joined to.
+  **Generate fixtures from the migrations, do not type them.** Parse the real create-table /
+  create-view out of the earlier migration and build the stub from that column list, or run the
+  earlier migration itself. Cross-check every `alias.column` in the new file against the repo's real
+  create statements before shipping. And "verified on a real Postgres" is only worth what the
+  fixtures are worth — any claim of verification should say WHICH parts they could actually
+  exercise.
+- **Do not reuse a one-letter alias for two tables in one file (056).** `e` meant `expenses` in
+  three places and `company_expenses` in a fourth, which is precisely how the wrong date column got
+  typed and why a checking script could not tell them apart. `ce` costs one character.
+- **One failed panel should not blank a dashboard (056).** `Promise.all` rejects on the first
+  failure, so a single bad query left the MIS reporting "No projects visible" — a different and far
+  more alarming claim than "one panel could not load". `Promise.allSettled`, each result standing on
+  its own, with the failures named in the toast.
+- **Inherit the gate; never restate it (056).** The MIS needed founder/accounts = all projects,
+  PM = assigned, supervisor = nothing. `v_project_pnl` already carries exactly that
+  (`is_member(...) and my_role() in (...)`), so every MIS view is `security_invoker` on top of it and
+  the rule exists in ONE place. A second copy would drift, and a reporting screen that drifts leaks
+  the whole company at once rather than one row.
+- **A dashboard total must come from the same call as its rows (056).** `fn_mis_company` sums
+  `v_mis_projects`, and the board PDF prints that total rather than adding the table it just drew.
+  The fastest way for a dashboard to lose its reader is a headline that does not match the list
+  underneath it.
+- **Don't name a figure something it isn't (056).** The brief asked for a cash position. There is no
+  bank balance, no receipts against invoices and no payment run in this app, so cash cannot be
+  computed — only guessed. The card says "Net position", prints that it is margin lifetime-to-date
+  less overheads for the chosen period, and states in words that it is not cash. Same rule as the
+  gang-level muster roll (054) and citing an IS code rather than transcribing it (044).
+- **Refuse to invent a series the data cannot support (056).** "Margin trend" normally means margin
+  earned per month. This app does not recognise revenue monthly, so that series would be fiction.
+  The chart shows margin TO DATE at each month end — defensible line by line — and the caption says
+  which one it is.
+- **Zero rows and a row of zeros are different answers (056).** `fn_mis_company` returns NOTHING for
+  a supervisor rather than a row of zeros, because zeros read as "the company has no projects". The
+  screen turns the empty result into a sentence.
+- **Three charts did not justify a chart library (056).** recharts plus its d3 dependencies is
+  ~400-500 KB on a PWA that loads on a site phone, and it arrives styled like a consumer product.
+  The app already hand-draws its Gantt and spend rails; `MiniChart.tsx` does the same and gets the
+  brand for free. Bar charts anchor at zero ALWAYS; the percentage line does not, and prints its
+  range so nobody misreads the slope.
 - **An accrual must never be added to a total built from payments (054).** Attendance × rate is what
   the labour on site is WORTH; `v_project_pnl` computes cost from expenses and certified RA bills,
   which is what was PAID. Adding the accrual on top would count every rupee of labour twice and get

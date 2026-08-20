@@ -19,6 +19,7 @@ import Insurance from '@/pages/money/Insurance'
 import Invoices from '@/pages/money/Invoices'
 import Labour from '@/pages/money/Labour'
 import Ledger from '@/pages/money/Ledger'
+import Mis from '@/pages/money/Mis'
 import Overheads from '@/pages/money/Overheads'
 import Pnl from '@/pages/money/Pnl'
 import RaBills from '@/pages/money/RaBills'
@@ -161,6 +162,11 @@ export default function App() {
                 {/* B6 P&L. Not project-scoped — it spans every project the
                     caller may see, and the company card is founder-only. */}
                 <Route path="pnl" element={<Pnl />} />
+                {/* B7 MIS. Cross-project, like P&L, so it lives here rather
+                    than in the bottom nav. Founder and accounts see every
+                    project, a PM sees assigned ones, a supervisor gets zero
+                    rows — all inherited from v_project_pnl, not restated. */}
+                <Route path="mis" element={<Mis />} />
                 {/* M29 part 2 — company overheads. No project at all: these
                     are the firm's own costs. company_expenses' RLS is
                     founder/accounts, and the page says so for a PM who

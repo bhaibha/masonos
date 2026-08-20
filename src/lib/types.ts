@@ -3031,3 +3031,156 @@ export interface LabourEffortRow {
   ot_hours: number
   peak_workers: number
 }
+
+// ---------- MIS reports & KPI dashboard (B7, migration 056) ----------
+
+/**
+ * The MIS is founder/PM/accounts. It inherits that from v_project_pnl rather
+ * than declaring it — a supervisor gets zero rows from every source, so this
+ * guard exists to show them a sentence instead of an empty screen.
+ */
+export function canSeeMis(role: UserRole | null): boolean {
+  return role !== null && MONEY_ROLES.includes(role)
+}
+
+export type ProjectHealth = 'critical' | 'watch' | 'ok'
+
+export const HEALTH_LABEL: Record<ProjectHealth, string> = {
+  critical: 'Needs attention',
+  watch: 'Watch',
+  ok: 'Healthy',
+}
+
+export const HEALTH_TEXT: Record<ProjectHealth, string> = {
+  critical: 'text-destructive',
+  watch: 'text-[var(--warning)]',
+  ok: 'text-[var(--positive)]',
+}
+
+export const HEALTH_DOT: Record<ProjectHealth, string> = {
+  critical: 'bg-destructive',
+  watch: 'bg-[var(--warning)]',
+  ok: 'bg-[var(--positive)]',
+}
+
+/** Row of v_mis_projects — the cross-project comparison table. */
+export interface MisProject {
+  project_id: string
+  project_name: string
+  project_status: string
+  revenue: number
+  total_cost: number
+  gross_margin: number
+  margin_pct: number | null
+  budget_total: number
+  budget_remaining: number
+  budget_pct_used: number | null
+  over_budget: boolean
+  committed_open: number
+  retention_held: number
+  /** null where no schedule has been generated — a real state, not "behind" */
+  activity_count: number | null
+  spi: number | null
+  cpi: number | null
+  pct_complete: number | null
+  bac: number | null
+  evm_actual_cost: number | null
+  open_ncrs: number
+  critical_ncrs: number
+  open_snags: number
+  pos_pending: number
+  bills_awaiting: number
+  /** one verdict, computed in Postgres so screen, CSV and PDF agree */
+  health: ProjectHealth
+}
+
+/**
+ * fn_mis_company. `overheads` and `net_position` are null for a PM —
+ * company_expenses is founder/accounts, and `sees_overheads` says which case
+ * this is so the card can say "restricted" rather than show a misleading zero.
+ *
+ * Margin is LIFETIME to date; overheads are for the chosen period. Both spans
+ * travel with the figure and the card prints them (the 040 lesson).
+ */
+export interface MisCompany {
+  project_count: number
+  active_count: number
+  contract_value: number
+  total_cost: number
+  gross_margin: number
+  blended_margin_pct: number | null
+  over_budget_count: number
+  bleeding_count: number
+  overheads: number | null
+  net_position: number | null
+  sees_overheads: boolean
+  overhead_from: string | null
+  overhead_to: string | null
+  retention_held: number
+  committed_open: number
+  bills_awaiting: number
+  overdue_compliance: number
+  open_ncrs: number
+  critical_ncrs: number
+  open_snags: number
+  pos_pending: number
+}
+
+/**
+ * One month of the trend. There is deliberately no "margin earned this month":
+ * the app does not recognise revenue monthly, so only margin TO DATE is a
+ * defensible figure.
+ */
+export interface MisTrendPoint {
+  month: string
+  monthly_cost: number
+  cumulative_cost: number
+  revenue_to_date: number
+  margin_to_date: number
+  margin_pct_to_date: number | null
+}
+
+export interface MisCategory {
+  category_id: number
+  category_name: string
+  amount: number
+  pct_of_total: number | null
+  entry_count: number
+}
+
+export type MisExceptionKind =
+  | 'budget'
+  | 'margin'
+  | 'cpi'
+  | 'spi'
+  | 'ncr'
+  | 'compliance'
+  | 'bg'
+  | 'insurance'
+  | 'ra_bill'
+  | 'po'
+
+export const EXCEPTION_LABEL: Record<MisExceptionKind, string> = {
+  budget: 'Budget',
+  margin: 'Margin',
+  cpi: 'Cost',
+  spi: 'Programme',
+  ncr: 'Quality',
+  compliance: 'Compliance',
+  bg: 'Bank guarantee',
+  insurance: 'Insurance',
+  ra_bill: 'Contractor bill',
+  po: 'Procurement',
+}
+
+/** Row of fn_mis_exceptions — eight sources in one shape, sorted by severity. */
+export interface MisException {
+  kind: MisExceptionKind
+  severity: 'critical' | 'warning'
+  project_id: string | null
+  project_name: string | null
+  title: string
+  detail: string | null
+  due_date: string | null
+  amount: number | null
+}

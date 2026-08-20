@@ -27,6 +27,9 @@ export default function MoneyLayout() {
 
   const tabs = [
     { to: '/money', label: 'Ledger', end: true },
+    // The founder's command view sits first after the ledger: it is the screen
+    // you open to find out what is wrong, not one you navigate to last.
+    { to: '/money/mis', label: 'MIS' },
     { to: '/money/pnl', label: 'P&L' },
     // Founder/accounts only — company_expenses' RLS enforces it; hiding the
     // tab keeps a PM off a screen that would only tell them they can't see it.
