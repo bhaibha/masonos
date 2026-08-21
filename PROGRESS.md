@@ -3271,3 +3271,391 @@ margin still visible. Supervisor: zero rows from all five sources.
 the whole MIS and reported "No projects visible" — a different and much more alarming claim than
 "one panel could not load". It is `Promise.allSettled` now, each panel standing on its own, with the
 failing ones named in the toast.
+
+## Session — C1 Mason Learn (Module 11), migration 057
+
+Confirmed at the start: **001–055 applied**. 056 was still written-but-unconfirmed, and C1 shares no
+objects with it, so this was built as 057 independently.
+
+### The brief's requirement 4 could not be built as written
+
+"Link method statements/IS refs to QA-QC ITP items" — the ITP was DELETED in migration 048, when the
+structured inspection plan was replaced by inspection comments. `itp_templates`, `itp_items`,
+`inspections`, `inspection_checks` and nine functions are gone. There is nothing left to point a
+foreign key at.
+
+Put to the founder, who chose **matching on a reference instead of hard links**:
+
+- an article carries `ref_no` (its own, MS-014) and `is_refs` (the standards it cites)
+- `ncrs.standard_ref` already exists and already holds exactly that kind of string
+- `fn_learn_by_ref('IS 456')` returns every article citing it
+
+`fn_learn_normalise_ref` strips case, spaces and a trailing year, so all four of "IS 456", "is456",
+"IS 456:2000" and "IS  456" resolve to the same article — verified. Nothing to maintain, nothing to
+re-attach when a schedule is regenerated, and it reaches every module that records a reference
+rather than the one module that got the join table.
+
+### Ships empty
+
+The founder also chose no seeded content. 044 seeded five IS-referenced ITP templates and 045 seeded
+627 checklist questions; 048 deleted all of it. Five category labels are seeded because the module
+needs shelves to put the first article on. Content nobody in the firm wrote is content nobody in the
+firm trusts.
+
+### Search
+
+Weighted tsvectors — title and reference number at weight A, summary/tags/activity at B, body at C —
+with GIN indexes and `websearch_to_tsquery`, so quoted phrases and `-exclusion` work without anyone
+being told. Articles and their steps are searched through one function, with a step hit scored at
+half so a header match still wins; `ts_headline` returns the highlighted extract, rendered by
+splitting on the `<b>` marker into real elements rather than via `dangerouslySetInnerHTML`.
+
+An empty query returns the most recently updated rather than nothing — a search box that punishes
+you for not knowing what to type is a dead end.
+
+### Two bugs the real-Postgres run caught
+
+1. **`array_to_string` is STABLE, not immutable**, so the tsvector was refused as a generated column
+   with "generation expression is not immutable". Confirmed by isolating each subexpression:
+   `to_tsvector(regconfig, text)` and `setweight` are accepted, both array-to-text paths refused.
+   Fixed with a BEFORE INSERT OR UPDATE trigger — the pre-PG12 shape, which fires on every write and
+   so cannot drift any more than a generated column could.
+2. **`ts_rank_cd(...) * 0.5` is double precision** while the function declares `rank real`. That
+   creates cleanly and fails the first time anybody searches. Cast added to both union arms.
+
+The second is the more instructive one: a migration that runs clean has not been tested.
+
+### Verified
+
+Three clean runs under `ON_ERROR_STOP=1`, then the behaviour exercised rather than assumed:
+
+| Check | Result |
+|---|---|
+| Word appearing only inside a step | found, attributed `step`, snippet highlighted |
+| Title hit vs step hit on the same word | 1.4 vs 0.4 — header wins |
+| Quoted phrase `"cover blocks"` | matches the step |
+| Negation `concrete -slab` | excludes correctly |
+| `fn_learn_by_ref` across four spellings | all resolve to the same two articles |
+| Publish a step-less method statement | REFUSED |
+| Method statement with no activity | REFUSED (check constraint) |
+| Duplicate ref differing only in case/space | REFUSED (unique index) |
+| Version bump | 1 → 2 on publish, unchanged on re-publish |
+
+`npx tsc -b --force` clean.
+
+**Run migration 056, then 057.**
+
+### Addendum — AI drafting for Mason Learn (migration 058 + `learn-draft` Edge Function)
+
+Asked for: "it should fetch all the details using AI." Two decisions were put to the founder, who
+chose **structure-only drafting** and **Gemini** as the provider.
+
+#### What it does, and the line it does not cross
+
+Give it a title or activity and Gemini proposes the STEP SEQUENCE for a method statement, where a
+safety note and a QA checkpoint belong on each step, plus likely IS standards by NUMBER and likely
+tags. The engineer writes every value.
+
+It never returns a number, a tolerance, a cover figure, a curing period, a mix ratio — or a word of
+clause text from any standard. Three layers enforce that, because the prompt alone is not a control:
+
+1. **The response schema has no field for a value.** Structural, not advisory.
+2. **The prompt forbids it explicitly** and instructs `___` where a number belongs.
+3. **A scrub pass on the way out** replaces anything still matching a quantity pattern
+   ("25 mm", "7 days", "M25", "1:1.5:3", "150 c/c") with `___`, and filters IS refs down to bare
+   standard numbers, dropping anything else.
+
+Two reasons for that line, and the second matters more. IS codes are copyrighted and sold by BIS, so
+reproducing clause text is theft. And a hallucinated cover value, sitting in the firm's own library
+under the firm's name, reaches a bar bender. A model is good at the order of work and confidently
+wrong about the numbers — so it drafts the shape.
+
+#### It needed no new safety machinery
+
+The library already had all of it: everything lands as `draft`, drafts are invisible to supervisors
+at RLS, and `fn_learn_set_status` refuses to publish a method statement with no steps. Publishing
+stays the deliberate human act that says somebody checked it.
+
+The only addition is provenance — `ai_drafted_at` and `ai_model` — because a skeleton READS like a
+document, and six weeks later nobody can tell by looking whether a draft was written by the Planning
+Engineer or generated in four seconds. The editor keeps the reminder on screen until it is published.
+
+A suggestion also never overwrites typed work: summary/scope/PPE/tags are filled only where still
+empty, and replacing written steps asks first.
+
+#### The stack rule changed, deliberately
+
+CLAUDE.md said "no paid APIs". It now records ONE exception — Gemini, reached only through the
+`learn-draft` Edge Function, only for this purpose — so the rule and the code stop contradicting
+each other. Anything else wanting an AI call is a new decision, not a precedent.
+
+The key lives in the Edge Function, never the bundle (CLAUDE.md rule 1), and the caller's JWT and
+role are re-verified server-side against founder/PM, matching `learn_article_write` — the same
+pattern as `admin-create-user`.
+
+**Setup before the button works:**
+
+```
+supabase secrets set GEMINI_API_KEY=...
+supabase functions deploy learn-draft
+```
+
+Until then it returns a message naming the missing key rather than failing silently. Gemini Flash's
+free tier is very likely to cover the firm's entire usage at four active projects.
+
+`npx tsc -b --force` clean.
+
+**Run migration 056, then 057, then 058.**
+
+### Fix — the empty method statement was a dead end (second time)
+
+Reported with a screenshot: a method statement created with no steps, Publish refusing, and no way
+forward on the screen.
+
+The refusal was correct — `fn_learn_set_status` will not publish a step-less procedure. The screen
+was the problem: it stated "no steps written yet" and offered only a generic **Edit**, while the
+"Draft the structure" button lives two scrolls away inside the editor. Somebody who has just created
+a method statement lands exactly here, so the way forward belongs here.
+
+- The empty-steps message is now a card with **Add the procedure** on it, plus a line saying where
+  the AI drafter is and what it does.
+- **Publish is disabled** when a method statement has no steps, with the reason on hover. The RPC
+  still refuses — that is the boundary — but a button that always fails is just a worse error
+  message.
+
+**This is the second dead end shipped in this project**, after the labour screen telling a founder
+to go to Money → Labour to add a contractor. Same shape both times: an accurate message with no
+action attached. Worth checking for deliberately — any place that says "there is nothing here yet"
+should also say what to do about it, for the roles that can.
+
+### Fix — "Failed to send a request to the Edge Function" was a CORS preflight
+
+The Draft-the-structure button failed with that message after the function was deployed and
+`GEMINI_API_KEY` was set. It was never a deployment problem.
+
+`supabase-js`'s `functions.invoke()` attaches `apikey`, `x-client-info` and
+`x-supabase-api-version` on top of `authorization` and `content-type`. The function's
+`Access-Control-Allow-Headers` named only the last two, so the browser failed the preflight and the
+POST never left the machine. supabase-js reports a fetch that never happened as
+`FunctionsFetchError` — "Failed to send a request to the Edge Function" — which reads exactly like
+the function not existing, so the first two hours went into checking the deployment.
+
+`admin-create-user` carried the identical header list and would have failed the same way the first
+time anybody used it. Both fixed.
+
+**Lesson: a client-side network failure and a missing endpoint produce the same message.** The
+distinguishing test is the error CLASS, not the text — `FunctionsHttpError` means the function
+answered and refused; `FunctionsFetchError` means the browser never got there, which is CORS, the
+wrong project URL, or offline. Any new Edge Function copies the canonical allow-list, not a
+hand-written pair.
+
+### Fix — the real cause was gateway `verify_jwt`, not the CORS header list
+
+Probing `https://<ref>.supabase.co/functions/v1/learn-draft` in a browser tab returned
+`{"code":"UNAUTHORIZED_NO_AUTH_HEADER"}` — proof the function was deployed and that the GATEWAY was
+refusing it, not the function.
+
+`verify_jwt = true` makes the gateway demand an Authorization header before invoking the function.
+A CORS preflight is sent without one by specification, so the gateway answered the OPTIONS request
+401 with no CORS headers, and the browser blocked the POST that would have followed. The function's
+own OPTIONS handler never ran. The widened `Access-Control-Allow-Headers` list from the previous fix
+was correct and necessary, but it was never going to be reached.
+
+Fixed by adding `supabase/config.toml` with `verify_jwt = false` on `learn-draft` and
+`admin-create-user`. Both re-verify the caller server-side — Bearer token, `auth.getUser()`,
+`profiles.role` — so no protection is lost; the gateway check was redundant with the function's own.
+`daily-task-push` keeps it, being pg_net server-to-server with no browser involved.
+
+**Three lessons.** (1) `verify_jwt` and browser CORS are incompatible — any function called from the
+app turns it off and authenticates internally. (2) Put the setting in `config.toml`, not a
+`--no-verify-jwt` flag, or a later deploy silently reinstates the bug. (3) **Probe the endpoint
+before theorising.** One browser tab distinguished deployed-but-refused from never-deployed in ten
+seconds, after two rounds of reasoning from a message that cannot tell those apart.
+
+### Fix — "Gemini returned 404": the model had been retired
+
+With the gateway and CORS out of the way the whole chain worked — browser, auth, role check, outbound
+call — and Gemini itself answered 404. `gemini-2.0-flash`, chosen when 058 was written, was shut
+down by Google on 1 June 2026.
+
+Two changes:
+
+- The model name is now `GEMINI_MODEL`, defaulting to `gemini-3.5-flash` (released May 2026, no
+  announced shutdown). Deliberately NOT `gemini-2.5-flash`, which is already scheduled to go on
+  16 October 2026 — migrating onto a model with a known death date two months out is not a
+  migration.
+- A 404 from the provider now says the model has probably been retired and names it, instead of
+  printing a status code that reads like a broken URL.
+
+**Lesson: a third-party model name is a perishable constant, so treat it like one.** It belongs in
+config, not in a source file, because its expiry has nothing to do with our release cycle and the
+fix should not require a deploy. And the failure it produces — a bare 404 — is indistinguishable
+from a wrong endpoint, so the error message has to name the likely cause or the next person searches
+their API key instead.
+
+---
+
+## Session — C1 part 2: library documents + text extraction (migration 059)
+
+The brief: an upload button on Mason Learn, and the documents stored so that a later AI assistant
+can answer questions FROM them rather than just linking to them.
+
+### Built
+
+**Migration 059** — `learn_documents`, verified on a real PostgreSQL (three clean runs under
+`ON_ERROR_STOP=1`, fixtures produced by running the REAL 057 and 058 rather than hand-written stubs,
+which is the 056 lesson applied).
+
+- **One table, not two.** `article_id` is nullable: null = a document on a shelf in its own right,
+  set = an attachment on that article. A standalone PDF and an attachment are the same object with a
+  different owner, and two tables would have meant two search indexes, two extraction paths and two
+  places for the assistant to look — which is exactly how "the bot could not find it" happens to a
+  document that is plainly in the library.
+- `learn_articles.attachments` (a `text[]` added by 057 and never written to, because the upload UI
+  was never built) is migrated into the new table and then dropped. Two representations of one fact
+  eventually disagree.
+- Trigger-maintained tsvector, weights A/B/D. **The extracted body is weight D on purpose**: a
+  200-page standard says "concrete" four hundred times and would otherwise outrank the one-page
+  article actually titled "Concrete".
+- **The index input is capped at 500k characters**; `extracted_text` itself is stored whole. A
+  tsvector has a hard 1 MB limit and exceeding it raises "string is too long for tsvector", which
+  would refuse the upload of exactly the large reference documents this feature exists for.
+  Confirmed: a 2 MB document stores 2,080,000 characters, produces a 4 KB tsvector, and is findable.
+- `fn_learn_doc_search` for the screen, `fn_learn_category_counts` extended with `document_count`
+  (a shelf holding only PDFs was reading as empty), `fn_learn_by_ref` now answers with documents too.
+- **`fn_learn_retrieve` — the seam for the assistant.** One call, ranked passages across articles,
+  steps and documents, each carrying its source so an answer can always be traced back. Nothing
+  calls it in the UI yet; it exists so that building the assistant is a function call rather than a
+  project, and so vector retrieval can be substituted later without touching a caller.
+
+**Client-side extraction** (`src/lib/pdfText.ts`) — pdf.js behind a dynamic import. Confirmed
+code-split: 427 KB + a 1.26 MB worker, both lazy, neither in the main bundle.
+
+**UI** — `LearnUpload` (shared by the shelf and the article), `LearnDocCard`, upload buttons on both
+screens, documents listed as their own labelled block in search results.
+
+### Decisions worth keeping
+
+- **Extract at upload, not later.** A file in a bucket is opaque; every question anybody could ask
+  of it needs its text. Doing it now means the document is searchable immediately with no assistant
+  involved at all, and when the assistant arrives it reads a column instead of re-downloading and
+  re-parsing the whole library.
+- **No embeddings yet, deliberately.** Postgres FTS answers "which documents mention this" well, and
+  the retrieval design is far easier to get right once there is a real corpus and real questions to
+  test against. `fn_learn_retrieve` is where that swap happens.
+- **A scanned PDF says so.** pdf.js correctly returns nothing for a picture of a page. That is
+  recorded as `no_text` with a sentence explaining it, and shown on the card — not stored as an
+  empty string that looks like a successful extraction. A library that quietly contains documents
+  nobody can search is worse than one that names them. No OCR; that is its own decision.
+- **Extraction never throws.** A file that could not be parsed is still filed, with the reason
+  recorded. Losing the upload because a convenience failed would trade away the thing the user
+  actually asked for.
+- **Uploaded byte for byte, images included** — unlike the vault, which compresses images to 300 KB.
+  A vault photo records that something happened; a library document is a reference somebody reads a
+  figure off, and a scanned spec sheet through a JPEG quantiser is one where 8 becomes 3. Same rule
+  as `uploadDrawing`.
+- **RLS composes two conditions.** A document is visible if its own status allows it AND, when it
+  hangs off an article, that article is visible too. The second is not redundant: without it,
+  publishing a document attached to a draft method statement would leak the draft through its own
+  evidence. Confirmed in testing — a supervisor sees the two published standalone documents and not
+  the published document attached to a draft.
+- **`fn_learn_retrieve` is `security invoker`**, so RLS decides what each caller can be answered
+  from. A supervisor's question must never be answered out of a draft, and putting that gate
+  anywhere else would mean a second copy of the visibility rules.
+- **`ts_headline` output is split on the tags and re-emitted as React elements**, never
+  `dangerouslySetInnerHTML`. The snippet now comes out of an uploaded PDF, which is not trusted
+  markup.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor reading a document attached to a draft article | hidden |
+| Supervisor inserting a document | refused by RLS |
+| Same file uploaded twice | refused by `learn_doc_path_uk` |
+| Document with no shelf and no article | refused by `learn_doc_placed` |
+| 2 MB extracted text | indexed, searchable, no tsvector overflow |
+
+### Run migration 059 before testing.
+
+---
+
+## Session — C2 Client Approvals (migration 060)
+
+An internal register of decisions the CLIENT made. No portal, no client login, nobody outside the
+firm touches it. What it captures is what actually happens on these jobs: the owner says "yes, the
+Statuario" on a site walk, work proceeds, and four months later somebody asks who approved it.
+
+### Built
+
+**Migration 060** — `client_approvals`, three enums, `v_client_approvals`,
+`fn_set_approval_status`, `fn_project_approval_summary`, `fn_delete_approval`, guard trigger, audit
+trigger. **Verified on a real PostgreSQL by running the actual 001–016 chain first**, so the
+fixtures ARE the production schema rather than a hand-written approximation — which is the 056
+lesson, where stubbed columns passed three clean runs and then failed twice on the founder's paste.
+Three clean runs of 060 under `ON_ERROR_STOP=1`.
+
+**UI** — register at `/tasks/approvals` (new Approvals tab), log form with evidence upload, decision
+recording, and an approvals card on project detail.
+
+### Decisions worth keeping
+
+- **No amount column, ever.** Supervisors must read this register — they are the ones acting on
+  "the client approved the sample, proceed" — and CLAUDE.md's #1 rule is that they see no figures.
+  So an approval concerning money LINKS to the variation order and holds no rupee value itself,
+  exactly as `site_instructions` does with `has_cost_implication`. The view LEFT JOINs
+  `variation_orders`, whose own RLS excludes supervisors, so a supervisor sees the approval with the
+  VO number blank and a founder sees both. **Confirmed in testing.** The money stays where its own
+  policy already guards it and this module never has to know the rule.
+- **The client is free text, not a row in `profiles`.** Giving them a user row — or a `client_users`
+  table — would imply an account that will never exist. The register records what somebody outside
+  the system said.
+- **The "cannot approve what you raised" rule deliberately does NOT apply.** That rule stops
+  somebody rubber-stamping their own request; here the decision was made by the client, outside the
+  system, and the PM is a witness recording it. Applying it would mean the person who took the phone
+  call is the one person who cannot log it — which is the entire use case.
+- **So refuse to hide the weakness instead.** One person can, alone, assert the client approved
+  something; that is inherent to recording an out-of-band decision and cannot be designed away. What
+  can be done is not flatten it: `method` is mandatory so verbal never looks like signed, the card
+  prints what each method is worth, and `fn_project_approval_summary` counts DECIDED approvals with
+  no evidence attached and the project card shows that number. A register that displays a phone call
+  and a countersigned sheet identically looks authoritative about something it cannot support.
+- **Three nullable FKs, not `(table_name, record_id)`.** A generic pair cannot be enforced — nothing
+  stops it pointing at a row that was cancelled, deleted or never existed, and no check will catch
+  it. Three explicit FKs get referential integrity for one nullable column each. ON DELETE SET NULL,
+  not cascade: deleting a document must not delete the record that the client approved something
+  (the 031 container rule).
+- **`decided_on` is separate from `created_at`.** When the client decided is not when somebody got
+  round to typing it in, and it is the first one that matters when a sequence of events is
+  reconstructed. The form says so rather than defaulting silently to today.
+- **A BEFORE UPDATE guard on the decision columns.** An RLS UPDATE policy cannot say which columns,
+  so the policy letting a PM fix a typo also lets a PATCH set `status = 'approved'` with no
+  `decided_by` and no trail. Discriminated on `current_user` — PostgREST is `authenticated`, the
+  RPCs are SECURITY DEFINER — and it RAISES rather than silently reverting, because a PATCH only
+  sends changed columns so the trigger fires only when somebody meant it.
+- **Pending deletes, decided does not.** A pending approval is a note somebody typed. A decided one
+  is a record of something the client said, and deleting it destroys evidence — the fix for a
+  mistake is to set it back to pending and correct it, which leaves the whole sequence in
+  `audit_log`. Its own `fn_delete_approval` rather than a branch on `fn_delete_record`, following
+  050: re-emitting a 300-line function to add five lines is how a transcription error ships.
+- **`oldest_pending_days`, not just a count.** Three pending approvals is normal; one of them
+  sitting nine weeks is what stalls a job, and a count cannot show that.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor reads the register | allowed, VO number and title blank |
+| Supervisor inserting an approval | refused by RLS |
+| Supervisor calling `fn_set_approval_status` | refused — founder/PM only |
+| PATCH setting `status` directly | refused by `ca_guard` |
+| Rejection with a blank reason | refused, by RPC and by CHECK |
+| Deleting a decided approval | refused, names the number and says what to do |
+| Deleting a pending approval | allowed |
+| Audit trail | 3 INSERT, 2 UPDATE, DELETE + DELETE_HARD, all present |
+
+### Run migration 060 before testing.
+
+**2026-08-21 — migrations 059 and 060 confirmed APPLIED by the founder.** Mason Learn documents
+(upload + text extraction + retrieval seam) and the client approval register are both live.
+APPLY_pending.sql is now empty. Next migration = 061.

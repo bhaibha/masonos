@@ -33,6 +33,9 @@ import DrawingFolders from '@/pages/docs/DrawingFolders'
 import DrawingList from '@/pages/docs/DrawingList'
 import FolderView from '@/pages/docs/FolderView'
 import Folders from '@/pages/docs/Folders'
+import Learn from '@/pages/learn/Learn'
+import LearnArticle from '@/pages/learn/LearnArticle'
+import LearnEditor from '@/pages/learn/LearnEditor'
 import UploadForm from '@/pages/docs/UploadForm'
 import InwardForm from '@/pages/materials/InwardForm'
 import IssueForm from '@/pages/materials/IssueForm'
@@ -49,6 +52,7 @@ import Rfis from '@/pages/tasks/Rfis'
 import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import Qa from '@/pages/tasks/Qa'
 import Schedule from '@/pages/tasks/Schedule'
+import Approvals from '@/pages/tasks/Approvals'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
 import Snags from '@/pages/tasks/Snags'
@@ -84,6 +88,15 @@ export default function App() {
                 <Route path="team" element={<AdminTeam />} />
               </Route>
             </Route>
+
+            {/* C1 Mason Learn. Not project-scoped and no role guard: it is
+                reference material every role reads, and drafts are hidden from
+                anyone who cannot write them by RLS rather than by a route.
+                `new` sits above `:id` or it would be read as an article id. */}
+            <Route path="/learn" element={<Learn />} />
+            <Route path="/learn/new" element={<LearnEditor />} />
+            <Route path="/learn/:id/edit" element={<LearnEditor />} />
+            <Route path="/learn/:id" element={<LearnArticle />} />
 
             {/* All four roles may read; accounts is read-only per 001_core.sql. */}
             <Route path="/tasks" element={<TasksLayout />}>
@@ -122,6 +135,11 @@ export default function App() {
               {/* A8 Snags. Supervisors raise and resolve defects on their own
                   project; verification is founder/PM, enforced in the RPC. */}
               <Route path="snags" element={<Snags />} />
+              {/* C2 Client approvals. Every project member reads the register —
+                  it deliberately carries no amount, so a supervisor sees the
+                  decision and nothing about what it cost. Logging is
+                  founder/PM, enforced in RLS and the RPC. */}
+              <Route path="approvals" element={<Approvals />} />
             </Route>
 
             {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

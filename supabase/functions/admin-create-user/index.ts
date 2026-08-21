@@ -15,10 +15,18 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 
+// supabase-js's functions.invoke() attaches `apikey`, `x-client-info` and
+// `x-supabase-api-version` on top of the two obvious headers. Any header the
+// browser sends that is NOT named here fails the preflight, and the request
+// never leaves the machine — which surfaces as the generic
+// "Failed to send a request to the Edge Function", indistinguishable from the
+// function not being deployed at all. List what the client actually sends.
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-supabase-api-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 }
 
 const json = (body: unknown, status = 200) =>

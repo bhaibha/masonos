@@ -30,6 +30,10 @@ export default function DocsLayout() {
     // anyone. RLS limits them to Issued-For-Construction revisions.
     // Path is /docs/register — /docs/drawings belongs to the vault folder.
     { to: '/docs/register', label: 'Drawings' },
+    // Mason Learn is not project-scoped, so it is its own route rather than a
+    // Docs child — but this is where people look for reference material, so
+    // the way in is here.
+    { to: '/learn', label: 'Learn' },
   ]
 
   return (

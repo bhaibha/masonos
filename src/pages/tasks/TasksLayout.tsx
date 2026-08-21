@@ -55,6 +55,7 @@ export default function TasksLayout() {
     { to: '/tasks/instructions', label: 'Instructions' },
     { to: '/tasks/rfis', label: 'RFIs' },
     { to: '/tasks/snags', label: 'Snags' },
+    { to: '/tasks/approvals', label: 'Approvals' },
   ]
 
   return (

@@ -547,9 +547,66 @@ Order within group:
        MONEY_ROLES guard, and zero rows if the guard were removed).
 
 ## GROUP C — Content & internal workflow (build third) ~2–3 weeks
-- [ ] C1. M11 Mason Learn (IS codes, 115 method statements, 11-F Bengaluru regulatory bylaws, 11-G materials)
+- [x] **C1. M11 Mason Learn — migrations 057, 058 (AI drafting), 059 (documents
+      + text extraction). Run 057 -> 058 -> 059 in order before testing.**
+       The firm's own reference library at `/learn`: IS code index, method statements, Bengaluru
+       bylaws, materials guide, QA standards. Not project-scoped — an IS code is the same on every
+       job — so no project picker, and its own route rather than a Docs child.
+       **THE ITP IT WAS MEANT TO LINK TO NO LONGER EXISTS.** The brief asked for method statements
+       to link to QA-QC ITP items; 048 deleted `itp_templates`, `itp_items`, `inspections`,
+       `inspection_checks` and nine functions. So the connection is made by MATCHING A REFERENCE
+       rather than storing a link: an article carries `ref_no` and `is_refs`, `ncrs.standard_ref`
+       already holds exactly that kind of string, and `fn_learn_by_ref('IS 456')` returns every
+       article citing it. `fn_learn_normalise_ref` strips case, spaces and a trailing year, so
+       "IS 456", "is456", "IS 456:2000" and "IS  456" all resolve to the same article. Nothing to
+       maintain, nothing to re-attach when a schedule is regenerated, and it reaches every module
+       that records a reference rather than the one that got a join table.
+       **Search is Postgres FTS, not ilike.** Weighted tsvectors (title and reference heaviest, body
+       lightest), GIN indexes, `websearch_to_tsquery` so quoted phrases and -negation work, and
+       `ts_headline` snippets. Articles AND their steps are searched through one function — the
+       sentence somebody remembers from a method statement is usually inside a step, and a step hit
+       is scored at half so a title match still wins. An empty query is a browse, not a dead end.
+       **Method statements carry their safety and QA notes ON THE STEP**, not in one blob at the
+       top: a note at the head of a document is read once and forgotten; beside "strike the side
+       shutters" it is read when it matters.
+       **Guards:** a method statement cannot be published with no steps (an empty procedure in front
+       of somebody about to do the work is worse than none), cannot exist without an activity, and
+       a reference number cannot be duplicated even by case or spacing. Publishing goes through an
+       RPC so the version bump cannot be forgotten. Drafts are hidden at RLS from anyone who cannot
+       write them, so a half-finished procedure is never followed on site.
+       **Ships EMPTY, on purpose.** 044 seeded 627 checklist questions and 048 deleted them.
+       Categories are seeded — those are labels — and the library is not. Content nobody in the firm
+       wrote is content nobody in the firm trusts. The editor also states the 044 rule in place: IS
+       codes are cited by number and title, never transcribed, because BIS sells them.
+       Markdown is rendered by a small in-house component that emits REACT ELEMENTS — no dependency
+       and no `dangerouslySetInnerHTML` anywhere, so nothing typed into an article can inject markup.
+       Every role reads; founder/PM write. Attachments live under a `library/` storage prefix with
+       policies that state the rule rather than relying on `is_member()` (the 040 shape).
+       **VERIFIED ON A REAL POSTGRES:** three clean runs under `ON_ERROR_STOP=1`; a word appearing
+       only inside a step found and highlighted; a title hit (1.4) outranking a step hit (0.4);
+       quoted phrase and -negation both working; the reference join matching all four spellings; and
+       all three guards refusing. Two bugs caught by that run — `array_to_string` is STABLE so the
+       tsvector could not be a generated column (trigger-maintained instead), and
+       `ts_rank_cd(...) * 0.5` is double precision against a `real` return column, which creates
+       clean and fails at call time.
+       **Migration 058 + the `learn-draft` Edge Function — AI drafts the STRUCTURE.** Gemini
+       proposes the step sequence and where safety notes and QA checkpoints belong; the engineer
+       writes every value. It returns no number and no clause text, enforced three ways: the
+       response schema has no field for a value, the prompt forbids it, and a scrub pass replaces
+       anything still matching a quantity with `___`. IS codes are copyrighted, and a hallucinated
+       cover figure under the firm's name reaches a bar bender — a model is good at the order of
+       work and confidently wrong about the numbers.
+       It needed no new safety machinery: drafts already land unpublished, are invisible to
+       supervisors at RLS, and cannot be published step-less. `ai_drafted_at` records provenance
+       because a skeleton reads like a document. **CLAUDE.md's "no paid APIs" rule now records this
+       one deliberate exception.** Needs `supabase secrets set GEMINI_API_KEY=…` and
+       `supabase functions deploy learn-draft`.
+       **Not yet exercised in the app:** writing a real method statement end to end, the markdown
+       preview, publishing, the AI drafter against a live key, and the supervisor pass (drafts
+       invisible, no Write button, no editor).
         → mostly structured content as markdown/seed data in Document Vault; light UI to browse/search
-- [ ] C2. M07 Client Approvals (INTERNAL record version — log client verbal/WhatsApp approvals with evidence; no portal)
+- [x] **C2. M07 Client Approvals (INTERNAL record version — log client verbal/WhatsApp
+      approvals with evidence; no portal) — migration 060. Run it before testing.**
 
 ## GROUP D — AI / hard / needs data (build LAST; basic versions only) — reconsider each
 - [ ] D1. M39 AI Photo Defect — v1 = photo upload + Claude-vision tagging/notes, NOT trained defect model

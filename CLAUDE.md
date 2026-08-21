@@ -172,6 +172,21 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_mis_exceptions`). Read-only: one view, four functions, no tables and no
   triggers. Verified on a real PostgreSQL — three clean runs, KPI totals hand
   checked, PM overhead gate and supervisor zero-rows both confirmed.
+  **CORRECTED TWICE after failing on paste** — `pnl.project_name` (the view
+  selects `p.name` unaliased) and `e.expense_date` on `company_expenses` (its
+  column is `spend_date`). Both were bad sandbox stubs; see the lesson below.
+  **057 WRITTEN, NOT YET APPLIED** — C1 Mason Learn (`learn_categories`,
+  `learn_articles`, `learn_steps`, `learn_kind`/`learn_status`,
+  `v_learn_articles`, `fn_learn_search`, `fn_learn_by_ref`,
+  `fn_learn_normalise_ref`, `fn_learn_category_counts`, `fn_learn_set_status`,
+  trigger-maintained tsvectors, and three storage policies for the `library/`
+  prefix). Verified on a real PostgreSQL: three clean runs, search behaviour and
+  all three guards exercised.
+  **058 WRITTEN, NOT YET APPLIED** — `learn_articles.ai_drafted_at` +
+  `ai_model`, provenance for the Gemini skeleton drafter. Two columns, no
+  policies. Ships with the `learn-draft` Edge Function, which needs
+  `supabase secrets set GEMINI_API_KEY=…` and
+  `supabase functions deploy learn-draft` before the button works.
   **050 APPLIED** (confirmed 2026-08-12) — B3 rate comparison / comparative statement
   (`rate_comparisons`, `rc_items`, `rc_vendors`, `rc_quotes`, `rc_status`,
   `v_rc_matrix`, `v_rc_vendor_totals`, `v_rc_summary`, `rc_may_read`,
@@ -199,13 +214,173 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   sandbox, not just pglast): runs clean THREE times under `ON_ERROR_STOP=1`,
   and `fn_bbs_selftest()` returns 8/8 passing at 0.00 mm. That run found two
   bugs a read-through had missed — see the two lessons below.
-  Next migration = 057.
+  **059 APPLIED** (confirmed 2026-08-21) — C1 part 2, library documents
+  (`learn_documents` with a NULLABLE `article_id` so one table serves both a
+  standalone document and an article attachment, `doc_extract_status`,
+  `fn_learn_doc_touch` + trigger tsvector, `v_learn_documents`,
+  `v_learn_articles` rebuilt, `fn_learn_doc_search`, `fn_learn_retrieve`,
+  `fn_learn_category_counts` and `fn_learn_by_ref` re-emitted, and
+  `learn_articles.attachments` migrated in then DROPPED). Verified on a real
+  PostgreSQL — three clean runs, fixtures built by RUNNING 057/058 rather than
+  hand-typing them, all four guards confirmed firing.
+  **060 APPLIED** (confirmed 2026-08-21) — C2 Client Approvals (`client_approvals`,
+  `approval_subject`/`approval_method`/`approval_state`, `approval_no_seq`,
+  `v_client_approvals`, `fn_set_approval_status`,
+  `fn_project_approval_summary`, `fn_delete_approval`, `fn_ca_guard` +
+  `fn_ca_touch` triggers, audit trigger). Independent of 059 — it touches
+  projects/variation_orders/documents/materials only, all from 001-016.
+  Verified on a real PostgreSQL with the ACTUAL 001-016 chain as fixtures, not
+  stubs; three clean runs, all eight guards confirmed firing.
+  So: **001-060 ALL APPLIED.**
+  Next migration = 061.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
   `section` on template/live/answer checks, `inspections.location`, plus
   `fn_apply_itp_template` / `fn_save_itp_template` / `fn_record_inspection` /
   `fn_inspection_checks` re-emitted. Next migration = 047.
+- **An accurate message with no action is a dead end (054, 057 — shipped twice).** The labour screen
+  told a founder to go to Money -> Labour to add a contractor; the Learn screen said a method
+  statement had no steps while the drafting button sat two scrolls away in the editor. Both were
+  true and both stopped somebody. Any empty state saying "there is nothing here yet" must carry the
+  action for the roles that can act, on the screen where they landed — and a button that will
+  certainly be refused should be disabled with the reason, not left to fail.
+- **Do not model people who will never log in (060).** The client approval register stores
+  `approved_by_name` as plain text. Giving the client a row in `profiles`, or a `client_users`
+  table, would imply an account nobody will ever issue. Model the RECORD of what an outsider said,
+  not the outsider as a user.
+- **When an integrity rule cannot apply, say so and compensate (060).** A PM normally cannot approve
+  what they raised. Here the decision is the CLIENT's, made outside the system, and the PM is a
+  witness — applying the rule would stop the person who took the phone call from logging it. So the
+  rule is dropped ON PURPOSE and the residual weakness is exposed instead of hidden: `method` is
+  mandatory so verbal never looks like signed, and the summary counts DECIDED approvals with NO
+  evidence attached. A register that shows a phone call and a countersigned sheet identically looks
+  authoritative about something it cannot support.
+- **Explicit nullable FKs beat a (table_name, record_id) pair (060).** A generic link cannot be
+  enforced: nothing stops it pointing at a row since cancelled, deleted or never created, and no
+  database check will catch it. Three nullable FKs cost one column each and get referential
+  integrity free. ON DELETE SET NULL, never cascade — deleting the document must not delete the
+  record that the client approved something.
+- **Let the existing policy hide the money; do not restate it (060).** An approval that concerns
+  money holds NO amount and links to the VO. The register view LEFT JOINs `variation_orders`, so a
+  supervisor gets the approval with the VO half blank purely because that table's own RLS refused —
+  no column grant, no role check, nothing here to drift. Same move as 023's `has_cost_implication`.
+  Reach for it whenever a screen supervisors need shows a record that merely REFERS to money.
+- **Record when it happened, not when it was typed (060).** `decided_on` is the day the client
+  decided; `created_at` is the day somebody got round to entering it. They are routinely weeks
+  apart, and the first is the one that matters when a sequence of events is reconstructed. Any log
+  of an out-of-band event needs both dates and a form that asks for the real one.
+- **An age beats a count on a dashboard card (060).** Three approvals awaiting the client is normal;
+  one of them waiting nine weeks is what stalls a job. `oldest_pending_days` is what the card leads
+  with.
+- **Extract the text at upload, not when the AI arrives (059).** A file in a bucket is opaque, and
+  every question anybody could ask of it needs its text. Pulling it out at upload makes the document
+  searchable IMMEDIATELY through the box that already exists — no assistant involved — and turns the
+  later assistant into a column read rather than a batch job that re-downloads and re-parses the
+  whole library. The general rule: when a feature will obviously need a derived form of some data,
+  derive it at write time; deriving it later means reprocessing everything ever stored.
+- **Build the seam, not the feature (059).** `fn_learn_retrieve` returns ranked passages with their
+  source across articles, steps and documents. Nothing calls it yet. It is the shape an assistant
+  needs — text to read plus a citation to show — so when the assistant is built it is a function
+  call, and swapping FTS for vector retrieval later changes no caller. Embeddings were deliberately
+  NOT built: the retrieval design is far easier to get right against a real corpus and real
+  questions than against an imagined one.
+- **A tsvector has a hard 1 MB limit (059).** Indexing a large document raises "string is too long
+  for tsvector" and would refuse the upload of exactly the big reference documents the feature
+  exists for. The index input is capped at 500k characters while `extracted_text` is stored whole —
+  the cap costs deep-page search on a very long document; refusing the upload would cost the
+  document. And WEIGHT THE BULK TEXT LOWEST (D): a 200-page standard says "concrete" four hundred
+  times and would otherwise outrank the one-page article actually titled "Concrete".
+- **A nullable owner beats a second table (059).** A standalone library document and an attachment
+  on an article are the same object with a different owner, so `article_id` is nullable rather than
+  there being two tables. Two tables would have meant two search indexes, two extraction paths and
+  two places for the assistant to look — which is precisely how "the bot could not find it" happens
+  to a document that is plainly in the library.
+- **Compose the visibility rule; the second half is not redundant (059).** A document is readable if
+  its own status allows it AND, when it hangs off an article, that article is readable too. Without
+  the second clause, publishing a document attached to a DRAFT method statement leaks the draft
+  through its own evidence. Any child row that can be published independently of its parent needs
+  both halves.
+- **Say when something is stored but not searchable (059).** pdf.js correctly returns nothing for a
+  scan, because a scan is a picture of a page. That is recorded as `no_text` with a sentence and
+  shown on the card, rather than stored as an empty string that looks like a successful extraction.
+  A library that quietly contains documents nobody can search is worse than one that names them —
+  same family as naming the one BBS figure that still does not reconcile (053).
+- **A best-effort step must never lose the main act (059).** Extraction NEVER throws: a file that
+  could not be parsed is still filed, with the reason recorded. Failing the upload because a
+  convenience failed would trade away the thing the user actually asked for.
+- **ts_headline output is untrusted once it comes from an upload (059).** The snippet now originates
+  inside a PDF somebody sent the firm. It is split on the `<b>` markers and re-emitted as React
+  elements, never `dangerouslySetInnerHTML`. The highlight survives and nothing in a document can
+  inject markup into the app.
+- **A model name is a perishable constant — put it in config (058).** `gemini-2.0-flash` was
+  retired by Google on 1 June 2026 and answered `generateContent` with a bare 404, which reads
+  exactly like a broken URL. The name now lives in `GEMINI_MODEL` (default `gemini-3.5-flash`), so
+  the next retirement is `supabase secrets set` rather than a code change and a deploy — a vendor's
+  schedule has nothing to do with our release cycle. Not `gemini-2.5-flash`: it already has a
+  shutdown date of 16 October 2026, and moving onto a model that dies in two months is not a
+  migration. The 404 handler names the likely cause, because the previous message sent somebody
+  looking at their API key.
+- **`verify_jwt` at the gateway breaks every browser-called Edge Function (058).** The gateway
+  demands an Authorization header before invoking the function; a CORS preflight is sent WITHOUT one
+  by specification, so OPTIONS is answered 401 with no CORS headers and the browser blocks the POST.
+  The function's own OPTIONS handler never runs. Any function the app calls sets
+  `verify_jwt = false` in `supabase/config.toml` and authenticates INSIDE itself — Bearer token,
+  `auth.getUser()`, then `profiles.role` — which is what `learn-draft` and `admin-create-user`
+  already did, making the gateway check purely redundant. Put it in `config.toml`, never a
+  `--no-verify-jwt` flag: a later deploy that forgets the flag reinstates the bug, and the bug
+  reports itself as a missing endpoint.
+- **PROBE THE ENDPOINT BEFORE THEORISING (058).** Two rounds went into reasoning about a message
+  that structurally cannot distinguish its own causes. Opening
+  `https://<ref>.supabase.co/functions/v1/<name>` in a browser tab settled it in ten seconds:
+  `UNAUTHORIZED_NO_AUTH_HEADER` = deployed and the gateway is refusing; `404` = not deployed. When
+  an error message is known to be ambiguous, the next action is a measurement, not a hypothesis.
+- **A CORS preflight failure is indistinguishable from a missing endpoint (058).** The Gemini
+  drafting button reported "Failed to send a request to the Edge Function" with the function
+  deployed and the key set. `functions.invoke()` sends `apikey`, `x-client-info` and
+  `x-supabase-api-version` as well as `authorization`/`content-type`; the function's
+  `Access-Control-Allow-Headers` named only the last two, so the browser blocked the POST before it
+  left. supabase-js reports a fetch that never happened with the same sentence it would use for a
+  dead URL. **Read the error CLASS, not the text** — `FunctionsHttpError` means the function
+  answered and refused, `FunctionsFetchError` means the browser never reached it (CORS, wrong URL,
+  offline). Every Edge Function uses the full canonical allow-list; `admin-create-user` had the same
+  two-header list and would have failed identically on first use.
+- **Let a model draft the SHAPE, never the values (058).** Gemini is good at the order of work in a
+  procedure and confidently wrong about cover, curing days and tolerances — and the numbers are the
+  part that reaches a bar bender. So `learn-draft` returns a skeleton with `___` where every value
+  belongs, the response SCHEMA has no field for a requirement (structural, not just prompted), a
+  regex scrub replaces anything that still looks like one, and IS refs are filtered to bare standard
+  numbers. Reproducing BIS clause text would also be theft; refusing the numbers happens to solve
+  both problems at once.
+- **A skeleton reads like a document (058).** Nobody can tell six weeks later whether a draft was
+  written by the Planning Engineer or generated in four seconds, so `ai_drafted_at` records it and
+  the editor keeps the reminder on screen. The existing machinery did the rest with no changes:
+  everything lands as `draft`, drafts are invisible to supervisors at RLS, and publishing is the
+  deliberate human act. An AI feature that plugs into an existing safety gate needs no new one.
+- **A suggestion must never overwrite typed work (058).** The drafter fills summary/scope/PPE/tags
+  only where they are still empty, and asks before replacing steps somebody has written. The one
+  thing worse than a bad suggestion is a bad suggestion that ate the good version.
+- **A generated column must be IMMUTABLE, and array_to_string is not (057).** A weighted tsvector
+  over `is_refs`/`tags` was refused at create time with "generation expression is not immutable":
+  `to_tsvector(regconfig, text)` and `setweight` are immutable, but `array_to_string` and
+  `text[]::text` are STABLE. Isolating each subexpression against a real Postgres found it in a
+  minute; guessing would have taken longer. The fix is the pre-PG12 shape — a plain tsvector column
+  maintained by a BEFORE INSERT OR UPDATE trigger, which fires on every write and so cannot drift
+  any more than a generated column could.
+- **A RETURNS TABLE type mismatch creates clean and fails at CALL time (057).** `ts_rank_cd` returns
+  real, but `ts_rank_cd(...) * 0.5` in a UNION arm promotes to double precision, and the function —
+  declared `rank real` — was accepted by `create function` and then raised "structure of query does
+  not match function result type" the first time anyone searched. Cast every arm of a UNION
+  explicitly to the declared type; a migration that runs clean has not been tested.
+- **Match on a reference instead of adding a link table (057).** C1 was asked to link method
+  statements to QA ITP items, which 048 had deleted. Rather than invent a join to whatever survived,
+  articles carry `is_refs` and `ncrs` already carries `standard_ref`, and `fn_learn_by_ref`
+  normalises case, spaces and a trailing year so "IS 456", "is456" and "IS 456:2000" all resolve to
+  the same article. Nothing to maintain, nothing to re-attach when a schedule is regenerated, and it
+  reaches every module that records a reference rather than the one that got the FK.
+- **Ship the structure, not the content (057).** 044 seeded 627 checklist questions and 048 deleted
+  them. Mason Learn ships with five category labels and an empty library. Content nobody in the firm
+  wrote is content nobody in the firm trusts.
 - **A STUB THAT DOES NOT MATCH PRODUCTION PROVES NOTHING (056, shipped broken TWICE).** 056 ran
   clean three times in the sandbox and still failed on the founder's first paste, then failed again
   on the second, both times for the same underlying reason — a hand-written fixture that did not
@@ -583,8 +758,13 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 - Frontend: Vite + React 18 + TypeScript + Tailwind v4 + shadcn/ui (Base UI / Nova preset) + Zustand + React Router
 - Motion: framer-motion. Toasts: sonner. Icons: lucide-react.
 - Backend: Supabase — Postgres, Auth, Storage, RLS, Edge Functions, pg_cron
-- PDF: client-side (jsPDF) — no server rendering
-- Deploy: Cloudflare Pages. Repo: GitHub. No Firebase, no AWS, no Express, no paid APIs.
+- PDF: client-side (jsPDF) to write, pdfjs-dist to READ (059, dynamic import only — it is ~400KB
+  plus a 1.26MB worker and must never enter the main bundle)
+- Deploy: Cloudflare Pages. Repo: GitHub. No Firebase, no AWS, no Express.
+- **One paid-API exception, added deliberately at 058: Google Gemini**, reached ONLY through the
+  `learn-draft` Edge Function (key in `GEMINI_API_KEY`, never in the bundle), and ONLY to draft the
+  STRUCTURE of a Mason Learn method statement. It is not allowed to state a value or reproduce a
+  standard — see 058's header. Anything else wanting an AI call is a new decision, not a precedent.
 
 ## Non-negotiable engineering rules
 1. **RLS on every table. No exceptions.** Never use the service-role key in frontend code.

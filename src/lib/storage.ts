@@ -225,3 +225,42 @@ export async function signedDrawingUrl(
 ): Promise<string | null> {
   return signed(DRAWINGS_BUCKET, path, expiresInSeconds)
 }
+
+/**
+ * The literal first segment for Mason Learn documents (migration 057).
+ *
+ * A library document belongs to the firm, not to a site, so there is no project
+ * id to key the path off — the same problem the `company/` prefix solves for
+ * overhead proofs. 057's documents_library_* policies match this exact word, so
+ * it must never be something a project id could collide with; a uuid cannot
+ * equal "library".
+ */
+export const LIBRARY_PREFIX = 'library'
+
+/**
+ * A library document (migration 059). Uploaded BYTE-FOR-BYTE, images included.
+ *
+ * Deliberately different from uploadDocument(), which compresses images to
+ * 300KB. A vault photo is a record that something happened; a library document
+ * is a reference somebody reads a figure off, and a scanned spec sheet through
+ * a JPEG quantiser is one where 8 becomes 3. Same reasoning as uploadDrawing().
+ */
+export async function uploadLibraryFile(
+  file: File,
+): Promise<{ path: string; fileType: string }> {
+  const ext = extensionOf(file.name)
+  const contentType = file.type || 'application/octet-stream'
+  const path = `${LIBRARY_PREFIX}/${crypto.randomUUID()}${ext}`
+
+  const { error } = await supabase.storage
+    .from(DOCUMENTS_BUCKET)
+    .upload(path, file, { contentType, upsert: false })
+
+  if (error) throw error
+  return { path, fileType: contentType }
+}
+
+/** Removes the stored object. Called after the row is gone, never before. */
+export async function removeLibraryFile(path: string): Promise<void> {
+  await supabase.storage.from(DOCUMENTS_BUCKET).remove([path])
+}

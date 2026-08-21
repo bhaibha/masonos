@@ -1,0 +1,37 @@
+project_id = "vkdkrtxiipnxlhfqpjjf"
+
+# ============================================================
+# Edge Function JWT verification
+# ============================================================
+# `verify_jwt = true` makes the Supabase GATEWAY demand an Authorization header
+# before it invokes the function at all. A browser CORS preflight (OPTIONS) is
+# sent WITHOUT an Authorization header by specification, so the gateway answers
+# it 401 — with no CORS headers on that response — and the browser blocks the
+# real POST that would have followed. The function's own OPTIONS handler never
+# runs, because the gateway rejected the request before reaching it.
+#
+# supabase-js surfaces that as `FunctionsFetchError`, whose message is
+# "Failed to send a request to the Edge Function" — the SAME sentence it uses
+# for a function that was never deployed. That cost several debugging rounds.
+#
+# Both functions below re-verify the caller themselves: they require a Bearer
+# token, resolve it with `auth.getUser()`, and check `profiles.role` server-side
+# before doing anything. Turning the gateway check off therefore removes NO
+# protection — it only stops the gateway from answering the preflight. This is
+# the arrangement Supabase documents for any function called from a browser.
+#
+# Recorded here rather than left as a `--no-verify-jwt` flag somebody has to
+# remember, because a deploy that silently re-enables it breaks the feature in a
+# way whose error message points somewhere else entirely.
+
+[functions.learn-draft]
+verify_jwt = false
+
+[functions.admin-create-user]
+verify_jwt = false
+
+# daily-task-push is called by pg_cron via pg_net, server-to-server. There is no
+# browser and no preflight, and it authenticates on its own shared secret, so
+# the gateway check stays on.
+[functions.daily-task-push]
+verify_jwt = true

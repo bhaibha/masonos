@@ -8,6 +8,7 @@ import {
   Package,
   Receipt,
   ShieldCheck,
+  Stamp,
   Wallet,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -30,6 +31,7 @@ import {
 import { fetchSafetySummary } from '@/lib/queries/safety'
 import { fetchQaSummary } from '@/lib/queries/qa'
 import { fetchSnagSummary } from '@/lib/queries/snags'
+import { fetchApprovalSummary } from '@/lib/queries/approvals'
 import { fetchProjectContract } from '@/lib/queries/variations'
 import {
   fetchProject,
@@ -54,6 +56,7 @@ import {
   SNAG_SEVERITY_LABEL,
   type QaSummary,
   type SnagSummary,
+  type ApprovalSummary,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -74,6 +77,7 @@ export default function ProjectDetail() {
   const [safety, setSafety] = useState<SafetySummary | null>(null)
   const [snags, setSnags] = useState<SnagSummary | null>(null)
   const [qa, setQa] = useState<QaSummary | null>(null)
+  const [approvals, setApprovals] = useState<ApprovalSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
 
   // Scope every tab to this project the moment the screen opens.
@@ -135,6 +139,9 @@ export default function ProjectDetail() {
     // Same shape as the snag summary: one server-side function, so the card
     // and the QA screen can never disagree about how many NCRs are open.
     fetchQaSummary(id).then(setQa).catch(() => setQa(null))
+    // Same shape again: one server-side function, so the card cannot disagree
+    // with the register it links to.
+    fetchApprovalSummary(id).then(setApprovals).catch(() => setApprovals(null))
 
     fetchSnagSummary(id)
       .then((s) => {
@@ -224,6 +231,13 @@ export default function ProjectDetail() {
 
         <RevealItem className="h-full">
           <QaCard qa={qa} onOpen={() => navigate('/tasks/qa')} />
+        </RevealItem>
+
+        <RevealItem className="h-full">
+          <ApprovalsCard
+            a={approvals}
+            onOpen={() => navigate('/tasks/approvals')}
+          />
         </RevealItem>
 
         <RevealItem className="h-full sm:col-span-2">
@@ -786,6 +800,73 @@ function QaCard({
               : `${q.total_comments} observation${q.total_comments === 1 ? '' : 's'} logged`}
             {q.qa_docs > 0 && ` · ${q.qa_docs} QA document${q.qa_docs === 1 ? '' : 's'}`}
           </p>
+        </>
+      )}
+    </SectionCard>
+  )
+}
+
+/**
+ * Client approvals (C2). Two numbers a founder wants at a glance: what the
+ * client has not come back on, and how many decided approvals have nothing
+ * attached to them.
+ *
+ * No amounts here, ever — the table carries none, so this card is safe for a
+ * supervisor without a role check.
+ */
+function ApprovalsCard({
+  a,
+  onOpen,
+}: {
+  a: ApprovalSummary | null
+  onOpen: () => void
+}) {
+  return (
+    <SectionCard
+      icon={Stamp}
+      title="Client approvals"
+      action="View register"
+      onAction={onOpen}
+    >
+      {a === null ? (
+        <Skeleton className="h-8 w-40" />
+      ) : (
+        <>
+          <div className="flex gap-8">
+            <Stat
+              label="Awaiting client"
+              value={String(a.pending_count)}
+              tone={a.pending_count > 0 ? 'warning' : undefined}
+            />
+            <Stat label="Approved" value={String(a.approved_count)} />
+          </div>
+
+          {/* An age, not just a count: three pending approvals is normal, one
+              of them sitting nine weeks is what stalls a job. */}
+          {a.oldest_pending_days !== null && a.oldest_pending_days > 0 && (
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Oldest has been waiting {a.oldest_pending_days} day
+              {a.oldest_pending_days === 1 ? '' : 's'}.
+            </p>
+          )}
+
+          {/* Named rather than hidden: this is the number that matters if an
+              approval is ever questioned. */}
+          {a.no_evidence_count > 0 && (
+            <p className="mt-2 text-[11px] text-[var(--warning)]">
+              {a.no_evidence_count} decided approval
+              {a.no_evidence_count === 1 ? '' : 's'} with no evidence attached.
+            </p>
+          )}
+
+          {a.pending_count === 0 &&
+            a.approved_count === 0 &&
+            a.rejected_count === 0 && (
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Nothing logged yet. Client decisions recorded here stay
+                answerable months later.
+              </p>
+            )}
         </>
       )}
     </SectionCard>

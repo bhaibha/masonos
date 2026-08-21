@@ -3184,3 +3184,311 @@ export interface MisException {
   due_date: string | null
   amount: number | null
 }
+
+// ---------- Mason Learn, the reference library (C1, migration 057) ----------
+
+export type LearnKind = 'article' | 'method_statement'
+export type LearnStatus = 'draft' | 'published' | 'archived'
+
+export const LEARN_KIND_LABEL: Record<LearnKind, string> = {
+  article: 'Article',
+  method_statement: 'Method statement',
+}
+
+export const LEARN_STATUS_LABEL: Record<LearnStatus, string> = {
+  draft: 'Draft',
+  published: 'Published',
+  archived: 'Archived',
+}
+
+/**
+ * Everyone reads the library — it is reference, and there is not a rupee in it.
+ * Drafts are the exception: RLS hides them from anyone who cannot write, so a
+ * half-finished method statement is never followed on site.
+ */
+export function canWriteLearn(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+export interface LearnCategory {
+  code: string
+  name: string
+  description: string | null
+  sort_order: number
+  article_count: number
+  /** Uploaded files on this shelf (059). A shelf holding only PDFs is not empty. */
+  document_count: number
+}
+
+/** Row of v_learn_articles — the list shape. */
+export interface LearnArticleRow {
+  id: string
+  category_code: string
+  category_name: string
+  kind: LearnKind
+  status: LearnStatus
+  title: string
+  ref_no: string | null
+  summary: string | null
+  is_refs: string[]
+  trades: string[]
+  tags: string[]
+  activity: string | null
+  version: number
+  updated_at: string
+  attachment_count: number
+  step_count: number
+}
+
+/** One search hit. `matched_in` says whether the phrase was in a step. */
+export interface LearnSearchHit {
+  id: string
+  category_code: string
+  category_name: string
+  kind: LearnKind
+  status: LearnStatus
+  title: string
+  ref_no: string | null
+  summary: string | null
+  is_refs: string[]
+  tags: string[]
+  step_count: number
+  rank: number
+  /** ts_headline output — contains <b> markers, rendered as text segments */
+  snippet: string | null
+  matched_in: 'article' | 'step' | 'recent'
+}
+
+export interface LearnStep {
+  id: string
+  article_id: string
+  step_no: number
+  instruction: string
+  safety_note: string | null
+  qa_checkpoint: string | null
+  is_refs: string[]
+}
+
+/** The full record, for reading and editing. */
+export interface LearnArticle extends LearnArticleRow {
+  body: string | null
+  scope: string | null
+  ppe: string | null
+  created_by: string
+  updated_by: string | null
+}
+
+/* ---------------- library documents (059) ---------------- */
+
+/** Mirrors the doc_extract_status enum. */
+export type DocExtractStatus = 'pending' | 'ok' | 'no_text' | 'failed'
+
+/**
+ * What the screen says about a document's searchability. Stated plainly,
+ * because "this file is in the library but nothing inside it can be found" is
+ * the single most surprising thing about a document library and needs to be
+ * visible without asking.
+ */
+export const EXTRACT_LABEL: Record<DocExtractStatus, string> = {
+  pending: 'Not read yet',
+  ok: 'Searchable',
+  no_text: 'Scanned — not searchable',
+  failed: 'Could not be read',
+}
+
+/** Row of v_learn_documents. The extracted text is NOT here — it is bulk. */
+export interface LearnDocumentRow {
+  id: string
+  article_id: string | null
+  article_title: string | null
+  shelf_code: string | null
+  shelf_name: string | null
+  status: LearnStatus
+  title: string
+  description: string | null
+  ref_no: string | null
+  is_refs: string[]
+  trades: string[]
+  tags: string[]
+  file_path: string
+  file_name: string
+  file_type: string | null
+  file_size: number | null
+  page_count: number | null
+  extract_status: DocExtractStatus
+  extract_note: string | null
+  has_text: boolean
+  text_length: number
+  created_at: string
+  updated_at: string
+}
+
+/** One hit from fn_learn_doc_search. */
+export interface LearnDocumentHit extends LearnDocumentRow {
+  rank: number
+  snippet: string | null
+}
+
+/**
+ * One passage from fn_learn_retrieve — the seam a future assistant reads.
+ * Every passage carries where it came from, so an answer can be traced back to
+ * the document it was taken from.
+ */
+export interface LearnPassage {
+  source_type: 'article' | 'step' | 'document'
+  source_id: string
+  article_id: string | null
+  title: string
+  ref_no: string | null
+  is_refs: string[]
+  passage: string
+  rank: number
+}
+
+export interface NewLearnDocument {
+  article_id: string | null
+  category_code: string | null
+  title: string
+  description: string
+  ref_no: string
+  is_refs: string[]
+  trades: string[]
+  tags: string[]
+}
+
+export interface NewLearnArticle {
+  category_code: string
+  kind: LearnKind
+  title: string
+  ref_no: string
+  summary: string
+  body: string
+  is_refs: string[]
+  trades: string[]
+  tags: string[]
+  activity: string
+  scope: string
+  ppe: string
+}
+
+/** Provenance: set when an AI skeleton was generated into the article (058). */
+export interface LearnAiProvenance {
+  ai_drafted_at: string | null
+  ai_model: string | null
+}
+
+export interface NewLearnStep {
+  step_no: number
+  instruction: string
+  safety_note: string
+  qa_checkpoint: string
+  is_refs: string[]
+}
+
+/* ================================================================
+   C2 — CLIENT APPROVALS (migration 060)
+   ================================================================ */
+
+export type ApprovalSubject =
+  | 'material_selection'
+  | 'design_change'
+  | 'variation_order'
+  | 'stage_signoff'
+  | 'sample'
+  | 'other'
+
+export type ApprovalMethod = 'verbal' | 'whatsapp' | 'email' | 'signed'
+export type ApprovalState = 'pending' | 'approved' | 'rejected'
+
+export const APPROVAL_SUBJECT_LABEL: Record<ApprovalSubject, string> = {
+  material_selection: 'Material selection',
+  design_change: 'Design change',
+  variation_order: 'Variation order',
+  stage_signoff: 'Stage sign-off',
+  sample: 'Sample or mock-up',
+  other: 'Other',
+}
+
+export const APPROVAL_METHOD_LABEL: Record<ApprovalMethod, string> = {
+  verbal: 'Verbal',
+  whatsapp: 'WhatsApp',
+  email: 'Email',
+  signed: 'Signed',
+}
+
+/**
+ * How much a method is worth if the approval is ever questioned. Shown on the
+ * card, because a register that displays a phone call and a countersigned sheet
+ * identically looks authoritative about something it cannot support.
+ */
+export const APPROVAL_METHOD_WEIGHT: Record<ApprovalMethod, string> = {
+  verbal: 'Weakest record — attach a note or photo if you can',
+  whatsapp: 'Keep the screenshot attached',
+  email: 'Keep the email attached',
+  signed: 'Strongest record',
+}
+
+export const APPROVAL_STATUS_LABEL: Record<ApprovalState, string> = {
+  pending: 'Awaiting the client',
+  approved: 'Approved',
+  rejected: 'Rejected',
+}
+
+/** Founder and PM log approvals; everyone on the project reads them. */
+export function canLogApprovals(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/** Row of v_client_approvals. Carries NO amount — by design (see 060). */
+export interface ClientApprovalRow {
+  id: string
+  approval_no: string
+  project_id: string
+  project_name: string
+  subject: ApprovalSubject
+  title: string
+  details: string | null
+  approved_by_name: string
+  client_role: string | null
+  method: ApprovalMethod
+  status: ApprovalState
+  decided_on: string | null
+  reject_reason: string | null
+  decided_at: string | null
+  decided_by_name: string | null
+  raised_by_name: string | null
+  variation_id: string | null
+  /** Null for a supervisor — variation_orders' own RLS hides it. */
+  vo_number: string | null
+  variation_title: string | null
+  document_id: string | null
+  document_title: string | null
+  material_id: string | null
+  material_name: string | null
+  evidence: string[]
+  evidence_count: number
+  evidence_missing: boolean
+  created_at: string
+}
+
+export interface ApprovalSummary {
+  pending_count: number
+  approved_count: number
+  rejected_count: number
+  oldest_pending_days: number | null
+  no_evidence_count: number
+}
+
+export interface NewClientApproval {
+  project_id: string
+  subject: ApprovalSubject
+  title: string
+  details: string
+  approved_by_name: string
+  client_role: string
+  method: ApprovalMethod
+  variation_id: string | null
+  document_id: string | null
+  material_id: string | null
+  evidence: string[]
+}
