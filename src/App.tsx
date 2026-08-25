@@ -53,6 +53,7 @@ import SafetyChecklist from '@/pages/tasks/SafetyChecklist'
 import Qa from '@/pages/tasks/Qa'
 import Schedule from '@/pages/tasks/Schedule'
 import Approvals from '@/pages/tasks/Approvals'
+import Clashes from '@/pages/tasks/Clashes'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
 import Snags from '@/pages/tasks/Snags'
@@ -140,6 +141,10 @@ export default function App() {
                   decision and nothing about what it cost. Logging is
                   founder/PM, enforced in RLS and the RPC. */}
               <Route path="approvals" element={<Approvals />} />
+              {/* D2 Clash register. Every project member reads it — the table
+                  holds no figures. Verification and the RFI to a consultant
+                  are founder/PM, enforced in the RPCs. */}
+              <Route path="clashes" element={<Clashes />} />
             </Route>
 
             {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

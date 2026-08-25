@@ -3492,3 +3492,181 @@ export interface NewClientApproval {
   material_id: string | null
   evidence: string[]
 }
+
+/* ================================================================
+   D1 — AI PHOTO HELPER (migration 061)
+   ================================================================ */
+
+export type PhotoSource = 'site_log' | 'snag' | 'inspection' | 'other'
+export type AnalysisState = 'suggested' | 'accepted' | 'dismissed'
+
+/**
+ * One thing the model thinks is worth a closer look.
+ *
+ * There is deliberately NO severity field. A severity is a judgement, and a
+ * judgement from something that cannot measure is a number people would quote.
+ * `what_to_check` is the point of the whole structure: it forces the output
+ * into the grammar of a question for a person, not a finding.
+ */
+export interface PhotoConcern {
+  concern: string
+  what_to_check: string
+}
+
+export interface PhotoAnalysis {
+  id: string
+  project_id: string
+  photo_path: string
+  source: PhotoSource
+  description: string | null
+  concerns: PhotoConcern[]
+  model: string | null
+  analysed_at: string
+  status: AnalysisState
+  acted_by: string | null
+  acted_at: string | null
+  dismiss_note: string | null
+  accepted_snag_id: string | null
+  accepted_ncr_id: string | null
+  created_at: string
+}
+
+export interface PhotoAnalysisSummary {
+  total_count: number
+  suggested_count: number
+  accepted_count: number
+  dismissed_count: number
+  /** Null until something has been decided — a rate from a sample of zero isn't one. */
+  accept_rate_pct: number | null
+}
+
+/**
+ * Who may ask for an analysis and act on one.
+ *
+ * Supervisors included, deliberately: they are the ones standing in front of
+ * the wall with the phone, and there is no money anywhere in this feature.
+ */
+export function canAnalysePhotos(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
+/** An NCR is a formal non-conformance. Founder/PM only, matching 043. */
+export function canAcceptAsNcr(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}
+
+/**
+ * The line that must appear next to every piece of model output in this app.
+ * Kept as a constant so it cannot drift between the three screens that show it.
+ */
+export const AI_SUGGESTION_LABEL = 'AI suggestion — verify on site'
+
+/* ================================================================
+   D2 — CLASH REGISTER (migration 062)
+   ================================================================ */
+
+export type ClashSeverity = 'low' | 'medium' | 'high'
+export type ClashStatus = 'open' | 'resolved' | 'verified'
+
+export const CLASH_SEVERITY_LABEL: Record<ClashSeverity, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+}
+
+export const CLASH_STATUS_LABEL: Record<ClashStatus, string> = {
+  open: 'Open',
+  resolved: 'Resolved',
+  verified: 'Verified',
+}
+
+/** Reuses the drawing register's disciplines (029) — one list, not two. */
+export const CLASH_DISCIPLINES: DrawingDiscipline[] = [
+  'structural',
+  'mep',
+  'architectural',
+  'interior',
+  'landscape',
+  'other',
+]
+
+/** Row of v_clashes. No money anywhere — supervisors read all of it. */
+export interface ClashRow {
+  id: string
+  clash_no: string
+  project_id: string
+  system_a: string
+  system_b: string
+  discipline_a: DrawingDiscipline
+  discipline_b: DrawingDiscipline
+  location: string
+  description: string
+  severity: ClashSeverity
+  status: ClashStatus
+  drawing_a_id: string | null
+  drawing_a_no: string | null
+  drawing_a_title: string | null
+  drawing_b_id: string | null
+  drawing_b_no: string | null
+  drawing_b_title: string | null
+  drawing_refs: string[]
+  photos: string[]
+  assigned_to: string | null
+  assigned_to_name: string | null
+  rfi_id: string | null
+  rfi_number: string | null
+  rfi_status: string | null
+  rfi_answered: boolean
+  resolution: string | null
+  resolved_at: string | null
+  resolved_by_name: string | null
+  verified_at: string | null
+  verified_by_name: string | null
+  raised_by: string
+  raised_by_name: string | null
+  created_at: string
+  /** Null unless the clash is open. */
+  open_days: number | null
+}
+
+export interface ClashSummary {
+  open_count: number
+  resolved_count: number
+  verified_count: number
+  open_high: number
+  oldest_open_days: number | null
+  /** Open clashes whose RFI has gone out and not come back. */
+  awaiting_rfi: number
+}
+
+export interface NewClash {
+  project_id: string
+  system_a: string
+  system_b: string
+  discipline_a: DrawingDiscipline
+  discipline_b: DrawingDiscipline
+  location: string
+  description: string
+  severity: ClashSeverity
+  drawing_a_id: string | null
+  drawing_b_id: string | null
+  drawing_refs: string[]
+  photos: string[]
+  assigned_to: string | null
+}
+
+/** Raise and resolve. Supervisors included — they find them on site. */
+export function canWorkClashes(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'supervisor'].includes(role)
+}
+
+/**
+ * Verify a clash as closed out, and raise the RFI to a consultant.
+ *
+ * Same split as snags (027): the person who says it is fixed should not be the
+ * person who says it was checked. The server also refuses self-verification
+ * even for a founder or PM.
+ */
+export function canVerifyClash(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}

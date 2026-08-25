@@ -23,6 +23,7 @@ import {
   setSnagStatus,
   verifySnag,
 } from '@/lib/queries/snags'
+import { PhotoHelper } from '@/components/PhotoHelper'
 import { compressImage, signedSitePhotoUrl, uploadSitePhoto } from '@/lib/storage'
 import {
   canRaiseSnag,
@@ -376,6 +377,19 @@ function SnagCard({
       </div>
 
       {snag.photos.length > 0 && <Photos paths={snag.photos} label="Defect" />}
+
+      {/* D1 — an optional second look at the defect photo. Opt-in only: it
+          never fires on upload. Attached to the FIRST photo, because one
+          suggestion per snag is a decision somebody can act on and five is a
+          list nobody reads. */}
+      {snag.photos.length > 0 && (
+        <PhotoHelper
+          projectId={snag.project_id}
+          photoPath={snag.photos[0]}
+          source="snag"
+          snagId={snag.id}
+        />
+      )}
 
       {(snag.resolution_note || snag.resolution_photos.length > 0) && (
         <div className="mt-3 rounded-lg bg-secondary/50 p-3">

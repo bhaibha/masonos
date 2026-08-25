@@ -3659,3 +3659,168 @@ recording, and an approvals card on project detail.
 **2026-08-21 — migrations 059 and 060 confirmed APPLIED by the founder.** Mason Learn documents
 (upload + text extraction + retrieval seam) and the client approval register are both live.
 APPLY_pending.sql is now empty. Next migration = 061.
+
+---
+
+## Session — D1 AI Photo Helper (migration 061 + `photo-analyse` Edge Function)
+
+An optional second look at a site photo. Somebody taps **Analyse photo**, the image goes to Gemini
+Flash through an Edge Function, and back comes a description plus a list of things worth checking.
+
+### Built
+
+**Migration 061** — `photo_analyses`, two enums, guard + touch triggers, audit trigger,
+`fn_accept_photo_analysis`, `fn_dismiss_photo_analysis`, `fn_reanalyse_photo`,
+`fn_photo_analysis_summary`. Verified on a real PostgreSQL with **the entire 001–060 chain as
+fixtures** (three files abort only on their final `cron.job` verify line — pg_cron is not in the
+sandbox — so everything above them ran). Three clean runs of 061; eleven guards confirmed firing.
+
+**`photo-analyse` Edge Function** — reuses the existing `GEMINI_API_KEY`.
+
+**UI** — `PhotoHelper`, wired into Snags (defect photo), Site log (saved photos) and QA inspection
+comments.
+
+### The central decision: give it nowhere to put the thing it must not say
+
+A general vision model cannot measure a crack, judge cover, or tell shrinkage from settlement. It is
+good at "there is a dark linear feature that looks like cracking" and confidently wrong about what
+that means. So the restraint is structural, not just prompted:
+
+- The table has **no severity column**. The response schema has **no** severity, measurement or
+  verdict field — the model cannot return one because there is nowhere to put it.
+- The column is `concerns`, not `defects`, and every concern must carry **`what_to_check`** — an
+  instruction to a person. That single required field turns the whole output into a question rather
+  than a finding.
+- The prompt forbids measurements, verdicts and causes, and requires hedging.
+- A regex scrub removes any dimension, grade or percentage that survives all of that.
+
+Same shape as 058's method-statement drafter: let the model produce the SHAPE, never the value that
+reaches a decision. There it was cover and curing days; here it is crack widths.
+
+### Other decisions worth keeping
+
+- **The function fetches the image as the CALLER.** The client sends a path, not bytes; the function
+  downloads it with a Supabase client built from the caller's own Authorization header, so
+  `site-photos` RLS decides access. The service-role key would have worked and would have made this
+  an "analyse any photo in the company" endpoint.
+- **The function writes the row itself**, also as the caller. If the browser did the insert, `model`
+  would be a claim rather than a fact and the guard trigger freezing the analysis text would be
+  guarding nothing.
+- **Accepting creates a record in the acting user's name**, with the text editable on the way in and
+  the severity supplied by the person. A defect report that belongs to nobody is one nobody will
+  defend.
+- **Opt-in per photo**, never on upload — inside the free tier, and a thing somebody chose. A unique
+  index on `photo_path` stops a double tap buying a second opinion; two analyses of one picture is a
+  disagreement nobody can resolve.
+- **Dismissals are kept**, and `fn_photo_analysis_summary` reports the accept rate over decided rows.
+  An AI feature nobody can evaluate stays switched on forever by default.
+- **Supervisors are the audience.** They hold the phone in front of the wall, and there is no money
+  anywhere in this feature, so nothing to hide from them. NCRs stay founder/PM, matching 043.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor on another project reads it | zero rows |
+| PATCH setting `status` directly | refused by `pa_guard` |
+| PATCH editing the analysis text | refused — "that is what the model returned" |
+| Second analysis for the same photo | refused by `photo_analysis_path_uk` |
+| Supervisor raising an NCR | refused — founder/PM only |
+| Accept with a blank location | refused |
+| Accept an already-accepted suggestion | refused |
+| Re-analyse an accepted photo | refused — the snag would lose its origin |
+| Re-analyse a dismissed photo | allowed |
+| Dismissed row after dismissal | kept, with the note |
+| Audit trail | 2 INSERT, 2 UPDATE, 1 DELETE — the cleared analysis survives in `old_data` |
+
+### Run migration 061 before testing.
+
+Then `supabase functions deploy photo-analyse`. **No new API key** — `GEMINI_API_KEY` is already set
+on this project for `learn-draft` and Supabase secrets are project-wide.
+
+---
+
+## Session — D2 Clash Detection (migration 062)
+
+A coordination clash register: two systems in the same place, found by a person, written down so it
+gets chased before it gets built over.
+
+### Built
+
+**Migration 062** — `clashes`, two enums, sequence, `v_clashes`, `fn_set_clash_status`,
+`fn_raise_rfi_from_clash`, `fn_project_clash_summary`, `fn_delete_clash`, guard + touch triggers,
+audit trigger. Verified on a real PostgreSQL with the **actual 001–060 chain as fixtures**; three
+clean runs, twelve guards confirmed firing.
+
+**Independent of 061.** It touches projects, profiles, drawings and rfis only — all from 001–029 —
+so it can be applied in either order.
+
+**UI** — `/tasks/clashes` (new Clashes tab), raise form with two systems + disciplines + grid ref +
+drawing pickers + photos, status actions, ask-the-consultant flow, and `DrawingOverlay`.
+
+### The central decision: name it after what it is
+
+Navisworks resolves geometry — it knows two solids intersect, in what volume, at what coordinate.
+This has no geometry, no models and no coordinates. It is a register of what people found.
+
+Everything follows from that:
+
+- No tolerance field, no auto-detection, no "clash count" presented as absolute.
+- The register footer says in words: **an empty list means nobody has looked**, not that there are no
+  clashes.
+- The overlay carries a **permanent banner**, not a tooltip: it cannot prove a clearance and cannot
+  prove the absence of a clash.
+- The overlay ships **manual nudge and scale sliders** precisely because the two sheets are not
+  registered to a common origin. Auto-aligning them would imply a dimensional relationship that does
+  not exist; making the user line them up by eye means they know what the result is worth.
+
+A tool that looks like clash detection and is not is worse than no tool, because somebody will trust
+it. Same family as calling the MIS figure "net position" rather than cash (056).
+
+### Other decisions worth keeping
+
+- **Disciplines reuse `drawing_discipline` from 029.** Two enums meaning the same six things drift
+  the moment somebody adds to one. Severity got its own type, because a clash severity and a snag
+  severity describe different things and should be able to diverge independently.
+- **The RFI is created in the same transaction as the link**, and `rfi_id` is refused from the
+  client by the guard trigger. Two steps would eventually produce a clash marked "sent to the
+  consultant" with no RFI behind it.
+- **The RFI question gets the clash number, both systems, the location and every drawing number
+  appended server-side.** The consultant's first reply is otherwise "which drawings?", and that
+  round trip costs a week.
+- **Verification is founder/PM, and the resolver cannot verify their own work** — enforced in the
+  RPC, not just the UI. Same split as snags (027).
+- **A supervisor can delete only a clash they raised themselves**, and only while open with no RFI
+  attached.
+- **`system_a <> system_b` is a CHECK constraint.** A clash between a thing and itself is a typo,
+  and catching it at the keyboard beats discovering it in a coordination meeting three weeks later.
+- **`awaiting_rfi` on the summary** counts open clashes whose question has gone out and not come
+  back. Those are the ones nobody inside the firm can move — they need chasing, not assigning.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor raises a clash | allowed |
+| Clash between a thing and itself | refused by `clash_two_systems` |
+| PATCH setting `status` directly | refused by `clash_guard` |
+| Resolve with a blank account of the fix | refused |
+| Supervisor verifies | refused — founder/PM only |
+| Supervisor raises an RFI | refused — founder/PM only |
+| PM raises the RFI from the clash | RFI written, linked, drawing refs appended |
+| A second RFI on the same clash | refused, names the existing one |
+| Delete a clash that has an RFI | refused |
+| The resolver verifies their own work | refused, names the clash |
+| A different PM verifies | allowed, resolution text kept |
+| Supervisor deletes somebody else's clash | refused |
+| Supervisor on another project | zero rows |
+| Audit trail | 2 INSERT, 3 UPDATE, DELETE + DELETE_HARD |
+
+### Run migration 062 before testing.
+
+**2026-08-25 — migrations 061 and 062 confirmed APPLIED by the founder.** The AI photo helper and
+the clash register are both live. APPLY_pending.sql is empty. Next migration = 063.
+
+**Still outstanding for D1 to actually work:** `supabase functions deploy photo-analyse`, then turn
+OFF Verify JWT on that function in the dashboard. No new API key — `GEMINI_API_KEY` is already set
+on the project and Supabase secrets are project-wide.

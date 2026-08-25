@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { PhotoHelper } from '@/components/PhotoHelper'
 import { ListSkeleton } from '@/components/Skeleton'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { Button } from '@/components/ui/button'
@@ -276,6 +277,18 @@ export default function SiteLog() {
         >
           Add photo
         </Button>
+
+        {/* D1 — optional second look. Only on a SAVED photo: a pending one has
+            no storage path yet, so there is nothing for the helper to fetch.
+            Save the log first. */}
+        {savedPhotos.length > 0 && projectId && (
+          <PhotoHelper
+            projectId={projectId}
+            photoPath={savedPhotos[0]}
+            source="site_log"
+            siteLogId={existingId}
+          />
+        )}
 
         {(savedPhotos.length > 0 || pending.length > 0) && (
           <div className="mt-3 grid grid-cols-3 gap-2">

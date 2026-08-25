@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { FieldRow, Select, Textarea } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
+import { PhotoHelper } from '@/components/PhotoHelper'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -429,6 +430,17 @@ function CommentCard({
       <p className="mt-2 text-sm break-words">{c.comment}</p>
 
       {c.photos.length > 0 && <PhotoStrip paths={c.photos} />}
+
+      {/* D1 — optional second look at the observation photo. Opt-in only. */}
+      {c.photos.length > 0 && (
+        <PhotoHelper
+          projectId={c.project_id}
+          photoPath={c.photos[0]}
+          source="inspection"
+          commentId={c.id}
+          onRaised={() => void onChanged()}
+        />
+      )}
 
       {mayDelete && (
         <div className="mt-3 flex justify-end border-t border-border pt-2">

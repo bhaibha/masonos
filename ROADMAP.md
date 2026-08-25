@@ -609,8 +609,11 @@ Order within group:
       approvals with evidence; no portal) — migration 060. Run it before testing.**
 
 ## GROUP D — AI / hard / needs data (build LAST; basic versions only) — reconsider each
-- [ ] D1. M39 AI Photo Defect — v1 = photo upload + Claude-vision tagging/notes, NOT trained defect model
-- [ ] D2. M38 Drawing Intelligence & Clash Detection — v1 = manual clash checklist + drawing overlay notes
+- [x] **D1. M39 AI Photo Helper — v1 = opt-in Gemini-vision description + things-to-check on a
+      site photo, NOT a trained defect model. Migration 061 + the `photo-analyse` Edge
+      Function. Run 061 before testing.**
+- [x] **D2. M38 Clash Detection — manual coordination register with an opacity-slider drawing
+      overlay, ties into RFIs. NOT automated BIM geometry. Migration 062. Run it before testing.**
 - [ ] D3. M47 Predictive Project Intelligence — v1 = simple trend flags from existing data (cost/schedule slope)
         NOTE: true ML versions need historical project data you don't have yet + specialist work. Defer real AI.
 

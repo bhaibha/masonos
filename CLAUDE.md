@@ -232,7 +232,25 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified on a real PostgreSQL with the ACTUAL 001-016 chain as fixtures, not
   stubs; three clean runs, all eight guards confirmed firing.
   So: **001-060 ALL APPLIED.**
-  Next migration = 061.
+  **061 APPLIED** (confirmed 2026-08-25) — D1 AI Photo Helper (`photo_analyses`,
+  `photo_source`/`analysis_state`, `fn_pa_guard` + `fn_pa_touch` triggers,
+  `fn_accept_photo_analysis`, `fn_dismiss_photo_analysis`,
+  `fn_reanalyse_photo`, `fn_photo_analysis_summary`, audit trigger). Ships with
+  the `photo-analyse` Edge Function, which REUSES the existing
+  `GEMINI_API_KEY` — secrets are project-wide — and needs only
+  `supabase functions deploy photo-analyse`. Verified on a real PostgreSQL with
+  the whole 001-060 chain as fixtures; three clean runs, eleven guards
+  confirmed firing.
+  **062 APPLIED** (confirmed 2026-08-25) — D2 Clash register (`clashes`,
+  `clash_severity`/`clash_status`, `clash_no_seq`, `v_clashes`,
+  `fn_set_clash_status`, `fn_raise_rfi_from_clash`,
+  `fn_project_clash_summary`, `fn_delete_clash`, `fn_clash_guard` +
+  `fn_clash_touch` triggers, audit trigger). Independent of 061 — it touches
+  projects/profiles/drawings/rfis only, all from 001-029. Verified on a real
+  PostgreSQL with the actual 001-060 chain as fixtures; three clean runs,
+  twelve guards confirmed firing.
+  So: **001-062 ALL APPLIED.**
+  Next migration = 063.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
@@ -245,6 +263,53 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   true and both stopped somebody. Any empty state saying "there is nothing here yet" must carry the
   action for the roles that can act, on the screen where they landed — and a button that will
   certainly be refused should be disabled with the reason, not left to fail.
+- **Name the tool after what it is, not what it resembles (062).** This is a hand-kept clash
+  REGISTER, not BIM clash detection: no geometry, no models, no coordinates. So there is no
+  tolerance field, no auto-detection, and the register footer says in words that an empty list means
+  nobody has looked rather than that there are no clashes. The drawing overlay carries a permanent
+  banner — not a tooltip — saying it cannot prove a clearance. A tool that looks like Navisworks and
+  is not is worse than no tool, because somebody will trust it. Same family as naming the MIS card
+  "net position" rather than cash (056).
+- **Manual controls are the honest signal (062).** The overlay ships nudge and scale sliders
+  BECAUSE the two sheets are not registered to a common origin. Auto-aligning them would imply a
+  dimensional relationship that does not exist; making the user line them up by eye means they know
+  exactly how much the result is worth.
+- **Reuse the enum that already means this (062).** Clash disciplines are `drawing_discipline` from
+  029, not a new `clash_discipline`. Two enums meaning the same six things drift the moment somebody
+  adds to one — the same judgement as 043's refusal to add a fifth role for one module. Severity DID
+  get its own type, because a clash severity and a snag severity describe different things and
+  should be able to diverge without a data migration on the other.
+- **Create the linked record in the same transaction as the link (062).** `fn_raise_rfi_from_clash`
+  writes the RFI and stamps `rfi_id` together, and the guard trigger refuses `rfi_id` from the
+  client. Two steps would eventually produce a clash marked "sent to the consultant" with no RFI
+  behind it — the same failure mode `fn_record_inspection` was written to prevent in 043.
+- **Append the context the other party will ask for (062).** The RFI question gets the clash number,
+  both systems, the location and every drawing number appended server-side. The consultant's first
+  reply is otherwise "which drawings?", and that round trip costs a week on a live job.
+- **Give the model no field for the thing it must not say (061).** A vision model cannot measure a
+  crack from a photograph, so `photo_analyses` has NO severity column, the response schema has no
+  severity/measurement/verdict field, the prompt forbids them, and a regex scrub strips any
+  dimension that survives. The column is `concerns`, not `defects`, and every concern must carry
+  `what_to_check` — which forces the output into the grammar of a question for a person rather than
+  a finding. Structure beats instruction: a field that does not exist cannot be filled in.
+- **A suggestion must become somebody's assertion before it is a record (061).** Accepting writes a
+  snag or NCR whose `raised_by` is the ACTING USER, with the text editable on the way in. A defect
+  report that belongs to nobody is one nobody will defend, and the model does not get to be the
+  author of a construction record.
+- **Fetch the input as the caller, never with the service key (061).** `photo-analyse` downloads the
+  image using a Supabase client built from the caller's own Authorization header, so the bucket
+  policy decides whether that person may see that photo. The service-role key would have worked and
+  would have turned the endpoint into "analyse any photo in the company". The same client writes the
+  row, which is what makes the `model` column a fact rather than a claim.
+- **Opt-in per item keeps an AI feature honest AND cheap (061).** Nothing fires on upload. Somebody
+  taps the button, which keeps usage inside the free tier and makes the analysis a thing a person
+  chose rather than a thing that happened to them. A unique index on `photo_path` stops a double tap
+  buying a second opinion nobody asked for — two analyses of one picture is a disagreement no one
+  can resolve.
+- **Keep the dismissals (061).** A dismissed suggestion is not deleted, and
+  `fn_photo_analysis_summary` reports the accept rate over decided rows. An AI feature nobody can
+  evaluate is one that quietly stays switched on forever; this is the number that says whether the
+  API calls buy anything.
 - **Do not model people who will never log in (060).** The client approval register stores
   `approved_by_name` as plain text. Giving the client a row in `profiles`, or a `client_users`
   table, would imply an account nobody will ever issue. Model the RECORD of what an outsider said,

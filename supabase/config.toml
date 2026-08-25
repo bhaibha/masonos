@@ -30,6 +30,9 @@ verify_jwt = false
 [functions.admin-create-user]
 verify_jwt = false
 
+[functions.photo-analyse]
+verify_jwt = false
+
 # daily-task-push is called by pg_cron via pg_net, server-to-server. There is no
 # browser and no preflight, and it authenticates on its own shared secret, so
 # the gateway check stays on.

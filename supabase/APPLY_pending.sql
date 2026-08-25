@@ -1,2 +1,2 @@
--- Nothing pending. 001–060 are all applied (confirmed 2026-08-21).
+-- Nothing pending. 001–062 are all applied (confirmed 2026-08-25).
 -- Append the next migration here as soon as it is written, in order.
