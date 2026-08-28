@@ -3824,3 +3824,107 @@ the clash register are both live. APPLY_pending.sql is empty. Next migration = 0
 **Still outstanding for D1 to actually work:** `supabase functions deploy photo-analyse`, then turn
 OFF Verify JWT on that function in the dashboard. No new API key — `GEMINI_API_KEY` is already set
 on the project and Supabase secrets are project-wide.
+
+---
+
+## Session — D3 Predictive Intelligence (migration 063)
+
+A health-signals panel: simple arithmetic over data the app already holds, turned into sentences.
+No model, no training, nothing predicted.
+
+### Built
+
+**Migration 063** — `project_health_snapshots` (nightly, pg_cron at 22:50 IST), `health_flag_acks`,
+two enums, `fn_capture_health_snapshot`, `fn_project_health_flags`, `fn_deadline_signals`,
+`fn_health_trend`, `fn_ack_health_flag` / `fn_unack_health_flag`, audit trigger on the acks.
+Verified on a real PostgreSQL with the **actual 001–062 chain as fixtures**; three clean runs, ten
+guards firing, arithmetic hand-checked against seeded data.
+
+**UI** — `/money/signals` (new Signals tab beside MIS), plus a signals card on project detail that
+renders only when something is flagging.
+
+### The history problem, and what I did about it
+
+Three of the five requested signals have real history: task rollover (`tasks.rolled_from` +
+`planned_date`), defect accumulation (snag/NCR created and resolved dates), and deadlines (three
+alert functions already exist).
+
+**Two do not.** `schedule_activities.pct_complete` holds one current value and EVM derives from it,
+so "spend rising faster than progress" and "CPI trending below 1" **cannot be computed backwards** —
+there is no historical progress figure anywhere in this database.
+
+So those two ship as **point-in-time**, with `basis` printed on the card, and
+`project_health_snapshots` starts recording nightly so the same flags can be trended from tomorrow.
+No back-history was invented. Inventing one would have made every early "trend" a straight line
+through a single point.
+
+### Decisions worth keeping
+
+- **Every flag carries `basis` and `sample_n`, and the card prints both.** A divergence measured
+  once today and a slope over six readings are different claims. Trend arms refuse below three
+  observations; the rollover flag additionally requires ten tasks in the window, because one
+  rollover out of two is 50% and means nothing.
+- **Every card shows the raw number** in the serif face next to the sentence, so a reader who thinks
+  10 points is the wrong gap argues with the threshold rather than with the app.
+- **Progress is weighted by activity budget.** In testing that gave 30% where a plain average of
+  percentages said 25% — a plain average treats site clearance and superstructure as equals.
+- **The three existing alert functions are composed, not rewritten.** `fn_compliance_alert` (028),
+  `fn_bg_alert` (033) and `fn_insurance_alert` (034) already carry their own role gates; restating
+  the thresholds here would put the same rule in two places.
+- **A snooze expires.** 90 days maximum, no permanent dismissal. A signal that can be silenced
+  forever will be. The ack is the only human act in an otherwise read-only module, which is why it
+  is the only thing here with an audit trigger — auditing a nightly bookkeeping sweep would be
+  auditing a log.
+- **The empty state does not say "healthy."** It says these particular checks found nothing on the
+  data entered. And a supervisor gets **zero rows, not zeros** — a row of zeros on a health panel
+  reads as an all-clear (the 056 lesson).
+- **The sweep reads base tables, not the owner-run views**, because pg_cron has no `auth.uid()` and
+  every role-gated view would return nothing (the 038 lesson).
+
+### Observed in testing, worth knowing
+
+CPI came back **null** on the seeded project because no expense carried an `activity_id`. That is
+the untagged-expense blind spot documented in `COST_RECONCILIATION_CHECKLIST.md` §4.2, showing up
+honestly as "no reading" rather than as a fabricated number — and it means the CPI flag will stay
+silent on any project whose spend is not tagged to activities.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor reads flags | zero rows |
+| Supervisor reads deadline signals | zero rows |
+| Supervisor reads the snapshot table | zero rows (RLS) |
+| Accounts | `cost` category only — no schedule or quality flags |
+| Founder | all four flags, correct basis and sample sizes |
+| Snooze for 400 days | refused — 1 to 90 only |
+| Supervisor snoozes a flag | refused — founder/PM |
+| Snoozed flag | disappears from the list |
+| Bring it back | reappears |
+| Audit on the ack | INSERT + DELETE recorded |
+
+### Run migration 063 before testing.
+
+It schedules a nightly pg_cron job at 22:50 IST. There will be **no trends until a few nights have
+passed** — that is correct, not a fault. "Capture today's reading" on the panel takes one manually.
+
+**2026-08-28 — migration 063 confirmed APPLIED.** Health signals live. APPLY_pending.sql is empty.
+Next migration = 064.
+
+**Groups A, B, C and D are complete — all 39 roadmap items built.** What remains is not new modules:
+- Run `SUPERVISOR_RLS_CHECKLIST.md` (139 checks; §12 tests RLS directly rather than the UI).
+- Run `COST_RECONCILIATION_CHECKLIST.md` (75 checks; §9 lists the nine figures that are not supposed
+  to reconcile, and flags EVM BAC vs project budget as the one real unknown).
+- Deploy `photo-analyse` and turn off its Verify JWT, or D1 stays unreachable.
+- Long-standing: M21 petty cash has backend and no UI; `admin-create-user` never run end to end;
+  `VITE_VAPID_PUBLIC_KEY` not set in the Cloudflare Worker; GST treatment unconfirmed with the CA.
+- Signals need a few nights of snapshots before any trend arm fires. That is expected.
+
+**2026-08-28 — `photo-analyse` deployed.** D1 is reachable; the AI photo helper works end to end.
+Supervisor access spot-checked and behaving.
+
+**Not yet recorded as passed:** the full `SUPERVISOR_RLS_CHECKLIST.md`, specifically §12 — the
+twenty console commands that query the database directly with a supervisor's own token. Every other
+section tests the UI and RLS together, so a screen that looks right has only passed the courtesy
+check. §12 is the one that shows whether the data is protected or merely hidden. Until it is run,
+treat the supervisor audit as partial.

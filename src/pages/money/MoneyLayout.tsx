@@ -30,6 +30,9 @@ export default function MoneyLayout() {
     // The founder's command view sits first after the ledger: it is the screen
     // you open to find out what is wrong, not one you navigate to last.
     { to: '/money/mis', label: 'MIS' },
+    // D3 signals next to the MIS for the same reason: it answers "what should
+    // worry me", which is the other half of "how are we doing".
+    { to: '/money/signals', label: 'Signals' },
     { to: '/money/pnl', label: 'P&L' },
     // Founder/accounts only — company_expenses' RLS enforces it; hiding the
     // tab keeps a PM off a screen that would only tell them they can't see it.

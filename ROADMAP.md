@@ -614,7 +614,9 @@ Order within group:
       Function. Run 061 before testing.**
 - [x] **D2. M38 Clash Detection — manual coordination register with an opacity-slider drawing
       overlay, ties into RFIs. NOT automated BIM geometry. Migration 062. Run it before testing.**
-- [ ] D3. M47 Predictive Project Intelligence — v1 = simple trend flags from existing data (cost/schedule slope)
+- [x] **D3. M47 Predictive Intelligence — trend flags from existing data (burn vs progress,
+      CPI/SPI, rollover rate, defect accumulation, deadlines). NOT ML. Migration 063.
+      Run it before testing.**
         NOTE: true ML versions need historical project data you don't have yet + specialist work. Defer real AI.
 
 ---

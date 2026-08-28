@@ -3670,3 +3670,86 @@ export function canWorkClashes(role: UserRole | null): boolean {
 export function canVerifyClash(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm'].includes(role)
 }
+
+/* ================================================================
+   D3 — HEALTH SIGNALS (migration 063)
+   ================================================================ */
+
+export type SignalCategory = 'cost' | 'schedule' | 'quality' | 'deadline'
+export type SignalLevel = 'watch' | 'concern'
+/** How the number was arrived at. Printed on screen — the two are different claims. */
+export type SignalBasis = 'point_in_time' | 'trend'
+
+export const SIGNAL_CATEGORY_LABEL: Record<SignalCategory, string> = {
+  cost: 'Cost',
+  schedule: 'Programme',
+  quality: 'Quality',
+  deadline: 'Deadlines',
+}
+
+export const SIGNAL_LEVEL_LABEL: Record<SignalLevel, string> = {
+  watch: 'Worth watching',
+  concern: 'Needs a look',
+}
+
+export const SIGNAL_BASIS_LABEL: Record<SignalBasis, string> = {
+  point_in_time: 'Measured once, today',
+  trend: 'Compared with earlier readings',
+}
+
+/**
+ * The line that frames the whole panel. A constant so it cannot drift between
+ * the signals screen and the project card.
+ *
+ * These are arithmetic over a small dataset, not a model and not a forecast.
+ * With four active projects there is no sample to forecast from, and a figure
+ * presented as a prediction gets quoted as one.
+ */
+export const SIGNAL_DISCLAIMER =
+  'Early signals, not forecasts. Simple arithmetic over what the app already ' +
+  'holds — indicative only, and worth checking before acting on.'
+
+export interface HealthFlag {
+  project_id: string
+  project_name: string
+  code: string
+  category: SignalCategory
+  level: SignalLevel
+  headline: string
+  detail: string
+  metric_value: number | null
+  metric_label: string
+  basis: SignalBasis
+  /** Observations behind a trend; 1 for a point-in-time reading. */
+  sample_n: number
+  snoozed_until: string | null
+}
+
+export interface DeadlineSignal {
+  code: string
+  level: SignalLevel
+  headline: string
+  detail: string
+  metric_value: number | null
+  metric_label: string
+}
+
+export interface HealthTrendPoint {
+  snap_date: string
+  pct_spend: number | null
+  progress_pct: number | null
+  cpi: number | null
+  spi: number | null
+  open_snags: number
+  open_ncrs: number
+}
+
+/** Founder and PM see every category; accounts sees cost and deadline only. */
+export function canSeeSignals(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm', 'accounts'].includes(role)
+}
+
+/** Setting a signal aside is a judgement call — founder/PM. */
+export function canAckSignals(role: UserRole | null): boolean {
+  return role !== null && ['founder', 'pm'].includes(role)
+}

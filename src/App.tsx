@@ -19,6 +19,7 @@ import Insurance from '@/pages/money/Insurance'
 import Invoices from '@/pages/money/Invoices'
 import Labour from '@/pages/money/Labour'
 import Ledger from '@/pages/money/Ledger'
+import Signals from '@/pages/money/Signals'
 import Mis from '@/pages/money/Mis'
 import Overheads from '@/pages/money/Overheads'
 import Pnl from '@/pages/money/Pnl'
@@ -153,6 +154,11 @@ export default function App() {
                 <Route index element={<Ledger />} />
                 <Route path="new" element={<ExpenseForm />} />
                 <Route path="budget" element={<BudgetVsActual />} />
+                {/* D3 health signals. The parent MONEY_ROLES guard is the
+                    outer layer; fn_project_health_flags decides which
+                    categories each role is computed — accounts gets cost and
+                    deadline only, and a supervisor gets zero rows. */}
+                <Route path="signals" element={<Signals />} />
                 {/* vendors_read/write is founder/pm/accounts — identical to
                     MONEY_ROLES, so the parent guard already covers it. */}
                 <Route path="vendors" element={<Vendors />} />

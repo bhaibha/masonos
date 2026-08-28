@@ -7,6 +7,7 @@ import {
   FileText,
   Package,
   Receipt,
+  Activity,
   ShieldCheck,
   Stamp,
   Wallet,
@@ -32,6 +33,7 @@ import { fetchSafetySummary } from '@/lib/queries/safety'
 import { fetchQaSummary } from '@/lib/queries/qa'
 import { fetchSnagSummary } from '@/lib/queries/snags'
 import { fetchApprovalSummary } from '@/lib/queries/approvals'
+import { fetchHealthFlags } from '@/lib/queries/signals'
 import { fetchProjectContract } from '@/lib/queries/variations'
 import {
   fetchProject,
@@ -57,6 +59,9 @@ import {
   type QaSummary,
   type SnagSummary,
   type ApprovalSummary,
+  type HealthFlag,
+  canSeeSignals,
+  SIGNAL_LEVEL_LABEL,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -78,6 +83,7 @@ export default function ProjectDetail() {
   const [snags, setSnags] = useState<SnagSummary | null>(null)
   const [qa, setQa] = useState<QaSummary | null>(null)
   const [approvals, setApprovals] = useState<ApprovalSummary | null>(null)
+  const [signals, setSignals] = useState<HealthFlag[] | null>(null)
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
 
   // Scope every tab to this project the moment the screen opens.
@@ -142,6 +148,17 @@ export default function ProjectDetail() {
     // Same shape again: one server-side function, so the card cannot disagree
     // with the register it links to.
     fetchApprovalSummary(id).then(setApprovals).catch(() => setApprovals(null))
+    // D3 signals for this project only. canSeeSignals and canSeeMoney are the
+    // same three roles, so `showMoney` is reused here rather than reading
+    // `role` again — which would add a dependency to an effect that
+    // deliberately runs on `id` alone. Supervisors get zero rows from the
+    // server regardless; the card is hidden for them because an always-empty
+    // card is clutter, not because it would leak.
+    if (showMoney) {
+      fetchHealthFlags(id).then(setSignals).catch(() => setSignals([]))
+    } else {
+      setSignals([])
+    }
 
     fetchSnagSummary(id)
       .then((s) => {
@@ -232,6 +249,15 @@ export default function ProjectDetail() {
         <RevealItem className="h-full">
           <QaCard qa={qa} onOpen={() => navigate('/tasks/qa')} />
         </RevealItem>
+
+        {canSeeSignals(role) && (signals === null || signals.length > 0) && (
+          <RevealItem className="h-full sm:col-span-2">
+            <SignalsCard
+              flags={signals}
+              onOpen={() => navigate('/money/signals')}
+            />
+          </RevealItem>
+        )}
 
         <RevealItem className="h-full">
           <ApprovalsCard
@@ -814,6 +840,64 @@ function QaCard({
  * No amounts here, ever — the table carries none, so this card is safe for a
  * supervisor without a role check.
  */
+/**
+ * D3 health signals for this project.
+ *
+ * Rendered only when something is flagging — an "all clear" card would be
+ * claiming something these checks cannot support. The panel itself says the
+ * same thing in its empty state.
+ */
+function SignalsCard({
+  flags,
+  onOpen,
+}: {
+  flags: HealthFlag[] | null
+  onOpen: () => void
+}) {
+  return (
+    <SectionCard
+      icon={Activity}
+      title="Signals"
+      action="View all"
+      onAction={onOpen}
+    >
+      {flags === null ? (
+        <Skeleton className="h-8 w-40" />
+      ) : (
+        <div className="space-y-2">
+          {flags.slice(0, 3).map((f) => (
+            <div
+              key={f.code}
+              className="flex items-start justify-between gap-3 rounded-lg bg-secondary/50 px-3 py-2"
+            >
+              <p className="text-xs leading-relaxed">{f.headline}</p>
+              <span
+                className={cn(
+                  'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  f.level === 'concern'
+                    ? 'bg-destructive/10 text-destructive'
+                    : 'bg-[color-mix(in_oklab,var(--warning)_16%,transparent)] text-[var(--warning)]',
+                )}
+              >
+                {SIGNAL_LEVEL_LABEL[f.level]}
+              </span>
+            </div>
+          ))}
+          {flags.length > 3 && (
+            <p className="text-[11px] text-muted-foreground">
+              and {flags.length - 3} more.
+            </p>
+          )}
+          {/* The framing travels with the signals, not just on the panel. */}
+          <p className="text-[10px] text-muted-foreground">
+            Early signals, not forecasts — indicative only.
+          </p>
+        </div>
+      )}
+    </SectionCard>
+  )
+}
+
 function ApprovalsCard({
   a,
   onOpen,

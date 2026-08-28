@@ -250,7 +250,15 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   PostgreSQL with the actual 001-060 chain as fixtures; three clean runs,
   twelve guards confirmed firing.
   So: **001-062 ALL APPLIED.**
-  Next migration = 063.
+  **063 APPLIED** (confirmed 2026-08-28) — D3 Health signals
+  (`project_health_snapshots` + nightly pg_cron job, `health_flag_acks`,
+  `signal_category`/`signal_level`, `fn_capture_health_snapshot`,
+  `fn_project_health_flags`, `fn_deadline_signals`, `fn_health_trend`,
+  `fn_ack_health_flag`, `fn_unack_health_flag`, audit trigger on the acks).
+  Verified on a real PostgreSQL with the actual 001-062 chain as fixtures;
+  three clean runs, ten guards confirmed firing, arithmetic hand-checked.
+  So: **001-063 ALL APPLIED. Groups A, B, C and D are complete.**
+  Next migration = 064.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
@@ -263,6 +271,35 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   true and both stopped somebody. Any empty state saying "there is nothing here yet" must carry the
   action for the roles that can act, on the screen where they landed — and a button that will
   certainly be refused should be disabled with the reason, not left to fail.
+- **If the history does not exist, start recording — do not backfill a fiction (063).**
+  `schedule_activities.pct_complete` holds one current value, so "spend rising faster than progress"
+  and "CPI trending down" cannot be computed backwards; there is no historical progress figure in
+  this database. So those flags ship as POINT-IN-TIME with `basis` printed on the card, and
+  `project_health_snapshots` starts capturing nightly so the same flags can be trended from tomorrow.
+  Inventing a back-history from today's numbers would have made every early trend a straight line
+  through one point. Same shape as 059's extract-at-upload: derive it at write time, because
+  deriving it later means it never existed.
+- **A trend needs a sample size, and the card must print it (063).** Every flag carries `basis`
+  ('point_in_time' or 'trend') and `sample_n`, and the trend arms refuse to fire below three
+  observations. A slope from two points is a line through two points. The rollover flag also
+  requires ten tasks in the window — one rollover out of two is 50% and means nothing.
+- **Show the number the threshold was applied to (063).** Every signal prints its raw metric in the
+  serif face next to the sentence, so a reader who thinks 10 points is the wrong gap argues with the
+  threshold rather than with the app. A warning whose basis is invisible gets ignored on the second
+  occurrence.
+- **Weight progress by budget, never average the percentages (063).** A plain average treats site
+  clearance and superstructure as equals and calls a job half done when the expensive half has not
+  started. The snapshot's `progress_pct` is Σ(pct × budget) / Σ(budget) — in testing that was 30%
+  where a plain average said 25%.
+- **A snooze must expire (063).** `fn_ack_health_flag` refuses anything over 90 days and there is no
+  permanent dismissal. A signal that can be silenced forever will be, and the condition it describes
+  does not go away because somebody clicked. The ack is also the ONE human act in a read-only
+  module, which is why it is the only thing here with an audit trigger — auditing a nightly
+  bookkeeping sweep would be auditing a log.
+- **An empty health panel must not say "healthy" (063).** The empty state says these particular
+  checks found nothing on the data entered, not that the job is fine. And a supervisor gets ZERO
+  ROWS rather than zeros, for the same reason as `fn_mis_company` (056): a row of zeros on a health
+  screen reads as an all-clear.
 - **Name the tool after what it is, not what it resembles (062).** This is a hand-kept clash
   REGISTER, not BIM clash detection: no geometry, no models, no coordinates. So there is no
   tolerance field, no auto-detection, and the register footer says in words that an empty list means
