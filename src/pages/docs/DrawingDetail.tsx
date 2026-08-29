@@ -216,7 +216,7 @@ export default function DrawingDetail() {
       )}
 
       {revisions && revisions.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {revisions.map((r) => (
             <RevealItem key={r.id}>
               <RevisionCard

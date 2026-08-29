@@ -205,7 +205,7 @@ export default function ComparisonDetail({
       )}
 
       {view === 'lines' ? (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {grid.items.map((it) => (
             <RevealItem key={it.id}>
               <ItemCard

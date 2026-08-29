@@ -133,7 +133,7 @@ export default function Comparisons() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((c) => (
             <RevealItem key={c.comparison_id}>
               <ComparisonCard

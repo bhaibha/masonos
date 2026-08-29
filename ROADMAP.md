@@ -649,3 +649,22 @@ token (28px → 44px on 15 buttons). `tsc -b --force` clean.
 3. Design system + toasts + skeletons + empty states.
 4. Supervisor RLS test if money is shown.
 5. Commit git after each module: `git commit -m "MXX: <module> done"`.
+
+## Desktop layout (its own workstream, not a module)
+
+The app was specified mobile-first — primary device a phone on site — and that is still right for
+supervisors. The founder works on a laptop, which was never in scope. Fixing it is ADDITIVE: the
+phone layout below `lg` does not move.
+
+- [x] **DL1. One page-width rule.** `.page-w` / `.page-w-wide` / `.page-w-form` in `index.css`
+      replace `max-w-lg` copy-pasted across 14 files. Below `lg` identical to what shipped.
+- [x] **DL2. Left rail at `lg`+**, bottom tab bar below it. Both read the same TABS array and role
+      filter, so a destination cannot appear in one and not the other.
+- [ ] DL3. Re-flow the founder's core screens — Dashboard project cards 3–4 across, stat rows 4-up.
+      (112 `grid-cols-2` exist; change per screen, never in bulk — two-up is correct in forms.)
+- [ ] DL4. Real tables on desktop for the ledgers (Ledger, MIS, registers). Card lists are a phone
+      pattern; scanning 40 expenses with a mouse wants sortable columns.
+- [ ] DL5. Tab strips — 15 on Tasks, 18 on Money — wrap or group at `lg` instead of scrolling
+      horizontally.
+- [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
+      thumb-sized targets.

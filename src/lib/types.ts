@@ -3753,3 +3753,70 @@ export function canSeeSignals(role: UserRole | null): boolean {
 export function canAckSignals(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm'].includes(role)
 }
+
+/* ================================================================
+   IN-APP ASSISTANT (migration 064)
+   ================================================================ */
+
+export type AssistantActionKind =
+  | 'task'
+  | 'snag'
+  | 'site_log_note'
+  | 'rfi'
+  | 'document_draft'
+
+export type AssistantActionState =
+  | 'proposed'
+  | 'confirmed'
+  | 'cancelled'
+  | 'failed'
+
+export const ACTION_KIND_LABEL: Record<AssistantActionKind, string> = {
+  task: 'Create a task',
+  snag: 'Raise a snag',
+  site_log_note: "Add a note to today's site log",
+  rfi: 'Raise an RFI',
+  document_draft: 'File a note in the vault',
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  /** Which tools ran, so "why did it say that" stays answerable. */
+  toolCalls: { name: string; args: Record<string, unknown> }[]
+  /** Confirmation cards attached to this turn. */
+  proposals: AssistantProposal[]
+  streaming?: boolean
+  error?: string
+}
+
+export interface AssistantProposal {
+  action_id: string
+  kind: AssistantActionKind
+  project: string
+  values: Record<string, unknown>
+  state: AssistantActionState
+  resultId?: string
+}
+
+/**
+ * Everyone can use the assistant. What it can SEE and DO differs by role, and
+ * that difference is enforced in the database and in the tool whitelist — not
+ * by hiding the panel.
+ */
+export function canUseAssistant(role: UserRole | null): boolean {
+  return role !== null
+}
+
+/**
+ * Shown at the top of the panel and next to the first answer.
+ *
+ * The assistant reads live data through the user's own permissions, so its
+ * figures are real — but it is a language model and can still misread a
+ * question or summarise badly. Saying so once, plainly, is the honest framing.
+ */
+export const ASSISTANT_DISCLAIMER =
+  'Reads live data through your own permissions — it can only see what your ' +
+  'role allows. It can draft records for you to confirm, but never creates, ' +
+  'changes or deletes anything on its own, and never touches money.'

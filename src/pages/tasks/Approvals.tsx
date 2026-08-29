@@ -109,14 +109,14 @@ export default function Approvals() {
 
   if (!projectId) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-8">
+      <div className="page-w px-4 py-8">
         <OtherProjectsHint />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+    <div className="page-w space-y-4 px-4 py-4 pb-6">
       {mayLog && !logging && (
         <Button
           className="h-12 w-full gap-2 text-base"
@@ -176,7 +176,7 @@ export default function Approvals() {
       )}
 
       {list !== null && list.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {list.map((a) => (
             <RevealItem key={a.id}>
               <ApprovalCard row={a} mayLog={mayLog} onChanged={reload} />

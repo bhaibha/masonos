@@ -183,7 +183,7 @@ function RetentionTab({
         </p>
       </div>
 
-      <Stagger className="space-y-3">
+      <Stagger className="card-grid">
         {ledger.map((r) => {
           const mine = tranches.filter(
             (t) =>
@@ -568,7 +568,7 @@ function BgTab({
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((b) => (
             <RevealItem key={b.id}>
               <BgCard bg={b} role={role} onChanged={onChanged} />

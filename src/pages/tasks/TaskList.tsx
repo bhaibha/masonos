@@ -110,7 +110,7 @@ export default function TaskList() {
       )}
 
       {tasks && tasks.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {tasks.map((t) => (
             <RevealItem key={t.id}>
               <TaskCard

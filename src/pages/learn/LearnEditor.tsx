@@ -143,7 +143,7 @@ export default function LearnEditor() {
     return (
       <>
         <PageHeader title="Learn" />
-        <p className="mx-auto max-w-lg px-4 py-10 text-center text-sm text-muted-foreground">
+        <p className="page-w px-4 py-10 text-center text-sm text-muted-foreground">
           Only a founder or PM writes library content. You can read everything
           that has been published.
         </p>
@@ -155,7 +155,7 @@ export default function LearnEditor() {
     return (
       <>
         <PageHeader title="Learn" />
-        <div className="mx-auto max-w-lg px-4 py-4">
+        <div className="page-w px-4 py-4">
           <ListSkeleton rows={5} />
         </div>
       </>
@@ -222,7 +222,7 @@ export default function LearnEditor() {
     <>
       <PageHeader title="Learn" />
 
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+      <div className="page-w space-y-4 px-4 py-4 pb-6">
         <Link
           to={editing ? `/learn/${id}` : '/learn'}
           className="flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"

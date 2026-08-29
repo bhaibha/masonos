@@ -107,7 +107,7 @@ export default function Variations() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((vo) => (
             <RevealItem key={vo.id}>
               <VariationCard vo={vo} onChanged={reload} />

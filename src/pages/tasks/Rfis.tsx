@@ -131,7 +131,7 @@ export default function Rfis() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((rfi) => (
             <RevealItem key={rfi.id}>
               <RfiCard rfi={rfi} role={role} onChanged={reload} />

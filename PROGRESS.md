@@ -3928,3 +3928,255 @@ twenty console commands that query the database directly with a supervisor's own
 section tests the UI and RLS together, so a screen that looks right has only passed the courtesy
 check. §12 is the one that shows whether the data is protected or merely hidden. Until it is run,
 treat the supervisor audit as partial.
+
+---
+
+## Session — In-app AI assistant (migration 064 + the `assistant` Edge Function)
+
+A chat panel reachable from every screen. Answers questions about the firm's own data, answers
+construction questions grounded in Mason Learn, explains the app, and drafts a small set of records
+for a person to confirm.
+
+### Built
+
+**Migration 064** — `chat_threads`, `chat_messages`, `assistant_actions`, `assistant_usage`, three
+enums, `fn_assistant_quota`, `fn_assistant_propose`, `fn_assistant_execute`, `fn_assistant_cancel`,
+`fn_assistant_stats`, audit trigger on the actions. Verified on a real PostgreSQL with the whole
+001–063 chain as fixtures; three clean runs, nine guards firing.
+
+**`assistant` Edge Function** — reuses `GEMINI_API_KEY`. Streaming function-calling loop over a
+whitelist (`tools.ts`), plus a hand-written app guide (`guide.ts`).
+
+**UI** — floating launcher in `AppShell`, full-height panel, streaming render, tool chips showing
+what it looked at, confirmation cards.
+
+### The finding that changed the design
+
+**RLS alone is not enough for an assistant.** `v_project_spend` is `security_invoker` over
+`expenses`, whose RLS excludes supervisors. A supervisor selecting from it gets **one row of zeros**,
+not zero rows — `sum()` over no visible rows is null and the view coalesces it. Verified against a
+real database during this session.
+
+A human never sees that, because the dashboard checks the role first and prints "restricted for your
+role". A **model** sees `total_spent: 0` and answers *"nothing has been spent on Villa 12"* — a
+confident lie, and considerably worse than a refusal.
+
+So every tool declares which roles may call it, **on top of** RLS. RLS remains the boundary — it is
+what stops a crafted request — and the role list stops the assistant reporting a misleading zero.
+The general rule: whenever a machine reads a view that a human only reaches through a guarded
+screen, check what that view returns to someone unauthorised. Zeros are the dangerous case, not
+errors.
+
+### The security model
+
+- Every read and write runs on the **caller's own JWT**. No service-role key exists in this feature.
+- The model **never writes SQL**. It picks a name from the whitelist; `runTool` maps it to one
+  hard-coded query; an unrecognised name is refused before anything runs.
+- Write tools **do not write**. They store a proposal and return a card. Only `fn_assistant_execute`
+  inserts, and it is **SECURITY INVOKER** — so a supervisor confirming an RFI proposal is refused by
+  `rfi_insert` itself, not by a role check that could drift. Confirmed in testing.
+- **No code path to any financial table exists.** Five branches: task, snag, site log note, RFI,
+  document note. Not a guarded branch for money — no branch at all. The prompt also forbids it, but
+  the prompt is the courtesy and the missing code is the protection.
+- Nothing is ever deleted, voided or modified. Every write is an INSERT of a new record.
+- Rate limit runs **before** the model call. `assistant_usage` has no write policy, so only the
+  SECURITY DEFINER function increments it — the thing being counted cannot reset its own counter.
+
+### Other decisions worth keeping
+
+- **The confirmation card renders the stored payload**, not a paraphrase, so what is shown and what
+  gets inserted cannot disagree.
+- **Proposals are kept whether confirmed or declined.** `fn_assistant_stats` reports the confirm
+  rate — the only number that says whether this earns its API calls.
+- **Conversations are private to the person who had it**, not visible to a founder. The data inside
+  was already gated by RLS when it was fetched; the conversation is that person's working notes.
+- **Tool calls are stored on the message**, so "why did it say that" stays answerable.
+- **The app guide is hand-written prose.** Letting the model infer the app from tool names produces
+  confident directions to screens that do not exist — the worst possible failure for somebody on
+  site looking for a button.
+- **Streaming is real**, not a typing effect over completed text: a stream containing a functionCall
+  is drained, the tool runs, and a fresh stream opens with the result appended.
+
+### Guards confirmed firing
+
+| Guard | Result |
+|---|---|
+| Supervisor reading `v_project_spend` directly | **a row of zeros** — the hazard, now handled at the tool layer |
+| Propose an expense | refused — not a proposable kind |
+| Supervisor proposes + confirms a task | allowed, task created |
+| Confirm the same proposal twice | refused |
+| Supervisor confirms an RFI proposal | refused by `rfis` RLS |
+| PM confirms the same RFI | allowed, RFI-0002 created |
+| Founder reads a supervisor's conversation | zero threads, zero messages |
+| Rate limit exceeded | refused with the daily-limit message |
+| Resetting your own usage counter | `UPDATE 0` — RLS refused |
+
+### Run migration 064 before testing.
+
+Then `supabase functions deploy assistant`, and **turn off Verify JWT** on it in the dashboard.
+**No new API key** — `GEMINI_API_KEY` is already set and Supabase secrets are project-wide.
+
+**2026-08-28 — migration 064 applied and the `assistant` Edge Function deployed.**
+APPLY_pending.sql is empty. Next migration = 065.
+
+**Deploy note worth keeping:** the dashboard's "Create new edge function" flow starts with a single
+`index.ts`, so a multi-file function fails to bundle with `Module not found ".../tools.ts"`. The two
+extra files have to be added with **+ Add File**, named exactly `tools.ts` and `guide.ts` at the
+same level as index.ts. `npx supabase functions deploy assistant` walks the whole directory and
+avoids the problem entirely — worth preferring for any function that is more than one file.
+
+**Fix — the assistant launcher was hidden behind the bottom nav.** It shipped with
+`bottom-24 z-40 sm:bottom-6`, written on the assumption that the tab bar is mobile-only. It is not:
+`AppShell`'s nav is `fixed inset-x-0 bottom-0 z-50` at every width. So on a desktop window the
+button sat 24px up, underneath a 68px-tall nav with a higher z-index — faintly visible through the
+`backdrop-blur`, and impossible to tap. Now `bottom-24 z-[55]` at all widths.
+
+**Lesson: a fixed-position element needs checking against every other fixed element in the shell,
+not just the one you were thinking about.** A typecheck cannot see this and neither can a lint rule;
+it took reading a screenshot. Worth a deliberate look whenever something new is added with
+`position: fixed`.
+
+**Fix — the assistant's first real turn failed with `400 Function call is missing a
+thought_signature`.** Gemini 2.5+ attaches a `thoughtSignature` to each `functionCall` part and
+requires it echoed back unchanged on the following turn. The tool loop rebuilt the part as
+`{ functionCall: part.functionCall }`, which silently dropped it — and the resulting error reads
+like a malformed request rather than a lost field.
+
+**Never reconstruct a model part; pass back exactly what arrived.** Fixed by pushing the part
+verbatim, merging consecutive text chunks only where no signature is attached.
+
+Found a second issue in the same loop while fixing it: a thinking model emits its reasoning as parts
+flagged `thought: true`. Those carry text and were being streamed straight to the chat — the model's
+private working-out displayed to a site engineer as if it were the answer. They are now kept for the
+next turn (they carry signatures) and never sent to the browser.
+
+**Assistant model is now `ASSISTANT_MODEL`, falling back to `GEMINI_MODEL`.** Supabase secrets are
+project-wide, so setting `GEMINI_MODEL` to a Pro model would silently re-point `learn-draft` as well
+— the Learn skeleton drafter does not need a reasoning model and would only cost more and run
+slower. Same separation as `GEMINI_VISION_MODEL` on `photo-analyse`.
+
+To run the assistant on Gemini 3.1 Pro:
+`supabase secrets set ASSISTANT_MODEL=gemini-3.1-pro-preview`
+(the bare `gemini-3.1-pro` is not found on API version v1beta — the preview id is the one).
+
+**Gemini 3.1 Pro preview was tried and abandoned.** `gemini-3.1-pro-preview` returned 429 on the
+first attempt and 503 UNAVAILABLE ("high demand") on the next — the second is Google's capacity, not
+our quota. Preview Pro models carry a tiny free-tier allowance and are frequently overloaded, which
+is not something a chat panel on a site phone can be built on.
+
+Two things came out of it that are worth keeping regardless of model:
+- `quotaMessage()` parses Gemini's 429 body and says whether the limit was per-minute or DAILY, with
+  Google's own retry delay. "Try again in a minute" is useless advice against a daily cap.
+- `callGemini()` retries 503 (and a short 429) up to three times with backoff, and retries nothing
+  else — a 400 or 404 means the request is wrong and retrying it just wastes the user's time.
+  Bounded at three because somebody is watching a spinner: failing in three seconds with a reason
+  beats failing in thirty.
+
+Running on `gemini-3.5-flash`. Switching models is one secret, not a deploy.
+
+---
+
+## Session — desktop layout, first slice (DL1 + DL2)
+
+The founder works on a laptop; the app was built for a phone on site. Measured before changing
+anything: **14 files hardcoded `max-w-lg`** (512px, ~73% of a 1900px screen unused), **1 distinct
+`lg:` utility and 1 `xl:` in the whole codebase**, **112 `grid-cols-2` with only 3 responsive
+variants**, and tab strips of 15 (Tasks) and 18 (Money) items scrolling horizontally.
+
+### Built
+
+**DL1 — one page-width rule.** `.page-w`, `.page-w-wide`, `.page-w-form` in `index.css`, replacing
+`max-w-lg` in 14 files. Below `lg` they are byte-identical to what shipped, so the phone layout does
+not move; desktop widths layer on above.
+
+I first wrote this as a `<Container>` component and **deleted it**: two mechanisms for one rule is
+the drift problem the exercise existed to solve, and a CSS utility is a pure class-name swap where a
+component would have been a 14-file structural refactor. Runtime interpolation into a Tailwind class
+was also considered and rejected — the scanner cannot see it.
+
+**DL2 — left rail at `lg`+**, bottom tabs below. Both navigations render from the same `TABS` array
+through the same role filter, so a destination cannot appear in one and not the other — which is how
+a supervisor would eventually find Money on a desktop.
+
+**PageHeader now takes a `width`.** Dashboard and ProjectDetail are `wide`; everything else is
+`list`. Without it the title sat at a different left edge from the content it labels, which reads as
+a broken layout rather than a choice.
+
+### Verified
+
+`tsc -b --force` clean. oxlint: **6 warnings before, 6 after** — checked against a stash, so nothing
+new was introduced. Production build succeeds and all three utilities are present in the emitted CSS.
+
+### Lesson
+
+**A width rule copy-pasted into fourteen files is not a style, it is fourteen styles that happen to
+agree today.** The cost only shows up when a second device appears. Anything used on every screen —
+width, gutter, card padding — belongs in one place from the start, and a CSS utility is the cheapest
+one-place there is: no import, no component boundary, and the change is a class name.
+
+**Follow-up — the space was there but nothing used it.** Widening the container alone left the same
+single column of cards floating in the middle of a laptop screen: more width just makes wider empty
+cards. Two changes actually filled it.
+
+- The four section layouts (`TasksLayout`, `MoneyLayout`, `DocsLayout`, `MaterialsLayout`) wrap
+  every sub-page, so switching those four to `page-w-wide` widened roughly forty screens at once —
+  including all the ones that carry no width class of their own and simply inherit it.
+- A new `.card-grid` utility replaces `space-y-3` on all **28** card lists: a stack below `lg`,
+  two columns above it. At 1024px each card gets roughly the width it was designed for, and the
+  scroll halves.
+
+`PageHeader` was widened to match on all four, or the title would sit at a different left edge from
+the content it labels.
+
+**Lesson: on a wide screen, "empty" is usually a LAYOUT problem, not a width problem.** The instinct
+is to stretch the container; the actual fix is to give the content somewhere to go. Widening alone
+would have made the emptiness wider.
+
+---
+
+## Session — motion and depth on Dashboard + Project Detail
+
+Asked for "more attractive or interactive". That pulls against the documented aesthetic —
+*restrained luxury, architect's studio, precision over decoration* — so the brief was narrowed with
+the founder first: **motion and feedback** plus **richer visual depth**, on the two screens they
+live in, before rolling anything outward.
+
+### Built
+
+**`<Figure>`** — money figures count up on first paint. The design system asks for money to "feel
+important"; a number that moves holds the eye for the half-second it takes to land, which is the
+same reason a printed report sets the total in a heavier face.
+
+Three refusals inside it, all deliberate:
+- It **never animates between two real values** after first render. Watching a spend figure roll
+  from last month's number to this month's would imply the money moved while you watched, and
+  somebody would screenshot the wrong frame. A data change snaps.
+- It **does nothing under `prefers-reduced-motion`**.
+- It **does not animate below ₹1,000** — counting from zero to a small number is theatre.
+
+**`<GrowBar>`** — budget bars grow to their ratio rather than appearing at it, so an over-budget
+fill visibly runs past the budget marker and the eye follows it there.
+
+**`.card-interactive`** — 2px lift, deeper shadow, a hint of accent on the border. Hover-only
+(`@media (hover: hover)`), so a phone tap does not leave a stuck hover state, and under reduced
+motion the shadow still changes so the affordance survives without the movement.
+
+Applied **only to cards that actually navigate**. A lift on a card that does nothing is a promise
+the interface does not keep — on Project Detail the section cards lift only when they have an
+`onAction`.
+
+**`.card-grid-3`** — three across at 1440px. Deliberately not at 1024px, where a third column gives
+each card ~330px, narrower than the phone they were designed for.
+
+### Verified
+
+`tsc -b --force` clean. oxlint 6 warnings, same as baseline. Build succeeds, both new utilities
+present in the emitted CSS.
+
+### Lesson
+
+**Restraint is a design system's most expensive rule to keep, and motion is where it usually
+breaks.** Every animation added here had to answer "what does this tell the reader" — the count-up
+draws the eye to money, the growing bar makes overspend legible, the lift says a card is a door.
+Anything that only said "look, movement" was left out, and the count-up was deliberately crippled in
+three ways to stop it lying about data.

@@ -172,6 +172,117 @@
     box-shadow: var(--shadow-card-lift);
   }
 
+  /* ------------------------------------------------------------------
+     PAGE WIDTH — the one place it is decided.
+
+     `max-w-lg` (512px) was copy-pasted into fourteen files. That was right
+     while the only device was a phone on site, but it left a 512px column in
+     the middle of a laptop screen, and widening it meant a fourteen-file edit
+     that would drift the moment somebody added a fifteenth screen.
+
+     Below `lg` these are IDENTICAL to what shipped, so the phone layout — the
+     one that has actually been used on site — does not move. Desktop widths
+     layer on above it.
+     ------------------------------------------------------------------ */
+
+  /* Lists, registers, most screens. */
+  .page-w {
+    @apply mx-auto w-full max-w-lg;
+  }
+  @media (width >= 64rem) {
+    .page-w {
+      max-width: 48rem;
+    }
+  }
+
+  /* Dashboards and grids — uses the screen. */
+  .page-w-wide {
+    @apply mx-auto w-full max-w-lg;
+  }
+  @media (width >= 64rem) {
+    .page-w-wide {
+      max-width: 64rem;
+    }
+  }
+  @media (width >= 80rem) {
+    .page-w-wide {
+      max-width: 72rem;
+    }
+  }
+
+  /* Forms. Stays one readable column: a 1600px-wide text input is worse than
+     a 512px one, not better. */
+  .page-w-form {
+    @apply mx-auto w-full max-w-lg;
+  }
+
+  /* ------------------------------------------------------------------
+     INTERACTIVE CARD — a card that is also a link or a button.
+
+     The design system is restraint-first, so depth here is a lift of two
+     pixels and a slightly deeper shadow, not a colour change or a scale. On a
+     phone it does nothing (there is no hover), and under reduced motion it
+     settles instantly — the shadow still changes, so the affordance survives
+     for anyone who has turned animation off.
+     ------------------------------------------------------------------ */
+  .card-interactive {
+    transition:
+      box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 220ms ease;
+  }
+  @media (hover: hover) {
+    .card-interactive:hover {
+      box-shadow: var(--shadow-card-lift);
+      transform: translateY(-2px);
+      border-color: color-mix(in oklab, var(--accent) 32%, var(--border));
+    }
+  }
+  .card-interactive:active {
+    transform: translateY(0);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card-interactive {
+      transition: box-shadow 220ms ease;
+    }
+    .card-interactive:hover {
+      transform: none;
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     CARD LIST — a stack on a phone, columns on a laptop.
+
+     Every register in the app renders self-contained cards in a vertical
+     stack. That is right at 512px and wasteful at 1024px, where it leaves a
+     column of cards down the middle and a screen of nothing either side.
+
+     Two columns at `lg` gives each card roughly the width it was designed
+     for, and halves the scroll. Below `lg` this is exactly `space-y-3`.
+     ------------------------------------------------------------------ */
+  .card-grid {
+    @apply space-y-3;
+  }
+  @media (width >= 64rem) {
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+    .card-grid > * + * {
+      margin-top: 0;
+    }
+  }
+
+  /* Three across once there is genuinely room. Below this two is right — a
+     third column at 1024px gives each card ~330px, which is narrower than the
+     phone they were designed for. */
+  @media (width >= 90rem) {
+    .card-grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
   /* Large display figure for money and stats. */
   .figure {
     @apply font-heading tabular-nums;

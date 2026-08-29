@@ -108,7 +108,7 @@ export default function Invoices() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((inv) => (
             <RevealItem key={inv.id}>
               <InvoiceCard inv={inv} onChanged={reload} />

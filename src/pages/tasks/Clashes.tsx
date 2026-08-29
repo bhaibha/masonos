@@ -119,14 +119,14 @@ export default function Clashes() {
 
   if (!projectId) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-8">
+      <div className="page-w px-4 py-8">
         <OtherProjectsHint />
       </div>
     )
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+    <div className="page-w space-y-4 px-4 py-4 pb-6">
       {mayWork && !raising && !overlay && (
         <div className="grid grid-cols-2 gap-2">
           <Button className="h-12 gap-2 text-base" onClick={() => setRaising(true)}>
@@ -198,7 +198,7 @@ export default function Clashes() {
       )}
 
       {list !== null && list.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {list.map((c) => (
             <RevealItem key={c.id}>
               <ClashCard

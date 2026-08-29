@@ -107,7 +107,7 @@ export default function SiteInstructions() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((si) => (
             <RevealItem key={si.id}>
               <SiCard si={si} role={role} onChanged={reload} />

@@ -197,7 +197,7 @@ export default function Pnl() {
         </Button>
       </div>
 
-      <Stagger className="space-y-3">
+      <Stagger className="card-grid">
         {rows.map((p) => (
           <RevealItem key={p.project_id}>
             <ProjectCard pnl={p} />

@@ -1,13 +1,21 @@
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 
 export function PageHeader({
   title,
   eyebrow,
+  width = 'list',
 }: {
   title: string
   eyebrow?: string
+  /**
+   * Must match the width of the page underneath it, or on a wide screen the
+   * title sits at a different left edge from the content it labels — which
+   * reads as a broken layout rather than a design choice.
+   */
+  width?: 'list' | 'wide'
 }) {
   const profile = useAuth((s) => s.profile)
   const role = useAuth((s) => s.role)
@@ -15,7 +23,12 @@ export function PageHeader({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-5 pt-5 pb-4">
+      <div
+        className={cn(
+          width === 'wide' ? 'page-w-wide' : 'page-w',
+          'flex items-center justify-between gap-3 px-5 pt-5 pb-4',
+        )}
+      >
         <div className="min-w-0">
           <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
             {eyebrow ?? 'Your Masons'}

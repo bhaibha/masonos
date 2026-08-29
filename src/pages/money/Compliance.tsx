@@ -232,7 +232,7 @@ export default function Compliance() {
           <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
             {monthLabel(month)}
           </p>
-          <Stagger className="space-y-3">
+          <Stagger className="card-grid">
             {items.map((item) => (
               <RevealItem key={item.id}>
                 <ItemCard

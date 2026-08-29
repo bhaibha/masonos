@@ -209,7 +209,7 @@ export default function Orders() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((po) => (
             <RevealItem key={po.id}>
               <OrderCard po={po} withRates={withValues} onChanged={reload} />

@@ -40,10 +40,10 @@ export default function MaterialsLayout() {
 
   return (
     <>
-      <PageHeader title="Materials" />
+      <PageHeader title="Materials" width="wide" />
 
       <div className="sticky top-[61px] z-30 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto max-w-lg space-y-2 px-4 py-2">
+        <div className="page-w-wide space-y-2 px-4 py-2">
           <ProjectPicker />
           <nav className="-mx-1 flex gap-1 overflow-x-auto">
             {tabs.map((t) => (
@@ -67,7 +67,7 @@ export default function MaterialsLayout() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-lg px-4 py-4">
+      <div className="page-w-wide px-4 py-4">
 
         {loading && projects.length === 0 && <ListSkeleton rows={3} />}
 

@@ -89,7 +89,7 @@ export default function LearnArticle() {
     return (
       <>
         <PageHeader title="Learn" />
-        <div className="mx-auto max-w-lg px-4 py-10">
+        <div className="page-w px-4 py-10">
           <p className="text-center text-sm text-muted-foreground">
             That entry is not available. It may be a draft, which only the
             people who write the library can see.
@@ -110,7 +110,7 @@ export default function LearnArticle() {
     return (
       <>
         <PageHeader title="Learn" />
-        <div className="mx-auto max-w-lg px-4 py-4">
+        <div className="page-w px-4 py-4">
           <ListSkeleton rows={5} />
         </div>
       </>
@@ -124,7 +124,7 @@ export default function LearnArticle() {
     <>
       <PageHeader title="Learn" />
 
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+      <div className="page-w space-y-4 px-4 py-4 pb-6">
         <Link
           to="/learn"
           className="flex min-h-11 items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"

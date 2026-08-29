@@ -515,7 +515,7 @@ function ProjectTable({ projects }: { projects: MisProject[] }) {
         Project by project
       </h2>
 
-      <Stagger className="space-y-3">
+      <Stagger className="card-grid">
         {projects.map((p) => (
           <RevealItem key={p.project_id}>
             <Link

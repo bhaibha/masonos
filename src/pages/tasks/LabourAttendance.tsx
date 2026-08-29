@@ -192,7 +192,7 @@ export default function LabourAttendance() {
       )}
 
       {gangs.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {gangs.map((g) => (
             <RevealItem key={g.attendance_id}>
               <GangCard gang={g} role={role} onChanged={reload} />

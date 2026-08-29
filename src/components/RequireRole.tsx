@@ -27,7 +27,7 @@ export function RequireRole({ allow }: { allow: UserRole[] }) {
 
   if (!role || !allow.includes(role)) {
     return (
-      <div className="mx-auto max-w-lg px-6 py-20 text-center">
+      <div className="page-w px-6 py-20 text-center">
         <p className="text-sm text-muted-foreground">
           This section isn't available for your role.
         </p>

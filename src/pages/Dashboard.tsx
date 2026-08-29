@@ -6,10 +6,11 @@ import {
   Settings2,
   ShieldCheck,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { Figure } from '@/components/Figure'
 import { PageHeader } from '@/components/PageHeader'
 import { PushCard } from '@/components/PushCard'
 import { FadeUp, RevealItem, Stagger } from '@/components/Reveal'
@@ -147,9 +148,9 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageHeader title="Command" />
+      <PageHeader title="Command" width="wide" />
 
-      <div className="mx-auto max-w-3xl px-5 py-6">
+      <div className="page-w-wide px-5 py-6">
         {rows === null && (
           <>
             <Skeleton className="h-36 w-full rounded-2xl" />
@@ -210,7 +211,7 @@ export default function Dashboard() {
 
             {/* One column on a phone — two 180px cards can't hold a
                 ₹96,76,736 figure legibly. Two up from 640px. */}
-            <Stagger className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Stagger className="card-grid card-grid-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
               {rows.map((p) => (
                 <RevealItem key={p.project_id} className="h-full">
                   <ProjectCard
@@ -397,11 +398,18 @@ function PortfolioCard({
       ) : (
         <>
           <div className="mt-5 grid grid-cols-2 gap-5 sm:grid-cols-4">
-            <Metric label="Total spent" value={formatInr(portfolio.total_spent)} big />
-            <Metric label="Total budget" value={formatInr(portfolio.total_budget)} />
+            <Metric
+              label="Total spent"
+              value={<Figure value={portfolio.total_spent} />}
+              big
+            />
+            <Metric
+              label="Total budget"
+              value={<Figure value={portfolio.total_budget} />}
+            />
             <Metric
               label={over ? 'Over budget' : 'Remaining'}
-              value={formatInr(Math.abs(portfolio.remaining))}
+              value={<Figure value={Math.abs(portfolio.remaining)} />}
               tone={over ? 'danger' : 'positive'}
             />
             <Metric
@@ -517,7 +525,8 @@ function Metric({
   tone,
 }: {
   label: string
-  value: string
+  /** ReactNode, so a <Figure> can count up in place of a formatted string. */
+  value: ReactNode
   big?: boolean
   tone?: 'danger' | 'positive'
 }) {
@@ -560,7 +569,7 @@ function ProjectCard({
   return (
     <Link
       to={`/project/${project.project_id}`}
-      className="paper flex h-full flex-col p-5 transition-shadow hover:paper-lift focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
+      className="paper card-interactive flex h-full flex-col p-5 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
       aria-label={`Open ${project.name}`}
     >
       <header className="flex items-start justify-between gap-2">
@@ -591,7 +600,7 @@ function ProjectCard({
                 bar.over && 'text-destructive',
               )}
             >
-              {formatInr(project.total_spent)}
+              <Figure value={project.total_spent} />
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground tabular-nums">
               of {noBudget ? '—' : formatInr(project.total_budget)}

@@ -109,7 +109,7 @@ export default function Learn() {
     <>
       <PageHeader title="Learn" />
 
-      <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+      <div className="page-w space-y-4 px-4 py-4 pb-6">
         <div className="relative">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -283,7 +283,7 @@ export default function Learn() {
         )}
 
         {hits !== null && hits.length > 0 && (
-          <Stagger className="space-y-3">
+          <Stagger className="card-grid">
             {hits.map((h) => (
               <RevealItem key={h.id}>
                 <HitCard hit={h} />
@@ -300,7 +300,7 @@ export default function Learn() {
             <p className="px-1 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
               Documents
             </p>
-            <Stagger className="space-y-3">
+            <Stagger className="card-grid">
               {docs.map((d) => (
                 <RevealItem key={d.id}>
                   <LearnDocCard

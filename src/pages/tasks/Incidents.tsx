@@ -111,7 +111,7 @@ export default function Incidents() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((inc) => (
             <RevealItem key={inc.id}>
               <IncidentCard

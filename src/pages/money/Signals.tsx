@@ -114,7 +114,7 @@ export default function Signals() {
     return (
       <>
         <PageHeader title="Signals" />
-        <p className="mx-auto max-w-lg px-4 py-10 text-center text-sm text-muted-foreground">
+        <p className="page-w px-4 py-10 text-center text-sm text-muted-foreground">
           Health signals are restricted for your role.
         </p>
       </>
@@ -129,7 +129,7 @@ export default function Signals() {
     deadlines.length === 0
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-6">
+    <div className="page-w space-y-4 px-4 py-4 pb-6">
       {/* The framing, stated once at the top and not buried. */}
       <p className="flex items-start gap-2 rounded-lg bg-secondary/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
@@ -184,7 +184,7 @@ export default function Signals() {
           <p className="px-1 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
             On the projects
           </p>
-          <Stagger className="space-y-3">
+          <Stagger className="card-grid">
             {flags.map((f) => (
               <RevealItem key={`${f.project_id}_${f.code}`}>
                 <FlagCard flag={f} mayAck={mayAck} onChanged={reload} />

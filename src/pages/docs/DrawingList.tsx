@@ -107,7 +107,7 @@ export default function DrawingList() {
       )}
 
       {rows && rows.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {rows.map((d) => (
             <RevealItem key={d.id}>
               <Link

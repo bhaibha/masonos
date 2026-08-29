@@ -170,7 +170,7 @@ export default function Insurance() {
       )}
 
       {shown && shown.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {shown.map((p) => (
             <RevealItem key={p.id}>
               <PolicyCard

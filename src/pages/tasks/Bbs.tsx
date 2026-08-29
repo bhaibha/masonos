@@ -191,7 +191,7 @@ export default function Bbs() {
           )}
 
           {members.length > 0 && (
-            <Stagger className="space-y-3">
+            <Stagger className="card-grid">
               {members.map((m) => (
                 <RevealItem key={m.member_id}>
                   <MemberCard

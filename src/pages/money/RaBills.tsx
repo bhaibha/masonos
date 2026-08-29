@@ -166,7 +166,7 @@ export default function RaBills() {
       )}
 
       {shown && shown.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {shown.map((b) => (
             <RevealItem key={b.id}>
               <BillCard

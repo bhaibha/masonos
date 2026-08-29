@@ -99,7 +99,7 @@ export default function AdminTeam() {
       )}
 
       {team && team.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {team.map((m) => (
             <RevealItem key={m.id}>
               <MemberCard

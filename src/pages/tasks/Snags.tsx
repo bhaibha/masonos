@@ -162,7 +162,7 @@ export default function Snags() {
       )}
 
       {shown && shown.length > 0 && (
-        <Stagger className="space-y-3">
+        <Stagger className="card-grid">
           {shown.map((snag) => (
             <RevealItem key={snag.id}>
               <SnagCard snag={snag} role={role} onChanged={reload} />

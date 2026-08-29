@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { Figure } from '@/components/Figure'
 import { FadeUp, RevealItem, Stagger } from '@/components/Reveal'
 import { Skeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
@@ -179,7 +180,7 @@ export default function ProjectDetail() {
 
   if (project === 'missing') {
     return (
-      <div className="mx-auto max-w-lg px-5 py-6">
+      <div className="page-w-wide px-5 py-6">
         <BackBar />
         <EmptyState
           icon={ClipboardList}
@@ -212,7 +213,7 @@ export default function ProjectDetail() {
       {/* Money and Activity span the full width; the three compact summaries
           sit two-up from 640px. One column on a phone — money figures don't
           survive a 180px column. */}
-      <Stagger className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <Stagger className="card-grid card-grid-3 mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <RevealItem className="h-full sm:col-span-2">
           <MoneyCard
             spend={spend}
@@ -410,7 +411,14 @@ function SectionCard({
   children: React.ReactNode
 }) {
   return (
-    <section className="paper flex h-full flex-col p-6">
+    <section
+      className={cn(
+        'paper flex h-full flex-col p-6',
+        // Only a card you can actually open lifts. A lift on a card that does
+        // nothing is a promise the UI does not keep.
+        onAction && 'card-interactive',
+      )}
+    >
       <div className="flex items-center gap-2.5">
         <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2 className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
@@ -481,7 +489,7 @@ function MoneyCard({
               bar.over && 'text-destructive',
             )}
           >
-            {formatInr(spend.total_spent)}
+            <Figure value={spend.total_spent} />
           </p>
         </div>
         <div className="text-right">
@@ -542,7 +550,8 @@ function Stat({
   tone,
 }: {
   label: string
-  value: string
+  /** ReactNode, so a <Figure> can count up in place of a formatted string. */
+  value: React.ReactNode
   tone?: 'danger' | 'warning'
 }) {
   return (

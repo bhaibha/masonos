@@ -258,7 +258,17 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   Verified on a real PostgreSQL with the actual 001-062 chain as fixtures;
   three clean runs, ten guards confirmed firing, arithmetic hand-checked.
   So: **001-063 ALL APPLIED. Groups A, B, C and D are complete.**
-  Next migration = 064.
+  **064 APPLIED** (confirmed 2026-08-28) — in-app AI assistant (`chat_threads`,
+  `chat_messages`, `assistant_actions`, `assistant_usage`,
+  `assistant_action_kind`/`assistant_action_state`/`chat_role`,
+  `fn_assistant_quota`, `fn_assistant_propose`, `fn_assistant_execute`,
+  `fn_assistant_cancel`, `fn_assistant_stats`, audit trigger on the actions).
+  Ships with the `assistant` Edge Function, which REUSES the existing
+  `GEMINI_API_KEY` and needs `supabase functions deploy assistant`. Verified on
+  a real PostgreSQL with the whole 001-063 chain as fixtures; three clean runs,
+  nine guards confirmed firing.
+  So: **001-064 ALL APPLIED.**
+  Next migration = 065.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
@@ -271,6 +281,54 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   true and both stopped somebody. Any empty state saying "there is nothing here yet" must carry the
   action for the roles that can act, on the screen where they landed — and a button that will
   certainly be refused should be disabled with the reason, not left to fail.
+- **A preview model is not a foundation (064).** `gemini-3.1-pro-preview` gave 429 then 503
+  "high demand" on consecutive attempts — the 503 being Google's capacity rather than our quota.
+  Preview tiers have a tiny free allowance and get overloaded. Retry only what is TRANSIENT (503,
+  short 429) and only a few times: a 400 or 404 means the request itself is wrong, and an assistant
+  that takes thirty seconds to fail is worse than one that fails in three and says why.
+- **Never reconstruct a model part — echo back exactly what arrived (064).** Gemini 2.5+ attaches a
+  `thoughtSignature` to every `functionCall` part and REQUIRES it returned unchanged on the next
+  turn. Rebuilding the part as `{ functionCall: part.functionCall }` drops it and the following
+  request fails with `400 Function call is missing a thought_signature`, which reads like a
+  malformed request rather than a lost field. The same loop taught the second half: a thinking model
+  emits reasoning as parts flagged `thought: true`, which carry text and MUST be kept for the next
+  turn but must never be displayed — streaming them puts the model's private working-out in front of
+  the user as if it were the answer.
+- **A multi-file Edge Function cannot be deployed from the dashboard's new-function flow (064).**
+  It creates one `index.ts`, so `import './tools.ts'` fails to bundle with "Module not found" and a
+  path under /tmp that looks like an internal error rather than a missing file. Either add each file
+  with **+ Add File** using the exact name, or use `supabase functions deploy <name>`, which walks
+  the directory. Prefer the CLI for anything past a single file.
+- **RLS is necessary but NOT sufficient for an assistant, and this nearly shipped wrong (064).**
+  `v_project_spend` is security_invoker over `expenses`, whose RLS excludes supervisors. A supervisor
+  selecting from it does not get an error and does not get zero rows — they get ONE ROW OF ZEROS,
+  because `sum()` over no visible rows is null and the view coalesces it. Verified against a real
+  database. A human sees "restricted for your role" because the dashboard checks first; a MODEL sees
+  `total_spent: 0` and answers "nothing has been spent on Villa 12", which is a confident lie and
+  worse than a refusal. So every tool declares which roles may call it, on top of RLS. Whenever a
+  machine reads a view a human only reaches through a guarded screen, check what the view returns to
+  someone unauthorised — zeros are the dangerous case, not errors.
+- **The model gets a name from a list, never SQL (064).** `runTool` maps a whitelisted name to one
+  hard-coded query; an unrecognised name is refused before anything runs. Text-to-SQL against a
+  database with this much RLS would be one prompt injection away from a very bad afternoon, and the
+  whitelist costs nothing — there are only about fifteen useful questions.
+- **Make the forbidden thing unreachable, not forbidden (064).** `fn_assistant_execute` has five
+  branches: task, snag, site log note, RFI, document note. There is no branch for expenses, budgets,
+  POs, invoices, VOs, RA bills or overheads — not a branch that raises, NO BRANCH. The prompt also
+  says it cannot touch money, but the prompt is the courtesy and the missing code is the protection.
+  Third time this pattern has earned its place (058 schema, 061 severity, now this).
+- **SECURITY INVOKER is the whole safety story for an assistant write (064).** `fn_assistant_execute`
+  is invoker, so its INSERTs obey the caller's own policies exactly as if they had typed the form.
+  A supervisor confirming an RFI proposal is refused by `rfi_insert` itself — confirmed in testing —
+  not by a role check written in the function that could drift from it. Reach for SECURITY DEFINER
+  only when the function must do something the caller genuinely cannot.
+- **Propose, then execute — and keep the declines (064).** The confirmation card renders the SAME
+  jsonb payload that `fn_assistant_propose` stored, so what is shown and what gets inserted cannot
+  disagree. Proposals are kept whether confirmed or not: "the assistant suggested this and somebody
+  said no" is the only number that says whether the feature earns its API calls (the 061 rule).
+- **Rate-limit before the model call, and put the counter out of reach (064).** `assistant_usage`
+  has a SELECT policy and no write policy, so only the SECURITY DEFINER function increments it — the
+  thing being counted cannot reset its own counter. Verified: a direct UPDATE returns `UPDATE 0`.
 - **If the history does not exist, start recording — do not backfill a fiction (063).**
   `schedule_activities.pct_complete` holds one current value, so "spend rising faster than progress"
   and "CPI trending down" cannot be computed backwards; there is no historical progress figure in
@@ -863,6 +921,10 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
 - PDF: client-side (jsPDF) to write, pdfjs-dist to READ (059, dynamic import only — it is ~400KB
   plus a 1.26MB worker and must never enter the main bundle)
 - Deploy: Cloudflare Pages. Repo: GitHub. No Firebase, no AWS, no Express.
+- **Per-function model variables.** `ASSISTANT_MODEL` (assistant), `GEMINI_VISION_MODEL`
+  (photo-analyse), `GEMINI_MODEL` (learn-draft and the fallback for both). Supabase secrets are
+  PROJECT-WIDE, so one shared name means re-pointing one feature silently re-points the others —
+  a reasoning model for the chat assistant would drag the Learn drafter onto it too.
 - **One paid-API exception, added deliberately at 058: Google Gemini**, reached ONLY through the
   `learn-draft` Edge Function (key in `GEMINI_API_KEY`, never in the bundle), and ONLY to draft the
   STRUCTURE of a Mason Learn method statement. It is not allowed to state a value or reproduce a
