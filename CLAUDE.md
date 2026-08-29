@@ -268,7 +268,103 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   a real PostgreSQL with the whole 001-063 chain as fixtures; three clean runs,
   nine guards confirmed firing.
   So: **001-064 ALL APPLIED.**
-  Next migration = 065.
+  **065 APPLIED** (confirmed 2026-08-29) — CLIENT role + curated client data layer
+  (`client_projects`, `client_photos`, `client_messages`, `is_client`,
+  `is_internal`, `fn_client_project`, a HARDENED `is_member`, ten `v_client_*`
+  views, `fn_client_decide`, `fn_record_invoice_payment`,
+  `documents.client_visible`, `invoices.paid_on/paid_amount`, audit triggers).
+  Verified on a real PostgreSQL with the whole 001-064 chain and TWO clients on
+  TWO projects; three clean runs, every internal surface zero, cross-client
+  isolation confirmed, and the defence-in-depth case (client wrongly added to
+  project_members) confirmed still closed.
+  Confirmed live 2026-08-29: a real client account signs in, is redirected to
+  /portal, and sees its own project name through `v_client_project` — the whole
+  chain (JWT -> is_client -> fn_client_project -> owner-run view) proven end to
+  end through a real session.
+  So: **001-065 ALL APPLIED.**
+  **066 APPLIED** (confirmed 2026-08-29) — an aggregate must return ZERO ROWS
+  to a client, never one row of zeros. Fifteen functions re-emitted with the
+  same one-line wrapper, `v_portfolio_summary` rebuilt, `assistant_usage`'s
+  select policy tightened, `fn_assistant_quota` made to raise for a client,
+  and `fn_schedule_template` renamed to `_rows` + revoked with a filtered
+  wrapper over it. Verified on a real PostgreSQL with the ACTUAL 001-065 chain
+  as fixtures: three clean runs, founder/supervisor unchanged, all sixteen
+  surfaces zero for a client. Then verified LIVE — the client sweep reports
+  147/147 refused or empty.
+  So: **001-066 ALL APPLIED.**
+  **067 WRITTEN, NOT YET APPLIED** — the founder's client roster
+  (`v_client_roster` with per-client EXPOSURE counts, `fn_set_client_active`,
+  `fn_unlink_client`, `fn_link_client`, `fn_client_roster_summary`,
+  `fn_projects_without_client`). Ships with a `client` branch in
+  `admin-create-user` (needs `supabase functions deploy admin-create-user`) and
+  the `/admin/clients` tab. Verified on a real PostgreSQL with the ACTUAL
+  001-066 chain: three clean runs, founder/pm/accounts see the roster,
+  supervisor and client get zero rows, all three guards confirmed firing.
+  Next migration = 068.
+- **`is_internal()` is the wrapper for a surface EVERY internal role can read —
+  not for a restricted one (067, caught by its own test).**
+  `fn_client_roster_summary` sums `v_client_roster`, which supervisors cannot
+  see. With the plain 066 wrapper a SUPERVISOR got the row of zeros the wrapper
+  exists to prevent: they are internal, so it let them through, and the roster
+  underneath returned nothing. The wrapper must restate the restriction of the
+  thing being summed — here `and my_role() in ('founder','pm','accounts')`.
+  Rule: match the aggregate's guard to its SOURCE's audience, not merely to
+  "not a client".
+- **Two audiences, two forms — never one picker (067).** Creating a client is a
+  separate tab, a separate type (`NewClientInput`) and a separate Edge Function
+  branch from creating staff. A shared role dropdown makes "outsider created as
+  a pm" one mis-click away, and that mistake hands over the company's money.
+  The asymmetry is the point: staff wrongly marked `client` merely see less.
+- **Report exposure, don't build impersonation (067).** "View as this client"
+  would need a client session, i.e. an impersonation path into the one area
+  whose entire story is that the database refuses. The roster instead counts
+  what has actually been shared — documents, photos, bills, pending approvals —
+  which answers the real question ("what have I shown this person?") without
+  opening that door. Related: NO permission-toggle grid, because the curated
+  views ARE the permission model and a toggle would be a lie the first time
+  somebody edits a view.
+- **A picker's type should not invent the columns it refused to select (067).**
+  Padding `fn_projects_without_client` into the full `Project` type meant
+  writing `contract_value: null` and `management_fee_amount: null` — a shape
+  that claims to know the fee and reports it absent. A narrow `ProjectOption`
+  says instead that money was never in scope.
+- **An aggregate answers a question it just refused — third time (056, 064,
+  066).** `count(*)` over zero permitted rows is a legitimate 0, and
+  `coalesce(sum(x), 0)` is a legitimate 0, so a correctly-refused caller gets
+  ONE ROW OF ZEROS rather than nothing. RLS was never wrong: `is_member()`
+  returned false exactly as designed. The fix is uniform and belongs in every
+  future aggregate from the start:
+  `select * from ( <the aggregate> ) q where public.is_internal();`
+  Chosen over `having count(*) > 0`, which would also hide a legitimately empty
+  result from an internal user, and over per-body role checks, which would have
+  to be written fifteen different ways and would drift. **Any new function
+  returning a scalar roll-up gets this line on the day it is written.**
+- **A test proves only what it thought to ask (066).** The first client security
+  script probed 3 of ~115 functions, passed 46 of 49 checks, and read like a
+  clean bill of health. The exhaustive version — 84 tables, 35 views, 39
+  read-only RPCs, every project-scoped one called with the client's OWN project
+  id, which is the single id they legitimately know — found 18. A security test
+  is only worth its COVERAGE, so enumerate the surface from the schema
+  (`grant execute … to authenticated`, `grant select on public.…`) rather than
+  from memory of what seemed risky.
+- **A "read-only" script that writes (066).** The sweep called
+  `fn_assistant_quota`, which INSERTS before it answers, and then reported the
+  row it had just created as a finding. Before calling a function a test
+  describes as read-only, check its body for a write — "quota", "check",
+  "summary" and "alert" all sound like reads and one of them was not.
+- **Rename and wrap; never copy the seed data (066).** Filtering
+  `fn_schedule_template` meant re-emitting 9KB of the firm's build sequence.
+  Instead: `alter function … rename to fn_schedule_template_rows`, revoke it
+  from the API, and make the public name a `security definer` wrapper that
+  filters. Two copies of how the firm builds would eventually disagree about
+  how long a slab takes to cure. The rename is guarded on the `_rows` function
+  not already existing, so the migration stays re-runnable.
+- **A pure function has no RLS, and that is easy to forget (066).**
+  `fn_schedule_template` was `immutable`, so no policy ever applied and it
+  handed a client 120 rows of activities, durations and parallelism. Adding a
+  session-dependent filter also means it can no longer be IMMUTABLE — it drops
+  to STABLE. Audit `immutable`/pure functions separately whenever a new
+  audience is added: they are invisible to every RLS review.
   *(043/044/046, for the record:)*
   **046 APPLIED** — the firm's OWN twenty on-site checklists
   transcribed verbatim (500 questions, 3 discipline templates, 20 points),
@@ -299,6 +395,31 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   path under /tmp that looks like an internal error rather than a missing file. Either add each file
   with **+ Add File** using the exact name, or use `supabase functions deploy <name>`, which walks
   the directory. Prefer the CLI for anything past a single file.
+- **`using (true)` means "anyone with a login", and a new role makes that a leak (065).** Fourteen
+  policies granted read to `authenticated` with no condition — fine while every account belonged to
+  the firm. Adding a CLIENT role turned each into an open door: staff names, the labour supply
+  chain, the materials master, Mason Learn, and worst, `project_members`, which maps every project
+  in the company and hands out other clients' project ids. Whenever a role is added, the first job
+  is to grep `using (true)` — those policies were written under an assumption that no longer holds.
+- **A new outside role needs enforcement, not just convention (065).** The rule "a client is never in
+  project_members" is a convention somebody breaks in three years. So `is_member()` itself now
+  returns FALSE for a client before it looks at the table at all. Verified by deliberately inserting
+  the bad row: `is_member` stayed false and expenses/tasks/documents/POs all stayed at zero. When a
+  single function is the key to thirty tables, harden the function.
+- **A curated outside surface is a SEPARATE layer, never a filtered internal one (065).** Ten
+  `v_client_*` views, each owner-run with `where project_id = fn_client_project()` as the access
+  control. Reusing internal views with an extra WHERE would have meant every future edit to an
+  internal view was a potential client leak; a separate layer means a reviewer checks one line per
+  view. Same owner-run pattern as 010/038, and the same warning: losing that WHERE is a total leak.
+- **The secret hides in the enum (065).** `invoice_type` has a `management_fee` value, so "show the
+  client their invoices" would have told them the fee in rupees. The view filters to `progress`
+  only. Before exposing any table to a new audience, read its ENUMS — a type column is often where
+  the confidential case lives.
+- **Say when the brief contradicts itself, in the migration and to the founder (065).** Open-book
+  spend plus contract value lets a client derive margin by subtraction, while the same brief says
+  never show margin. Both cannot hold. It is implemented as asked, the contradiction is stated in
+  the file header and at the end of the security test, and the one-line fix is named. A commercial
+  decision made silently inside a migration is the worst place for it to live.
 - **RLS is necessary but NOT sufficient for an assistant, and this nearly shipped wrong (064).**
   `v_project_spend` is security_invoker over `expenses`, whose RLS excludes supervisors. A supervisor
   selecting from it does not get an error and does not get zero rows — they get ONE ROW OF ZEROS,

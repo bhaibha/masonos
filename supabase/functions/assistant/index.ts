@@ -237,6 +237,17 @@ Deno.serve(async (req) => {
   const role = (me?.role as Role) ?? null
   if (!role) return json({ error: 'No profile for this session' }, 403)
 
+  // A client has no tools — none of them list 'client' — so nothing could leak.
+  // Refused anyway: without this they reach Gemini on the firm's quota and get
+  // a general chatbot wearing the firm's name. The assistant is an internal
+  // tool and says so.
+  if ((role as string) === 'client') {
+    return json(
+      { error: 'The assistant is not part of the client portal.' },
+      403,
+    )
+  }
+
   let body: {
     message?: string
     thread_id?: string | null

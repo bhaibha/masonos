@@ -9,19 +9,25 @@ import { motion } from 'motion/react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AssistantLauncher } from '@/components/AssistantPanel'
 import { cn } from '@/lib/utils'
-import type { UserRole } from '@/lib/types'
+import { INTERNAL_ROLES, type UserRole } from '@/lib/types'
 import { useAuth } from '@/store/auth'
 
 interface Tab {
   to: string
   label: string
   icon: typeof LayoutDashboard
-  /** null = visible to every role */
-  roles: UserRole[] | null
+  /**
+   * Which roles see this destination. There is no "everyone" any more: a
+   * client is `authenticated` too, and `roles: null` advertised Dashboard and
+   * Docs to them. RequireInternal already redirects a client away from all of
+   * this — these lists are the second layer, so the nav is still correct if
+   * that guard is ever removed.
+   */
+  roles: UserRole[]
 }
 
 const TABS: Tab[] = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: null },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: INTERNAL_ROLES },
   {
     to: '/tasks',
     label: 'Tasks',
@@ -36,7 +42,7 @@ const TABS: Tab[] = [
     icon: Package,
     roles: ['founder', 'pm', 'supervisor'],
   },
-  { to: '/docs', label: 'Docs', icon: FileText, roles: null },
+  { to: '/docs', label: 'Docs', icon: FileText, roles: INTERNAL_ROLES },
 ]
 
 /**
@@ -55,7 +61,7 @@ const TABS: Tab[] = [
 export function AppShell() {
   const role = useAuth((s) => s.role)
   const location = useLocation()
-  const tabs = TABS.filter((t) => t.roles === null || (role && t.roles.includes(role)))
+  const tabs = TABS.filter((t) => role !== null && t.roles.includes(role))
 
   return (
     <div className="min-h-svh bg-background">

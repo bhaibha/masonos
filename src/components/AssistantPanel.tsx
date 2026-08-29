@@ -444,7 +444,11 @@ export function AssistantLauncher() {
   const [open, setOpen] = useState(false)
   const role = useAuth((s) => s.role)
 
-  if (!role) return null
+  // Not merely "signed in": the assistant is internal. This component sits
+  // inside AppShell, which RequireInternal already keeps clients out of — but a
+  // component that is only safe because of where it is mounted is one move away
+  // from being unsafe.
+  if (!role || role === 'client') return null
 
   return (
     <>

@@ -1,4 +1,23 @@
-export type UserRole = 'founder' | 'pm' | 'supervisor' | 'accounts'
+/**
+ * `client` is an OUTSIDE role (065): one project, a curated read-only surface,
+ * and none of the internal app. It is in this union so TypeScript forces every
+ * exhaustive Record below to say what a client sees — but it is deliberately
+ * absent from every internal capability check, and `is_member()` in the
+ * database returns false for it unconditionally.
+ */
+export type UserRole = 'founder' | 'pm' | 'supervisor' | 'accounts' | 'client'
+
+/** The four roles that belong to the firm. Use this for internal role pickers. */
+export const INTERNAL_ROLES: UserRole[] = [
+  'founder',
+  'pm',
+  'supervisor',
+  'accounts',
+]
+
+export function isClientRole(role: UserRole | null): boolean {
+  return role === 'client'
+}
 
 export type ProjectStatus = 'active' | 'on_hold' | 'completed'
 
@@ -49,6 +68,7 @@ export const ROLE_LABEL: Record<UserRole, string> = {
   pm: 'Project manager',
   supervisor: 'Site (no money)',
   accounts: 'Accounts',
+  client: 'Client (portal only)',
 }
 
 /** What each access role can reach — shown next to the picker so the founder
@@ -59,6 +79,11 @@ export const ROLE_ACCESS_NOTE: Record<UserRole, string> = {
   supervisor:
     'Tasks, site log, materials, safety, snags on assigned projects. All money, rates and confidential documents are hidden by the database.',
   accounts: 'All money modules across every project. Cannot write site data.',
+  client:
+    'Outside the firm. Their own project only, through a separate curated ' +
+    'portal — progress, shared photos and documents, their own invoices and ' +
+    'approvals. Never the internal app, never another project, never the ' +
+    'management fee or margin. Enforced in the database, not the interface.',
 }
 
 export function designationRole(title: string): UserRole | null {
@@ -105,6 +130,58 @@ export interface NewUserInput {
   designation: string
   role: UserRole
   project_ids: string[]
+}
+
+/**
+ * A CLIENT account. Deliberately a SEPARATE type from NewUserInput, and reached
+ * from a separate form on a separate tab — never a `client` option in the team
+ * role picker.
+ *
+ * The reason is the direction of the mistake. A staff member wrongly created as
+ * a client merely sees less. An outsider wrongly created as a `pm` sees the
+ * company's money. One dropdown containing both makes the second mistake one
+ * mis-click away, so the two paths do not share a control.
+ *
+ * No `designation`: a client is not a job title, and DESIGNATIONS maps titles to
+ * access roles for staff only (019). No `project_ids`: a client is never a
+ * project member — `is_member()` returns false for them whatever that table
+ * says (065) — so it is one project id, matching the UNIQUE constraint on
+ * client_projects.user_id.
+ */
+export interface NewClientInput {
+  email: string
+  password: string
+  full_name: string
+  phone: string
+  project_id: string
+}
+
+/** Row shape of public.v_client_roster (067). Carries no money, by design. */
+export interface ClientRosterRow {
+  link_id: string
+  user_id: string
+  full_name: string
+  is_active: boolean
+  project_id: string
+  project_name: string
+  project_status: ProjectStatus
+  granted_at: string
+  granted_by_name: string | null
+  shared_documents: number
+  published_photos: number
+  visible_invoices: number
+  pending_approvals: number
+  unread_from_client: number
+  last_message_at: string | null
+}
+
+export interface ClientRosterSummary {
+  client_count: number
+  active_count: number
+  suspended_count: number
+  projects_with_client: number
+  pending_approvals: number
+  unread_from_clients: number
 }
 
 /** Row shape of public.v_project_spend (security_invoker view). */

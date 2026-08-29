@@ -1,6 +1,50 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## CLIENT SECURITY — VERIFIED END TO END (2026-08-29, migration 066)
+
+The client portal data layer (065) is now proven against a real signed-in client,
+not just reasoned about.
+
+**What was run.** `client-security-sweep.js` pasted into the browser console as
+`testclient@yourmasons.test`: **147 surfaces** — 70 RLS tables, 36 internal views
+and 39 read-only RPCs, every project-scoped one called with the client's OWN
+project id, which is the single id a client legitimately knows.
+
+**First result: 18 of 147 returned a row.** Every figure in every one of them was
+`0` or `null` — nothing leaked, `is_member()` did its job — but that IS the
+failure this repo has been bitten by twice before (056, 064): an aggregate over
+zero permitted rows answers `0` rather than nothing. The portal has no UI yet, so
+the first screen built against `fn_project_evm` would have rendered "₹0 spent" on
+a ₹4 crore job.
+
+**Migration 066 closes all 18** with one uniform line —
+`select * from ( <the aggregate> ) q where public.is_internal();` — across fifteen
+functions, plus `v_portfolio_summary` rebuilt, `assistant_usage`'s select policy
+tightened, `fn_assistant_quota` made to raise for a client, and
+`fn_schedule_template` renamed to `_rows` and revoked behind a filtered wrapper
+(it was `immutable`, so no RLS ever applied and it handed out 120 rows of the
+firm's build sequence).
+
+**Verified twice.** On a real PostgreSQL with the ACTUAL 001-065 chain as
+fixtures (not stubs — the 056 lesson): three clean runs, founder and supervisor
+unchanged, all sixteen surfaces zero for a client, quota refused, no
+`assistant_usage` row created. Then live: **147/147 refused or empty.**
+
+**Also done by hand:** the defence-in-depth test — a client deliberately inserted
+into `project_members`, sweep re-run, every count still 0, row removed. That is
+the one that matters in three years.
+
+**Known and deliberate:** open-book spend plus contract value still lets a client
+derive margin by subtraction, while the brief says never show margin. Both cannot
+hold. Stated in 065's header and §6 of CLIENT_SECURITY_TEST.md; the one-line fix
+is named there. A commercial decision, not an engineering one.
+
+**Tools now in the repo:** `client-security-sweep.js` (the exhaustive one — use
+this), `client-security-test.js` (the older 49-check version),
+`CLIENT_SECURITY_TEST.md` (the manual/SQL routes plus §1i by hand). All three
+need `npm run dev`; `window.supabase` is stripped from production builds.
+
 ## Done (migrations 001–018 ALL APPLIED — confirmed 2026-07-25)
 - [x] Day 1: Foundation — auth, roles/RLS, app shell, Dashboard
 - [x] Day 2: Open Book — expenses, budgets, receipts, budget-vs-actual
@@ -4180,3 +4224,121 @@ breaks.** Every animation added here had to answer "what does this tell the read
 draws the eye to money, the growing bar makes overspend legible, the lift says a card is a door.
 Anything that only said "look, movement" was left out, and the count-up was deliberately crippled in
 three ways to stop it lying about data.
+
+---
+
+## Session — CLIENT role + curated client data layer (migration 065)
+
+A fifth role. A client signs in to the same app, is tied to exactly ONE project, and reaches a small
+curated surface built for them. **Data layer only — no UI this session, as asked.**
+
+### The three things that would have leaked
+
+**1. `is_member()` is the key to the whole building.** ~30 tables are gated on it. Had a client been
+added to `project_members`, they would have inherited read on tasks, site logs, snags, RFIs,
+clashes, approvals, documents, material inward, purchase orders, drawings and RA bills in one step.
+
+Two defences: the link is a separate table (`client_projects`), **and** `is_member()` now returns
+false for a client before it consults `project_members` at all. Verified by deliberately inserting
+the bad row — `is_member` stayed false and every internal count stayed at zero. The second defence
+is the one that matters; the first is only a convention.
+
+**2. Fourteen policies said `using (true)`** — "any authenticated user". A client is authenticated.
+Without the change they would have seen every staff profile, the whole materials master, the labour
+supply chain, Mason Learn, and `project_members` — which maps every project in the company and hands
+a client the project ids of your other clients to probe with. All now `is_internal()`.
+
+**3. `invoice_type` contains `management_fee`.** "Show the client their invoices" would have told
+them the fee in rupees. `v_client_invoices` returns `progress` only.
+
+### Built
+
+`client_projects` (one project per client, enforced by a unique constraint), `client_photos`,
+`client_messages`, `documents.client_visible` (default false), `invoices.paid_on/paid_amount`,
+`is_client()`, `is_internal()`, `fn_client_project()`, a hardened `is_member()`, ten `v_client_*`
+views, `fn_client_decide`, `fn_record_invoice_payment`, audit triggers throughout.
+
+Every curated view is **owner-run with `where project_id = fn_client_project()` as the access
+control** — the 010/038 pattern, and it carries the same warning: losing that WHERE from any one
+view is a silent total leak.
+
+### Caught in testing
+
+**`fn_audit` assumes an `id` column.** `client_projects` was keyed on `user_id`, so the audit trigger
+raised "record new has no field id" and — because the trigger runs in the same transaction —
+**aborted the write**. Granting a client access would have failed in production with an error naming
+neither the table nor the function. Exactly the 051 trap. Fixed with a surrogate `id` plus a unique
+constraint on `user_id`, which keeps "exactly one project" intact.
+
+### Two things that did not exist and were added rather than faked
+
+- **Payment status.** `invoice_status` is only ('issued','cancelled'); there is no payment tracking
+  anywhere. Rather than derive a fiction, `paid_on`/`paid_amount` plus `fn_record_invoice_payment`.
+  Deliberately not a payments ledger with allocations — that is its own module.
+- **Photo sharing.** Photos live in a `text[]`, so a per-photo flag was impossible without a second
+  index-aligned array. Publishing a photo is now its own row with an author and a timestamp.
+
+### Verified — two clients, two projects, on a real PostgreSQL
+
+| Check | Result |
+|---|---|
+| 19 internal money surfaces (expenses, budgets, POs, VOs, invoices, RA bills, retention, BGs, overheads, vendors, wage rates, rate comparisons, audit log, P&L, spend, budget-vs-actual, portfolio) | all **0** |
+| 9 company-wide tables that were `using (true)` | all **0** |
+| 8 project tables (schedule, tasks, site logs, documents, snags, RFIs, clashes, drawings) | all **0** |
+| `profiles` | exactly **1** — their own |
+| Curated views | their project only, correct data |
+| Second client | sees only their own project, 0 of the first client's documents/invoices |
+| Client wrongly added to `project_members` | `is_member` **false**, all counts still **0** |
+| `management_fee` invoice | absent from `v_client_invoices` |
+| Confidential document flagged client_visible | still hidden |
+
+### The commercial decision, stated rather than buried
+
+Open-book spend **plus** contract value lets a client derive gross margin by subtraction, while the
+same brief says never show margin. Both cannot hold. It is implemented as asked, the contradiction
+is written into the migration header and the end of `CLIENT_SECURITY_TEST.md`, and the one-line fix
+is named. A commercial choice made silently inside a migration is the worst place for it to live.
+
+### Run migration 065 before testing.
+
+Then work through `CLIENT_SECURITY_TEST.md` — §1i (client wrongly added to project_members) is the
+one that matters in three years.
+
+**Follow-up — the client guard (CP2a).** Testing 065 with a real client account showed the data
+layer working exactly as designed (every internal surface empty) but the client standing in the
+wrong building: they landed on the internal Command dashboard reading "No projects yet", with a Docs
+tab offering Drawings and Learn, and a card offering them a daily task reminder.
+
+None of that leaked anything. All of it looked broken.
+
+- **`RequireInternal` wraps the entire `<AppShell>` route**, not each screen. One insertion point,
+  so every internal screen — including ones added next year by somebody who has never read 065 — is
+  covered by default. A per-screen list is a list somebody forgets to add to, and the forgotten one
+  is the leak.
+- **`RequireClient` + `/portal`** — a deliberately near-empty holding page showing only the client's
+  project name. That one fact proves `fn_client_project()` and `v_client_project` work end to end
+  through a real session, and everything else needs the curated screens designed properly. The
+  temptation on a holding page is to put "something useful" on it; that is how a half-built room
+  nobody revisits gets made.
+- **`TABS` no longer has `roles: null`.** There is no "everyone" any more — a client is
+  authenticated too, and that is precisely what advertised Dashboard and Docs to them. Now
+  `INTERNAL_ROLES`, as a second layer behind the guard.
+- **The assistant refuses clients twice** — the launcher does not render, and the Edge Function
+  returns 403. A client has no tools (none list `client`) so nothing could have leaked, but they
+  would have reached Gemini on the firm's quota and got a general chatbot wearing the firm's name.
+
+**Lesson: a component that is safe only because of where it is mounted is one move away from being
+unsafe.** The assistant launcher was fine inside AppShell and would have become a client-facing
+chatbot the moment somebody mounted it in a layout. The role check belongs in the component.
+
+**2026-08-29 — migration 065 applied and confirmed live.** A real client account signs in, is
+redirected to `/portal` by `RequireInternal`, and sees its own project name — proving the whole
+chain end to end through a real session: JWT → `is_client()` → `fn_client_project()` → owner-run
+curated view. No internal chrome reachable.
+
+The "not linked to a project yet" state was hit first and did its job: it named the missing step
+rather than showing an error, which is exactly the case it was written for (a founder creates the
+account but has not linked it, and the client cannot fix it themselves).
+
+Still to do before the portal is real: **run `CLIENT_SECURITY_TEST.md`** against the live database.
+The guard is convenience; that document is the proof. §1i is the one that matters in three years.

@@ -68,6 +68,10 @@ Deno.serve(async (req) => {
     return json({ error: 'Only the founder can create users' }, 403)
   }
 
+  // Stamped on client_projects.granted_by below. Letting a client in is a
+  // commercial act, so it records who did it.
+  const callerId = userData.user.id
+
   // ---- 2. Validate input ----
   let body: {
     email?: string
@@ -77,6 +81,15 @@ Deno.serve(async (req) => {
     role?: string
     designation?: string
     project_ids?: string[]
+    /**
+     * CLIENT ACCOUNTS ONLY. The single project this client may see.
+     * `client_projects.user_id` is UNIQUE (065), so a client account belongs to
+     * exactly one project and this is a scalar, not the `project_ids` array
+     * that staff assignments use. Two different shapes on purpose: they are
+     * different relationships, and collapsing them into one field is how an
+     * outsider eventually ends up on two jobs.
+     */
+    client_project_id?: string
   }
   try {
     body = await req.json()
@@ -88,12 +101,36 @@ Deno.serve(async (req) => {
   const password = body.password ?? ''
   const fullName = (body.full_name ?? '').trim()
   const role = body.role ?? 'supervisor'
-  const validRoles = ['founder', 'pm', 'supervisor', 'accounts']
+  const validRoles = ['founder', 'pm', 'supervisor', 'accounts', 'client']
+  const isClient = role === 'client'
 
   if (!email || !email.includes('@')) return json({ error: 'A valid email is required' }, 400)
   if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400)
   if (!fullName) return json({ error: 'Full name is required' }, 400)
   if (!validRoles.includes(role)) return json({ error: 'Unknown access role' }, 400)
+
+  // A client with no project is the "Your account is not linked to a project
+  // yet" dead end. Refuse it here rather than create half an account: the check
+  // is cheap and the half-created state needs SQL to repair.
+  if (isClient && !body.client_project_id) {
+    return json({ error: 'A client account must be linked to a project' }, 400)
+  }
+  // And the reverse — a staff role must never arrive carrying a client link.
+  if (!isClient && body.client_project_id) {
+    return json({ error: 'Only a client account takes a project link' }, 400)
+  }
+  // A client is an outsider, not a job title. `designation` maps titles to
+  // access roles for STAFF (019) and must never become load-bearing for an
+  // audience outside the firm — the 043 rule.
+  if (isClient && body.designation) {
+    return json({ error: 'A client account has no job title' }, 400)
+  }
+  // Portal access is a commercial act: only a founder grants it. The caller is
+  // already known to be a founder by this point, but stating it here keeps the
+  // rule next to the branch it governs.
+  if (isClient && Array.isArray(body.project_ids) && body.project_ids.length > 0) {
+    return json({ error: 'A client is never a project member' }, 400)
+  }
 
   // ---- 3. Create — service role, only now that the founder check passed ----
   const admin = createClient(url, serviceKey, {
@@ -132,7 +169,28 @@ Deno.serve(async (req) => {
     return json({ error: `Profile setup failed: ${profErr.message}` }, 400)
   }
 
-  // ---- 4. Project assignments ----
+  // ---- 4a. Client: link to the one project, or undo the whole thing ----
+  // An auth login that can sign in but reaches no project is worse than no
+  // account: it looks broken to the client and needs SQL to repair. So a failed
+  // link deletes the user, which cascades the profile row (001).
+  if (isClient) {
+    const { error: linkErr } = await admin
+      .from('client_projects')
+      .insert({
+        user_id: newId,
+        project_id: body.client_project_id,
+        granted_by: callerId,
+      })
+
+    if (linkErr) {
+      await admin.auth.admin.deleteUser(newId)
+      return json({ error: `Portal access failed: ${linkErr.message}` }, 400)
+    }
+
+    return json({ id: newId, email, full_name: fullName, role }, 200)
+  }
+
+  // ---- 4b. Staff project assignments ----
   const projectIds = Array.isArray(body.project_ids) ? body.project_ids : []
   if (projectIds.length > 0) {
     const rows = projectIds.map((pid) => ({ project_id: pid, user_id: newId }))

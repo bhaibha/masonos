@@ -34,3 +34,22 @@ export const supabase = createClient(url, anonKey, {
     detectSessionInUrl: false,
   },
 })
+
+/**
+ * DEV ONLY: expose the client so security tests can be run from the browser
+ * console against a real session.
+ *
+ * `import.meta.env.DEV` is a compile-time constant, so this whole block is
+ * removed from the production bundle by dead-code elimination — there is no
+ * `window.supabase` on the deployed app. Verified by grepping the built
+ * assets.
+ *
+ * It exists because CLIENT_SECURITY_TEST.md and SUPERVISOR_RLS_CHECKLIST.md
+ * both test RLS by querying the database AS THE SIGNED-IN USER, bypassing the
+ * UI entirely. That is the only honest way to prove the boundary: a screen
+ * that looks right proves the interface hides data, not that the database
+ * refuses it.
+ */
+if (import.meta.env.DEV) {
+  ;(window as unknown as { supabase: typeof supabase }).supabase = supabase
+}

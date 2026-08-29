@@ -668,3 +668,18 @@ phone layout below `lg` does not move.
       horizontally.
 - [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
       thumb-sized targets.
+
+## Client portal (new workstream — M25 was CUT as a public website; this is not that)
+
+An internal-app client role: one project, curated read-only surface plus approve. No public site.
+
+- [x] **CP1. Secure data layer — migration 065.** Client role, client_projects link, hardened
+      is_member(), 14 `using (true)` policies closed, client_visible opt-in, ten curated v_client_*
+      views, client RPCs, audit. **Data layer only — no UI.** Run 065 before testing.
+- [x] **CP2a. Guard.** `RequireInternal` wraps the whole internal shell, `RequireClient` wraps the
+      portal, `/portal` holding page, TABS closed to clients, assistant refuses clients at both the
+      launcher and the Edge Function. A client can no longer reach internal chrome.
+- [ ] CP2b. The portal shell proper — its own nav with the client's five destinations.
+- [ ] CP3. Client screens: progress, photos, open book, documents, invoices, approvals, messages.
+- [ ] CP4. Team-side: publish a photo, tick client_visible on a document, record an invoice payment,
+      reply in the thread, create/revoke a client account in Admin.

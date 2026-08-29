@@ -5,6 +5,10 @@ import { cn } from '@/lib/utils'
 const tabs = [
   { to: '/admin', label: 'Projects', end: true },
   { to: '/admin/team', label: 'Team' },
+  // Clients are a SEPARATE tab from Team on purpose. Sharing one screen would
+  // eventually mean sharing one role picker, and an outsider created as a `pm`
+  // is the one mistake in this app that cannot be undone quietly.
+  { to: '/admin/clients', label: 'Clients' },
 ]
 
 export default function AdminLayout() {
