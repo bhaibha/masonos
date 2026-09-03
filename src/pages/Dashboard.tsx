@@ -3,6 +3,7 @@ import {
   CalendarClock,
   ChevronRight,
   Landmark,
+  MessageSquare,
   Settings2,
   ShieldCheck,
 } from 'lucide-react'
@@ -26,6 +27,10 @@ import {
   fetchPortfolioSummary,
   fetchProjectPulse,
 } from '@/lib/queries/dashboard'
+import {
+  type ClientAttention,
+  fetchClientAttention,
+} from '@/lib/queries/clientMessages'
 import { fetchComplianceAlert } from '@/lib/queries/compliance'
 import { fetchProjectSpend } from '@/lib/queries/projects'
 import { fetchInsuranceAlert } from '@/lib/queries/insurance'
@@ -56,6 +61,7 @@ export default function Dashboard() {
   const [pulse, setPulse] = useState<Map<string, ProjectPulse>>(new Map())
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null)
   const [compliance, setCompliance] = useState<ComplianceAlert | null>(null)
+  const [client, setClient] = useState<ClientAttention | null>(null)
   const [bg, setBg] = useState<BgAlert | null>(null)
   const [insurance, setInsurance] = useState<InsuranceAlert | null>(null)
   const [pnl, setPnl] = useState<Map<string, ProjectPnl>>(new Map())
@@ -110,6 +116,16 @@ export default function Dashboard() {
         })
         .catch(() => {})
     }
+
+    // What the client is waiting on (073). security_invoker, so a supervisor
+    // sees nothing (client_messages_read and the approvals policies both need
+    // membership plus the right role) and the strip does not render for them.
+    // Returns null before 073 is applied, which has the same effect.
+    fetchClientAttention()
+      .then((c) => {
+        if (!cancelled) setClient(c)
+      })
+      .catch(() => {})
 
     // Compliance counts. RLS gives a supervisor zeroes rather than an error,
     // and the query returns null before migration 028 — either way the strip
@@ -177,6 +193,7 @@ export default function Dashboard() {
           />
         )}
 
+        {client !== null && <ClientStrip alert={client} />}
         {compliance !== null && <ComplianceStrip alert={compliance} />}
         {bg !== null && <BgStrip alert={bg} />}
         {insurance !== null && <InsuranceStrip alert={insurance} />}
@@ -283,6 +300,64 @@ function AlertStrip({
         <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
       </Link>
     </FadeUp>
+  )
+}
+
+/**
+ * WHAT THE CLIENT IS WAITING ON — first strip, above compliance and the expiry
+ * registers, because a person waiting on an answer outranks a date on a
+ * calendar.
+ *
+ * Urgent ONLY when the client asked for a change and nobody has looked. An
+ * approval needs no action, and a strip that turns red for good news teaches
+ * people to ignore red. The unseen counts clear themselves the moment somebody
+ * opens the register, so this cannot become permanent — which is the whole
+ * reason there is no stored "important" flag behind it.
+ */
+function ClientStrip({ alert }: { alert: ClientAttention }) {
+  const parts: string[] = []
+  if (alert.unseen_rejections > 0)
+    parts.push(
+      alert.unseen_rejections === 1
+        ? '1 change requested'
+        : `${alert.unseen_rejections} changes requested`,
+    )
+  if (alert.unread_messages > 0)
+    parts.push(
+      alert.unread_messages === 1
+        ? '1 unread message'
+        : `${alert.unread_messages} unread messages`,
+    )
+  if (alert.unseen_approvals > 0)
+    parts.push(
+      alert.unseen_approvals === 1
+        ? '1 new approval'
+        : `${alert.unseen_approvals} new approvals`,
+    )
+  if (alert.stale_pending > 0)
+    parts.push(
+      alert.stale_pending === 1
+        ? '1 waiting on them'
+        : `${alert.stale_pending} waiting on them`,
+    )
+
+  return (
+    <AlertStrip
+      icon={MessageSquare}
+      label="From your client"
+      parts={parts}
+      urgent={alert.unseen_rejections > 0}
+      // Messages, because that is where a conversation continues. The approvals
+      // register is one tab away and marks itself seen when opened.
+      to={alert.unread_messages > 0 ? '/tasks/messages' : '/tasks/approvals'}
+      trailing={
+        // The age, not the count — three items pending is normal, one of them
+        // pending nine weeks is what stalls a job (the 060 rule).
+        alert.stale_pending > 0 && alert.oldest_pending_days
+          ? `Oldest: ${alert.oldest_pending_days} days`
+          : undefined
+      }
+    />
   )
 }
 

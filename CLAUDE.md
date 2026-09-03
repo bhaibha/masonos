@@ -300,7 +300,169 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   the `/admin/clients` tab. Verified on a real PostgreSQL with the ACTUAL
   001-066 chain: three clean runs, founder/pm/accounts see the roster,
   supervisor and client get zero rows, all three guards confirmed firing.
-  Next migration = 068.
+  **068 WRITTEN, NOT YET APPLIED** — a client can DOWNLOAD what was shared
+  (`site_photos_client_read`, `documents_client_read` on storage.objects).
+  Ships with CP3 (the portal screens) and CP4 (the share toggles).
+  **069 WRITTEN, NOT YET APPLIED** — `documents` had NO UPDATE policy, so every
+  update to a document has always been refused. Adds `fn_set_document_shared`
+  and `fn_set_document_subfolder` (repairing 031, broken since it shipped).
+  **070 WRITTEN, NOT YET APPLIED** — 068's two storage policies could never
+  have worked; they query `public.documents` / `public.client_photos` directly,
+  and a policy's subquery inherits THAT table's RLS. Re-emitted against the
+  owner-run `v_client_documents` / `v_client_photos` views.
+  **071 WRITTEN, NOT YET APPLIED** — 065 clobbered 060's internal approvals
+  register by reusing its view name. Restores it as `v_approval_register`.
+  **072 WRITTEN, NOT YET APPLIED** — `fn_mark_client_messages_read`, so the
+  team side of the client thread can clear `read_at`. Ships with
+  `/tasks/messages` (the thread + reply box) and `queries/clientMessages.ts`.
+  **073 WRITTEN, NOT YET APPLIED** — client attention signals
+  (`client_approvals.team_seen_at` + partial index, `fn_mark_approvals_seen`,
+  `fn_client_attention`). Ships with the "From your client" dashboard strip and
+  seen-marking on the approvals register.
+  **074 WRITTEN, NOT YET APPLIED** — `v_client_photos` becomes a union of
+  published site-log photos and shared image documents, each row carrying its
+  `bucket`. One gallery whichever way a picture was shared.
+  Next migration = 075.
+- **Do not make the user learn where to put things (074).** A founder uploaded
+  eleven images to a vault folder literally called "Photos", ticked share, and
+  found them in the portal's DOCUMENTS tab while the Photos tab said "No photos
+  yet". Both statements were true and the combination was nonsense. The fix is
+  the view learning about both routes, not a rule the firm has to remember.
+- **Filtering for PRESENTATION belongs in the app; filtering for ACCESS belongs
+  in the view (074).** Images are hidden from the portal's Documents tab in the
+  query file, NOT by removing them from `v_client_documents` — because 070's
+  storage policy grants a client read on a file precisely BECAUSE a row exists
+  in that view. Tightening the view to de-duplicate a list would have silently
+  refused every image in the gallery.
+- **Carry the bucket, do not infer it (074).** A gallery row now says which
+  bucket its file is in, because the two routes land in different buckets and
+  deriving it from the path in the browser would be a guess that breaks the
+  first time a path convention changes.
+- **A flag that is true for everything carries no information (073).** The ask
+  was "mark client messages and approvals as important". Stored literally that
+  is a permanent badge on every client-originated row, and a permanent badge is
+  one people stop seeing — the 063 snooze lesson in a different costume. So
+  nothing is flagged: the alert is DERIVED from state that already means
+  something (unread, undecided, unseen) and clears itself when somebody looks.
+- **Separate the signal that needs action from the one that does not (073).**
+  `unseen_rejections` is counted apart from `unseen_approvals` and is the only
+  thing that makes the strip urgent. A strip that turns red for good news
+  teaches people to ignore red.
+- **An index predicate must be IMMUTABLE, and `enum::text` is only STABLE
+  (073).** `where status::text <> 'pending'` — the form used safely everywhere
+  else in this repo because of the 021 enum trap — is refused in a partial
+  index with "functions in index predicate must be marked IMMUTABLE". Use the
+  enum literal (`status <> 'pending'::approval_state`) there. Safe whenever the
+  enum value was created in an EARLIER migration; 021 only bites a value added
+  in the same transaction.
+- **`having`/filtered-empty is right when "nothing" is the empty case (073).**
+  066 banned hiding an empty aggregate because a legitimate zero (nothing spent)
+  had to stay visible. Here the opposite holds: "nothing is waiting" IS the
+  empty case, so `fn_client_attention` returns ZERO ROWS and the strip vanishes.
+  An alert rendering "0 unread" is noise, and noise is how a real one gets
+  missed.
+- **Half a feature is worse than none, because only one side can see it (072).**
+  065 built `client_messages` with policies for BOTH audiences, CP3 built the
+  client's screen, and no internal screen existed — so a client could write
+  "the gate colour looks wrong" into a table nobody in the firm could open. 067
+  then added an `unread_from_client` count to the Admin roster, which would have
+  reported a waiting message with no way to read it: the worst state, because it
+  LOOKS handled. When a table has two audiences, both screens ship together or
+  neither does.
+- **A column nothing writes is a bug with a delay fuse (072).** `read_at` was
+  created in 065 and nothing ever set it, because no UPDATE policy exists (by
+  design — a sent message stays sent). The 067 unread count read that column, so
+  it would have counted every message forever. Marking read had to be a
+  SECURITY DEFINER function touching one column on rows the client sent, exactly
+  the 069 shape.
+- **`drop view … cascade` on a name you did not create is a CLOBBER, not an
+  idempotency helper (071).** 065 wrote that line ten times for its ten
+  `v_client_*` views without checking whether any name was taken. One was:
+  migration 060 had already created `v_client_approvals` as the INTERNAL
+  register — approvals GIVEN BY a client, with project_name, method, evidence
+  and the raiser. 065 replaced it with the PORTAL view — approvals shown TO a
+  client, deliberately stripped of all of that. Same name, opposite meanings.
+  The founder's Approvals screen broke the moment 065 was applied and stayed
+  broken for three sessions, because nobody opened it: it reported
+  `column v_client_approvals.project_name does not exist` and rendered an empty
+  register. The approvals themselves were fine the whole time — raised, sent,
+  decided — only the internal LIST was blind.
+  **Before `create view`, grep the repo for the name.** A naming CONVENTION
+  (`v_client_*`) does not reserve the namespace, and a prefix that reads as
+  "for clients" also reads as "about clients".
+- **A screen nobody opens during a session is a screen nobody tests (071).**
+  065, 066, 067 and the whole CP3/CP4 build all touched approvals and none of
+  them loaded Tasks -> Approvals. After a migration that drops or replaces a
+  view, open every screen that reads it — the list is `grep -rn "<viewname>"
+  src/`, which takes ten seconds.
+- **AN RLS POLICY'S SUBQUERY IS ITSELF SUBJECT TO RLS (070).** 068 granted a
+  client read on a storage object with
+  `exists (select 1 from public.documents d where d.file_path = objects.name …)`.
+  Every condition was right and it returned nothing: the subquery runs with the
+  caller's privileges, so `documents_read` applied, and that requires
+  `is_member()` — which 065 made false for a client. The client could see the
+  row through the owner-run VIEW and not through the base table, and the policy
+  asked the base table. **If a policy must see a row the caller cannot, it goes
+  through a SECURITY DEFINER function or an owner-run view.** The fix asks
+  `v_client_documents` — the same view the list is built from — so the storage
+  grant and the listing cannot disagree by construction.
+- **Supabase storage returns "Object not found" for an RLS refusal (070).** It
+  is indistinguishable from a genuinely missing file, which is what made this
+  take three rounds. When a storage read fails, prove the object exists with a
+  `left join storage.objects on o.name = <path>` as `postgres` BEFORE theorising
+  about paths — same lesson as 058's "probe the endpoint".
+- **A swallowed error costs more than a bad error (070).** `signedDocumentUrl`
+  returned `string | null`, so the screen invented a cause ("your team may have
+  unshared it") that was confidently wrong and sent the founder looking in the
+  wrong place. It now returns `{ url, error }` and the toast prints what storage
+  actually said. Any helper that can fail for more than one reason returns the
+  reason.
+- **A table with no UPDATE policy refuses every update, silently (069).**
+  `documents` had SELECT, INSERT and DELETE policies and no UPDATE one, so
+  migration 031's sub-folder move has never worked in production — the PATCH
+  was refused, the toast was dismissed, and nobody noticed because filing a
+  document into a sub-folder is rare. **A capability nobody exercises is a
+  capability nobody discovers is missing.** When adding a write to an existing
+  table, check `pg_policies` for that CMD before assuming the table is writable.
+- **Do not fix it with an UPDATE policy (069).** An RLS UPDATE policy cannot say
+  WHICH columns, and on `documents` three columns ARE the security model:
+  `is_confidential` (hides from supervisors and clients), `project_id` (what
+  every is_member() reads) and `file_path` (what the 068 storage policy matches).
+  A policy loose enough to allow a sub-folder move is loose enough for a PATCH
+  to flip any of them. So the table keeps no UPDATE policy and two narrow
+  SECURITY DEFINER functions do the work — the same shape as `fn_void_record`,
+  where the ABSENCE of a policy is what makes the RPC unbypassable. Verified on
+  a real PostgreSQL with production-equivalent grants: the direct PATCH returns
+  0 rows.
+- **`String(err)` on a Supabase error prints "[object Object]" (069).** A
+  PostgrestError is a plain object, not an Error, so a hand-written
+  `err instanceof Error ? err.message : String(err)` hides the real cause — it
+  cost a whole debugging round here. The repo has `errText()` for exactly this;
+  every catch block uses it.
+- **Exposing a row is not exposing its FILE (068, found while building CP3).**
+  065 gave a client `v_client_documents` and `v_client_photos` — titles and
+  paths — but never touched storage, whose policies all read
+  `is_member(fn_storage_project(name))`, and 065 had just made `is_member()`
+  false for a client. So the portal would have listed documents nobody could
+  open and rendered every photo broken. Whenever a new audience gets a view over
+  something with a file behind it, the bucket policy is a SECOND migration, not
+  an afterthought.
+- **Grant the OBJECT, never the prefix (068).** The easy fix was
+  `or project_id = fn_client_project()`, which hands a client every object under
+  their project's prefix — receipts, drawings, confidential documents,
+  unpublished photos. Instead each policy requires a matching PUBLISHED ROW for
+  that exact path, so the storage grant is derived from the act of publishing
+  and the two cannot drift: unshare the document and the file is refused in the
+  same instant, so an old signed URL stops working rather than quietly
+  continuing to serve.
+- **Publishing belongs on the thing being published (CP4).** The share toggle is
+  on the document in the vault and on the photo in the site log — never on the
+  Admin screen, which only REPORTS the counts. Two places to manage visibility
+  means the two eventually disagree, and the disagreement is silent.
+- **Never offer a control the database will refuse.** The share toggle is hidden
+  on a confidential document, because `v_client_documents` and the 068 policy
+  both test `is_confidential` independently of `client_visible`. Showing the
+  toggle would promise something Postgres then declines.
 - **`is_internal()` is the wrapper for a surface EVERY internal role can read —
   not for a restricted one (067, caught by its own test).**
   `fn_client_roster_summary` sums `v_client_roster`, which supervisors cannot

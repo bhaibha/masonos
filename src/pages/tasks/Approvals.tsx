@@ -18,6 +18,7 @@ import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { markApprovalsSeen } from '@/lib/queries/clientMessages'
 import { errText } from '@/lib/errText'
 import {
   createApproval,
@@ -106,6 +107,15 @@ export default function Approvals() {
     // optional, the record is not.
     void fetchApprovalLinkOptions(projectId).then(setLinks).catch(() => {})
   }, [projectId, mayLog])
+
+  // Opening the register IS the act of seeing the client's decisions, so it
+  // clears the dashboard strip (073) — not a "mark as seen" button, which
+  // people click without reading. Failure is silent: the register loaded, which
+  // is what was asked for, and the strip simply stays up until next time.
+  useEffect(() => {
+    if (!projectId) return
+    void markApprovalsSeen(projectId).catch(() => {})
+  }, [projectId])
 
   if (!projectId) {
     return (

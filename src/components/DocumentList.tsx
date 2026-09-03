@@ -4,7 +4,7 @@ import { DeleteButton } from '@/components/DeleteAction'
 import { Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { errText } from '@/lib/errText'
-import { setDocumentSubfolder } from '@/lib/queries/documents'
+import { setDocumentShared, setDocumentSubfolder } from '@/lib/queries/documents'
 import { signedDocumentUrl } from '@/lib/storage'
 import {
   canUploadDocs,
@@ -89,6 +89,38 @@ function DocumentItem({
   const role = useAuth((s) => s.role)
   const [busy, setBusy] = useState(false)
   const [moving, setMoving] = useState(false)
+  const [shared, setShared] = useState(doc.client_visible)
+  const [sharing, setSharing] = useState(false)
+
+  // Founder/PM only, matching who may publish a photo (065). And NEVER for a
+  // confidential document: the curated view and the 068 storage policy both
+  // refuse one regardless of this flag, so offering the toggle would promise
+  // something the database would then decline.
+  const canShare = (role === 'founder' || role === 'pm') && !doc.is_confidential
+
+  async function toggleShare() {
+    setSharing(true)
+    try {
+      await setDocumentShared(doc.id, !shared)
+      setShared(!shared)
+      toast.success(
+        shared ? 'No longer shared with the client' : 'Shared with the client',
+        {
+          description: shared
+            ? 'Any link they already had stops working.'
+            : 'It appears in their portal straight away.',
+        },
+      )
+    } catch (err) {
+      // errText, not String(err): a Supabase PostgrestError is a plain object
+      // and stringifies to "[object Object]", which hid the real cause of this
+      // exact failure for a whole debugging round.
+      toast.error('Could not change what the client sees', {
+        description: errText(err),
+      })
+    }
+    setSharing(false)
+  }
 
   async function open() {
     setBusy(true)
@@ -138,6 +170,11 @@ function DocumentItem({
               Confidential
             </span>
           )}
+          {shared && (
+            <span className="rounded-md bg-[var(--positive)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--positive)]">
+              Client
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
             {busy ? '…' : 'Open'}
           </span>
@@ -156,6 +193,26 @@ function DocumentItem({
             onDeleted={onChanged}
             className="-ml-2"
           />
+
+          {/* Sharing lives HERE, on the document, not on an Admin screen.
+              Two places to manage visibility means the two eventually
+              disagree, and the disagreement is silent. */}
+          {canShare && (
+            <button
+              type="button"
+              onClick={() => void toggleShare()}
+              disabled={sharing}
+              aria-pressed={shared}
+              className={cn(
+                'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                shared
+                  ? 'bg-[var(--positive)]/15 text-[var(--positive)]'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {shared ? 'Shared with client' : 'Share with client'}
+            </button>
+          )}
 
           {/* Filing a document into a sub-folder after the fact. Only offered
               when there is somewhere else for it to go. */}

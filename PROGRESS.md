@@ -1,6 +1,92 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## CLIENT PORTAL — SCREENS, SHARING, MESSAGES (2026-09-03, migrations 068-074)
+
+The portal is now a working two-way surface, not a data layer with a holding
+page. **Run 070, 071, 072, 073 and 074** — `supabase/APPLY_pending.sql` holds
+all five in order.
+
+### CP3 — the client's screens
+`/portal` on its own shell (never AppShell, so no internal chrome can leak in):
+Progress (budget-weighted %, stages by phase, open-book spend by category vs
+contract), Photos (gallery + lightbox), Documents, Bills, Approvals
+(approve / ask-for-a-change, reason required), Messages.
+
+### CP4 — sharing, on the thing being shared
+**Share with client** on a document in the vault, and on a saved photo in the
+site log. Founder/PM only. Hidden entirely on a confidential document, because
+the view and the storage policy both refuse one regardless of the flag —
+offering the control would promise something Postgres then declines. Publishing
+never lives on the Admin screen, which only REPORTS the counts.
+
+### Five bugs found by using it, four of them mine
+- **068** — 065 exposed document/photo ROWS but never touched storage, whose
+  policies key on `is_member()`, which 065 had just made false for a client. The
+  portal would have listed files nobody could open.
+- **069** — `documents` had **no UPDATE policy at all**, so every update was
+  refused: migration 031's sub-folder move never worked in production. Fixed
+  with two narrow SECURITY DEFINER functions rather than a policy, because an
+  RLS UPDATE policy cannot restrict WHICH column.
+- **070** — 068's storage policies could never have worked: a policy's subquery
+  is itself subject to RLS on the table it reads. Re-emitted against the
+  owner-run views.
+- **071** — 065 clobbered 060's internal approvals register by reusing its view
+  name. The founder's Approvals screen had been blind since 065 was applied.
+  Restored as `v_approval_register`.
+- **074** — the Photos tab only knew about site-log photos, so images shared
+  from the vault's Photos folder landed in Documents. Now one gallery over both
+  routes, each row carrying its own bucket.
+
+### Client messages, both sides (072)
+`/tasks/messages` — the thread and a reply box, founder/PM write, supervisor
+reads. Marking read happens when a human OPENS the thread, not on a button.
+No read receipt for the client, on purpose: "read ✓✓" followed by a week of
+silence is worse than showing nothing.
+
+### "From your client" (073)
+A dashboard strip above the compliance and expiry alerts, because a person
+waiting on an answer outranks a date on a calendar. Four derived signals —
+unread messages, changes requested, new approvals, approvals aging on the
+client — and **no stored "important" flag**: a flag true for everything is a
+permanent badge, and a permanent badge is one people stop seeing. Urgent only
+for a change request. Clears itself when somebody opens the register or thread.
+
+### Still open
+- **Client sets their own password.** Today the founder types one and tells
+  them, so the firm knows the client's password and there is no recovery.
+  Supabase Auth has `inviteUserByEmail` and `resetPasswordForEmail`; both need
+  SMTP configured on the project first — a decision, not a code change.
+- **Timeline and milestones on the client home.** `v_client_progress` already
+  carries planned/actual dates; the screen does not render them yet.
+- The approvals form still asks "How they said it" at creation, which was
+  written before the portal existed and has no honest answer when you are
+  ASKING rather than recording.
+
+## CLIENT ADMINISTRATION (2026-08-29, migration 067)
+
+`/admin/clients` — the founder grants and revokes portal access without the SQL
+editor. Third tab alongside Projects and Team, deliberately separate from Team.
+
+- `v_client_roster` leads with EXPOSURE per client: documents shared, photos
+  published, bills visible, approvals pending, unread messages. Owner-run, the
+  WHERE clause is the access control, carries no money.
+- **Suspend** (reversible, the handover case) and **Remove access** (deletes the
+  link, deactivates, keeps the profile) are separate buttons. One "remove" would
+  hide which happened.
+- `admin-create-user` gained a `client` branch — it could not create a client at
+  all before, which is why the first account was made by hand in SQL. It writes
+  auth user + profile + `client_projects` together and deletes the user if the
+  link fails, so a half-created client cannot exist.
+- Not built, on purpose: no "view as client" (needs a client session, i.e. an
+  impersonation path) and no permission-toggle grid (the curated views ARE the
+  permission model).
+
+**Still to do:** run migration 067 and `supabase functions deploy
+admin-create-user`, then re-run `client-security-sweep.js` as the test client —
+it now covers `v_client_roster` and all five new functions and must stay at 0
+failures.
+
 ## CLIENT SECURITY — VERIFIED END TO END (2026-08-29, migration 066)
 
 The client portal data layer (065) is now proven against a real signed-in client,

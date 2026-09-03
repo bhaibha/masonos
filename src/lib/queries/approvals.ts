@@ -64,7 +64,7 @@ export async function fetchApprovals(
   status: ApprovalState | null,
 ): Promise<ClientApprovalRow[]> {
   let q = supabase
-    .from('v_client_approvals')
+    .from('v_approval_register')
     .select(COLUMNS)
     .eq('project_id', projectId)
     .order('status', { ascending: true })

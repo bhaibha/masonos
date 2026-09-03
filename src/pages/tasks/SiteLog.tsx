@@ -6,6 +6,12 @@ import { FieldRow, Select, Textarea } from '@/components/Field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { errText } from '@/lib/errText'
+import {
+  fetchPublishedPhotos,
+  publishPhoto,
+  type PublishedPhoto,
+  unpublishPhoto,
+} from '@/lib/queries/clientShare'
 import { fetchMySiteLog, upsertSiteLog } from '@/lib/queries/siteLogs'
 import {
   compressImage,
@@ -15,6 +21,7 @@ import {
 import { canWriteTasks, WEATHER_OPTIONS } from '@/lib/types'
 import { formatDayLabel, useSelectedDate } from '@/lib/useSelectedDate'
 import { useAuth } from '@/store/auth'
+import { cn } from '@/lib/utils'
 import { useProjects } from '@/store/project'
 
 interface PendingPhoto {
@@ -28,6 +35,10 @@ export default function SiteLog() {
   const user = useAuth((s) => s.user)
   const role = useAuth((s) => s.role)
   const canWrite = canWriteTasks(role)
+  // Publishing to the client is founder/PM only — the same pair that
+  // client_photos_write allows in 065. A supervisor logs the day's work; deciding
+  // what the client is shown is a commercial judgement, not a site one.
+  const canPublishToClient = role === 'founder' || role === 'pm'
   const [date] = useSelectedDate()
 
   const [loading, setLoading] = useState(true)
@@ -293,7 +304,13 @@ export default function SiteLog() {
         {(savedPhotos.length > 0 || pending.length > 0) && (
           <div className="mt-3 grid grid-cols-3 gap-2">
             {savedPhotos.map((path) => (
-              <SavedPhoto key={path} path={path} onRemove={() => removeSaved(path)} />
+              <SavedPhoto
+                key={path}
+                path={path}
+                projectId={projectId}
+                canPublish={canPublishToClient}
+                onRemove={() => removeSaved(path)}
+              />
             ))}
             {pending.map((p, i) => (
               <div key={p.previewUrl} className="relative">
@@ -326,8 +343,20 @@ export default function SiteLog() {
   )
 }
 
-function SavedPhoto({ path, onRemove }: { path: string; onRemove: () => void }) {
+function SavedPhoto({
+  path,
+  projectId,
+  canPublish,
+  onRemove,
+}: {
+  path: string
+  projectId: string | null
+  canPublish: boolean
+  onRemove: () => void
+}) {
   const [url, setUrl] = useState<string | null>(null)
+  const [published, setPublished] = useState<PublishedPhoto | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -338,6 +367,43 @@ function SavedPhoto({ path, onRemove }: { path: string; onRemove: () => void }) 
       cancelled = true
     }
   }, [path])
+
+  useEffect(() => {
+    if (!projectId || !canPublish) return
+    let cancelled = false
+    fetchPublishedPhotos(projectId, [path])
+      .then((m) => {
+        if (!cancelled) setPublished(m[path] ?? null)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [path, projectId, canPublish])
+
+  // Publishing is a deliberate act with an author, not a side effect of
+  // uploading — nothing here reaches the client until somebody taps this.
+  async function toggleShare() {
+    if (!projectId) return
+    setBusy(true)
+    try {
+      if (published) {
+        await unpublishPhoto(path)
+        setPublished(null)
+        toast.success('Removed from the client portal')
+      } else {
+        await publishPhoto(projectId, path)
+        const m = await fetchPublishedPhotos(projectId, [path])
+        setPublished(m[path] ?? null)
+        toast.success('Published to the client portal')
+      }
+    } catch (err) {
+      toast.error('Could not change what the client sees', {
+        description: errText(err),
+      })
+    }
+    setBusy(false)
+  }
 
   return (
     <div className="relative">
@@ -358,6 +424,23 @@ function SavedPhoto({ path, onRemove }: { path: string; onRemove: () => void }) 
       >
         ×
       </button>
+
+      {canPublish && (
+        <button
+          type="button"
+          onClick={() => void toggleShare()}
+          disabled={busy}
+          aria-pressed={published !== null}
+          className={cn(
+            'absolute inset-x-1 bottom-1 rounded-md py-1 text-[10px] font-medium transition-colors',
+            published
+              ? 'bg-[var(--positive)]/90 text-white'
+              : 'bg-background/90 text-muted-foreground',
+          )}
+        >
+          {published ? 'Client can see' : 'Share with client'}
+        </button>
+      )}
     </div>
   )
 }

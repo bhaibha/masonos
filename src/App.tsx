@@ -8,7 +8,13 @@ import {
   RequireInternal,
 } from '@/components/RequireInternal'
 import { RequireRole } from '@/components/RequireRole'
-import PortalHolding from '@/pages/portal/PortalHolding'
+import PortalApprovals from '@/pages/portal/PortalApprovals'
+import PortalBills from '@/pages/portal/PortalBills'
+import PortalDocuments from '@/pages/portal/PortalDocuments'
+import PortalLayout from '@/pages/portal/PortalLayout'
+import PortalMessages from '@/pages/portal/PortalMessages'
+import PortalPhotos from '@/pages/portal/PortalPhotos'
+import PortalProgress from '@/pages/portal/PortalProgress'
 import { ADMIN_ROLES, BUDGET_WRITE_ROLES, MONEY_ROLES } from '@/lib/types'
 import Dashboard from '@/pages/Dashboard'
 import Login from '@/pages/Login'
@@ -61,6 +67,7 @@ import Qa from '@/pages/tasks/Qa'
 import Schedule from '@/pages/tasks/Schedule'
 import Approvals from '@/pages/tasks/Approvals'
 import Clashes from '@/pages/tasks/Clashes'
+import ClientMessages from '@/pages/tasks/ClientMessages'
 import SiteInstructions from '@/pages/tasks/SiteInstructions'
 import SiteLog from '@/pages/tasks/SiteLog'
 import Snags from '@/pages/tasks/Snags'
@@ -85,7 +92,14 @@ export default function App() {
           {/* The client portal. Its own route tree and its own shell — a client
               never renders AppShell, so they never see the internal nav. */}
           <Route element={<RequireClient />}>
-            <Route path="/portal" element={<PortalHolding />} />
+            <Route path="/portal" element={<PortalLayout />}>
+              <Route index element={<PortalProgress />} />
+              <Route path="photos" element={<PortalPhotos />} />
+              <Route path="documents" element={<PortalDocuments />} />
+              <Route path="bills" element={<PortalBills />} />
+              <Route path="approvals" element={<PortalApprovals />} />
+              <Route path="messages" element={<PortalMessages />} />
+            </Route>
           </Route>
 
           {/* ONE guard around the entire internal app, so every screen — and
@@ -164,6 +178,9 @@ export default function App() {
                     holds no figures. Verification and the RFI to a consultant
                     are founder/PM, enforced in the RPCs. */}
                 <Route path="clashes" element={<Clashes />} />
+                {/* Founder/PM reply; a supervisor may read. Enforced by
+                    client_messages_write (065), not by this route. */}
+                <Route path="messages" element={<ClientMessages />} />
               </Route>
 
               {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

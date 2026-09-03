@@ -681,6 +681,13 @@ export interface DocumentRow {
   po_status: PoStatus | null
   /** null = filed at the top level of its folder (migration 031) */
   subfolder_id: string | null
+  /**
+   * Shared with the client portal (migration 065). Defaults false: uploading a
+   * document does NOT share it, and sharing is a separate, deliberate act.
+   * A confidential document can never be shared — v_client_documents and the
+   * 068 storage policy both check is_confidential as well as this flag.
+   */
+  client_visible: boolean
 }
 
 // ---------- Document sub-folders (migration 031) ----------
@@ -3516,7 +3523,7 @@ export function canLogApprovals(role: UserRole | null): boolean {
   return role !== null && ['founder', 'pm'].includes(role)
 }
 
-/** Row of v_client_approvals. Carries NO amount — by design (see 060). */
+/** Row of v_approval_register (060, renamed in 071). Carries NO amount — by design. */
 export interface ClientApprovalRow {
   id: string
   approval_no: string

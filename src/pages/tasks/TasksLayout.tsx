@@ -31,7 +31,8 @@ export default function TasksLayout() {
     !pathname.startsWith('/tasks/history') &&
     !pathname.startsWith('/tasks/schedule') &&
     !pathname.startsWith('/tasks/bbs') &&
-    !pathname.startsWith('/tasks/qa')
+    !pathname.startsWith('/tasks/qa') &&
+    !pathname.startsWith('/tasks/messages')
 
   useEffect(() => {
     void load()
@@ -57,6 +58,9 @@ export default function TasksLayout() {
     { to: '/tasks/snags', label: 'Snags' },
     { to: '/tasks/approvals', label: 'Approvals' },
     { to: '/tasks/clashes', label: 'Clashes' },
+    // The team half of the client portal thread. Under Tasks, not Admin: this
+    // is project conversation, and it belongs beside the work being discussed.
+    { to: '/tasks/messages', label: 'Client messages' },
   ]
 
   return (

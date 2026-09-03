@@ -8,7 +8,7 @@ import type {
 } from '@/lib/types'
 
 const COLUMNS =
-  'id, project_id, folder, subfolder_id, title, file_path, file_type, is_confidential, uploaded_by, created_at, po_id, profiles(full_name)'
+  'id, project_id, folder, subfolder_id, title, file_path, file_type, is_confidential, client_visible, uploaded_by, created_at, po_id, profiles(full_name)'
 
 type Joined = { profiles: { full_name: string } | { full_name: string }[] | null }
 
@@ -30,6 +30,7 @@ function mapRow(r: unknown): DocumentRow {
     po_id: (row.po_id as string | null) ?? null,
     po_status: null,
     subfolder_id: (row.subfolder_id as string | null) ?? null,
+    client_visible: Boolean(row.client_visible),
   }
 }
 
@@ -173,12 +174,45 @@ export async function setDocumentSubfolder(
   documentId: string,
   subfolderId: string | null,
 ): Promise<void> {
-  const { error } = await supabase
-    .from('documents')
-    .update({ subfolder_id: subfolderId })
-    .eq('id', documentId)
-    .select('id')
-    .single()
+  // Migration 069. This used to be a direct PATCH, and it never worked:
+  // `documents` has no UPDATE policy, so RLS default-deny refused every one of
+  // them silently. The RPC is the only path, and the missing policy is what
+  // makes it unbypassable — an UPDATE policy loose enough to allow this move
+  // would also allow a hand-written PATCH to flip is_confidential.
+  const { error } = await supabase.rpc('fn_set_document_subfolder', {
+    p_document: documentId,
+    p_subfolder: subfolderId,
+  })
+  if (error) throw error
+}
 
+
+/* ---------------- Sharing with the client (migrations 065 + 068) ---------------- */
+
+/**
+ * Share a document with the client portal, or stop sharing it.
+ *
+ * This is the ONLY way a document reaches a client, and it is deliberately a
+ * separate act from uploading — `client_visible` defaults to false, so nothing
+ * is shared by accident.
+ *
+ * Two things happen at once and cannot drift apart: `v_client_documents` starts
+ * returning the row, and the 068 storage policy starts permitting a signed URL
+ * for that exact object. Unsharing withdraws both in the same instant, so an
+ * old link stops working rather than quietly continuing to serve the file.
+ *
+ * No role check here. `docs_write` (001) already restricts this to project
+ * members, and a confidential document cannot become visible to a client
+ * whatever this flag says — the view and the storage policy both test
+ * `is_confidential` independently.
+ */
+export async function setDocumentShared(
+  documentId: string,
+  shared: boolean,
+): Promise<void> {
+  const { error } = await supabase.rpc('fn_set_document_shared', {
+    p_document: documentId,
+    p_shared: shared,
+  })
   if (error) throw error
 }
