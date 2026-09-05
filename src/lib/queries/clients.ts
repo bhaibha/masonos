@@ -151,3 +151,28 @@ export async function linkClient(
   })
   if (error) throw error
 }
+
+/* ---------------- Recovery ---------------- */
+
+/**
+ * Sends the client a password reset link.
+ *
+ * Uses the ANON key and the caller's own session — `resetPasswordForEmail`
+ * needs no privilege, so no Edge Function and no service-role key is involved.
+ * The link lands on /set-password with `type=recovery`, which is the same
+ * screen an invite lands on.
+ *
+ * ONLY OFFERED TO A CLIENT WHO HAS SIGNED IN BEFORE. Someone who never accepted
+ * their invitation has no password to reset; sending them a recovery link is
+ * the wrong email and leaves them exactly as stuck. That case needs the invite
+ * re-sent, which is a service-role operation and waits on SMTP.
+ *
+ * Nothing here confirms the address exists — Supabase deliberately answers the
+ * same way either way, and the toast copies that.
+ */
+export async function sendClientPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/set-password`,
+  })
+  if (error) throw error
+}

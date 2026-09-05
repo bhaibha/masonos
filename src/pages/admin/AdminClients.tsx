@@ -1,6 +1,8 @@
 import {
   CircleSlash,
   FileText,
+  MailWarning,
+  Send,
   Image,
   KeyRound,
   MessageSquare,
@@ -26,6 +28,7 @@ import {
   fetchClientRosterSummary,
   fetchProjectsWithoutClient,
   type ProjectOption,
+  sendClientPasswordReset,
   setClientActive,
   unlinkClient,
 } from '@/lib/queries/clients'
@@ -231,6 +234,24 @@ function ClientCard({
     setBusy(false)
   }
 
+  /**
+   * The recovery path. Nothing here confirms the address exists — Supabase
+   * answers identically either way, and the toast says the same, so this
+   * cannot be used to check whether somebody has an account.
+   */
+  async function resetPassword() {
+    setBusy(true)
+    try {
+      await sendClientPasswordReset(client.email)
+      toast.success('Reset link sent', {
+        description: `${client.email} can now choose a new password. The link expires shortly.`,
+      })
+    } catch (err) {
+      toast.error('Could not send the reset link', { description: errText(err) })
+    }
+    setBusy(false)
+  }
+
   async function remove() {
     if (
       !window.confirm(
@@ -267,6 +288,9 @@ function ClientCard({
           </p>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">
             {client.project_name}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            {client.email}
           </p>
         </div>
         <span
@@ -312,7 +336,35 @@ function ClientCard({
         </p>
       )}
 
+      {/* WHICH PROBLEM IS THIS? A client who has never signed in did not forget
+          a password — they never had one, so a reset link is the wrong email
+          and leaves them exactly as stuck. Say so instead of offering a button
+          that cannot help. */}
+      {!client.has_signed_in && (
+        <div className="mt-4 flex items-start gap-2.5 rounded-lg bg-secondary/60 p-3.5">
+          <MailWarning
+            className="mt-0.5 size-4 shrink-0 text-[var(--warning)]"
+            aria-hidden="true"
+          />
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Has never signed in. They still need to set a password — send them
+            their invitation again rather than a reset link.
+          </p>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
+        {client.has_signed_in && (
+          <Button
+            variant="outline"
+            className="h-11"
+            disabled={busy}
+            onClick={() => void resetPassword()}
+          >
+            <Send className="size-4" />
+            Send reset link
+          </Button>
+        )}
         <Button
           variant="outline"
           className="h-11"
@@ -345,6 +397,9 @@ function ClientCard({
       <p className="mt-3 text-[11px] text-muted-foreground">
         Access given {new Date(client.granted_at).toLocaleDateString('en-IN')}
         {client.granted_by_name ? ` by ${client.granted_by_name}` : ''}
+        {client.last_sign_in_at
+          ? ` · last signed in ${new Date(client.last_sign_in_at).toLocaleDateString('en-IN')}`
+          : ' · never signed in'}
       </p>
     </div>
   )

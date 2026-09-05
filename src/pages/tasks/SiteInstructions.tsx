@@ -220,6 +220,10 @@ function SiCard({
         await createDocument({
           project_id: si.project_id,
           folder: 'other',
+          // 075: the KIND, not just the folder. An RFI files into `drawings`
+          // and a site instruction into `other`, so the folder alone cannot
+          // tell an internal record from a client-shareable one.
+          doc_kind: 'site_instruction',
           title: `${si.si_number} · Site instruction`,
           file_path: path,
           file_type: fileType,

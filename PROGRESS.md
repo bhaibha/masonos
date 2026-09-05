@@ -1,6 +1,156 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## PASSWORD RECOVERY, BOTH DIRECTIONS (2026-09-05, migration 076)
+
+**Run migration 076.**
+
+Two ways in, because there are two people who get stuck:
+
+- **The client, on their own** — "Forgot your password?" on the login form
+  (built with the invite flow). Sends a recovery link to /set-password.
+- **The founder, on their behalf** — **Send reset link** on each card in
+  Admin -> Clients. Uses the anon key and `resetPasswordForEmail`; no Edge
+  Function, no service-role key, nothing new to deploy.
+
+### 076 — the roster learns two facts
+`v_client_roster` had a name and exposure counts and no way to reach anybody.
+It now carries `email`, `last_sign_in_at` and `has_signed_in`, joined from
+auth.users. Safe because the view is owner-run and its WHERE clause is
+unchanged: founder and accounts see every client, a PM sees their own projects'
+clients, **supervisor and client get zero rows** — verified on a real
+PostgreSQL, along with 067's summary function still resolving after the rebuild.
+
+### The distinction that matters
+A client who has **never signed in** did not forget a password — they never had
+one. A reset link is the wrong email and leaves them exactly as stuck while the
+founder believes the problem is solved. So the card shows their sign-in state,
+and where a reset cannot help it shows a sentence instead of a button:
+*"Has never signed in. They still need to set a password — send them their
+invitation again rather than a reset link."*
+
+Re-sending an invitation is service-role work and still waits on SMTP.
+
+### Recovery email template
+Supabase -> Auth -> Email Templates -> **Reset password**:
+```html
+<h2>Reset your password</h2>
+<p>Follow the link below to choose a new password for Mason OS.</p>
+<p><a href="{{ .SiteURL }}/set-password?token_hash={{ .TokenHash }}&type=recovery">Choose a new password</a></p>
+<p>This link can only be used once and expires shortly. If you didn't ask for it, ignore this email.</p>
+```
+
+### Still blocked on SMTP
+Supabase's built-in mailer **only delivers to members of the project team** and
+is capped at 2 messages/hour, so no email reaches a real client until custom
+SMTP is configured. Both templates and both code paths are ready; nothing has
+been sent end to end yet.
+
+## CLIENT INVITE / SET-PASSWORD FLOW (2026-09-05, no migration)
+
+The invite email always landed on `/login`. Two independent causes, neither of
+them in the email template — which is why editing the template never helped:
+
+1. `supabase.ts` sets `detectSessionInUrl: false`, so supabase-js never consumed
+   the token in the URL and no session ever appeared.
+2. With no session, `RequireAuth` renders `<Navigate to="/login">`, and a
+   react-router navigation to a new path **discards the hash**. The token was
+   destroyed on the way to the wrong screen.
+
+### What was built
+- **`src/lib/authLink.ts`** — captures the token at MODULE LOAD, before the
+  router mounts. Reads both wire formats (`#access_token=…&type=invite` and
+  `?token_hash=…&type=invite`) plus the error form
+  (`#error=…&error_code=otp_expired`), stores it module-level so a redirect or a
+  StrictMode double-render cannot lose it, then strips the credentials out of
+  the address bar with `replaceState`.
+- **`/set-password`** — registered OUTSIDE `RequireAuth`, because with the
+  `token_hash` form there is no session yet. Three phases: consuming, ready,
+  dead. Consumes via `setSession` (hash) or `verifyOtp` (token_hash), takes a
+  password through `updateUser`, then routes by role — client to `/portal`,
+  staff to `/dashboard`.
+- **Expiry handled in words**, not a blank error: "This link has expired —
+  invitation links are valid for a short time and can only be used once. Ask
+  your project team to send a new one."
+- **"Forgot your password?" on the login form**, sending a recovery link to the
+  same screen. Without it a recovery token could never be generated from inside
+  the app. The success message is identical whether or not the address exists,
+  so the form cannot be used to enumerate the firm's clients.
+
+### `detectSessionInUrl` stays FALSE, deliberately
+Turning it on would have "worked" and created a subtler bug: supabase-js would
+swallow the hash, hand us a session, satisfy `RequireAuth`, and drop the invited
+client into the portal **with no password set** — able to use the app once and
+never able to sign in again. An invite must terminate at a password prompt, so
+consuming the token is the app's decision to make, at the moment it is ready.
+
+### Email template (Supabase → Auth → Email Templates → Invite user)
+```html
+<h2>You have been invited</h2>
+<p>Your project team at Your Masons has set up your client portal.</p>
+<p><a href="{{ .SiteURL }}/set-password?token_hash={{ .TokenHash }}&type=invite">Set your password</a></p>
+<p>This link can only be used once and expires shortly.</p>
+```
+Reset password template is identical with `type=recovery`.
+
+Deliberately NOT `{{ .ConfirmationURL }}`: that routes through
+`/auth/v1/verify`, which some corporate mail scanners (Microsoft Defender Safe
+Links) PREFETCH, consuming the one-time token before the human clicks it — the
+invite then reports "expired" on first use. The `token_hash` form is inert until
+the app calls `verifyOtp`. Both forms are handled either way.
+
+Still open: `inviteUserByEmail` is not yet wired into `admin-create-user` — the
+founder still sets an initial password. Needs SMTP configured on the Supabase
+project first.
+
+## CLIENT PORTAL REVIEW — CONTEXT AND DOCUMENT TYPES (2026-09-03, migration 075)
+
+Three review findings. **Run migration 075.**
+
+### 1. "110% of contract" now says WHICH contract
+`v_client_spend_summary` measured spend against the ORIGINAL contract value, so
+a client with approved variations saw a percentage over 100 with no explanation.
+It now returns `contract_value`, `variations_value`, `variations_count` and
+`revised_contract_value` separately, and both Open Book and Bills show the
+arithmetic — original + approved variations = revised — rather than one number
+the client has to take on trust. **Approved variations only**; a submitted VO is
+a proposal, and counting it would inflate the denominator.
+
+Bills additionally shows **billed to date** against the same baseline.
+
+### 2. Document sharing is opt-in BY TYPE
+The root problem was structural: RFIs file into the `drawings` folder, site
+instructions into `other`, VOs into `contracts` — and no filing screen stamped
+`doc_kind`, so an RFI to a consultant looked exactly like an architectural
+drawing. All five screens now stamp the kind at creation.
+
+**Shareable:** plain uploads (drawings, contracts, permits, photos), variation
+orders, progress invoices, QA plans and test certificates.
+**Never shareable:** RFIs, site instructions, NCRs, purchase orders, and
+comparative statements — the last of those carries every vendor's quote, which
+is why the list is a function in a migration rather than a settings screen.
+
+Enforced in three independent places: the vault hides the toggle (and says why),
+`fn_set_document_shared` raises, and `v_client_documents` filters — which also
+withdraws the file, since 070's storage policy reads that view. A backfill
+stamps existing documents and **withdraws anything already shared** that the new
+rule excludes.
+
+### 3. Approvals and messages, proven end to end
+On a real PostgreSQL, as an actual client:
+- pending approvals visible through `v_client_approvals`
+- rejection with no reason -> **refused** ("Please say briefly why…")
+- approve one, reject one with a reason -> both recorded, `method` becomes
+  `signed`, `decided_by` stamped
+- deciding an already-decided item -> **refused**
+- the internal register shows the decision, the reason and the decider
+- messages both directions, `author_name` null on the client's own
+- the "From your client" strip then reports 1 unread, 2 unseen rejections
+
+Also confirmed: the client cannot read `client_approvals` directly — only
+through the curated view. My first test fixture selected from the base table and
+was correctly refused.
+
 ## CLIENT PORTAL — SCREENS, SHARING, MESSAGES (2026-09-03, migrations 068-074)
 
 The portal is now a working two-way surface, not a data layer with a holding

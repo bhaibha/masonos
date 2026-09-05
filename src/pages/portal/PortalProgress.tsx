@@ -83,16 +83,60 @@ export default function PortalProgress() {
       </div>
 
       {/* ---------- open book ---------- */}
-      {spend && spend.contract_value > 0 && (
+      {spend && spend.revised_contract_value > 0 && (
         <div className="paper p-6">
           <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
             Open book
           </p>
-          <div className="mt-3 flex flex-wrap gap-x-10 gap-y-3">
-            <Figure label="Contract value" value={formatInr(spend.contract_value)} />
+
+          {/* When variations exist, show the ARITHMETIC rather than one number.
+              A client who approved three variations and sees "112% of contract"
+              reasonably concludes the job is over budget — when in fact they
+              asked for more work and agreed the cost. The baseline has to say
+              which contract it means (075). */}
+          {spend.variations_count > 0 ? (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Original contract
+                </span>
+                <span className="figure text-sm tabular-nums">
+                  {formatInr(spend.contract_value)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="text-sm text-muted-foreground">
+                  {spend.variations_count === 1
+                    ? '1 approved variation'
+                    : `${spend.variations_count} approved variations`}
+                </span>
+                <span className="figure text-sm tabular-nums">
+                  + {formatInr(spend.variations_value)}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4 border-t border-border pt-2">
+                <span className="text-sm font-medium">Revised contract</span>
+                <span className="figure text-base tabular-nums">
+                  {formatInr(spend.revised_contract_value)}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-x-10 gap-y-3">
+            {spend.variations_count === 0 && (
+              <Figure label="Contract value" value={formatInr(spend.contract_value)} />
+            )}
             <Figure label="Spent so far" value={formatInr(spend.spent)} />
             {spend.pct_of_contract != null && (
-              <Figure label="Of contract" value={`${spend.pct_of_contract}%`} />
+              <Figure
+                label={
+                  spend.variations_count > 0
+                    ? 'Of revised contract'
+                    : 'Of contract'
+                }
+                value={`${spend.pct_of_contract}%`}
+              />
             )}
           </div>
 

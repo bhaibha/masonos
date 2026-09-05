@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { DeleteButton } from '@/components/DeleteAction'
 import { Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
+import { isShareableKind, KIND_LABEL } from '@/lib/docKinds'
 import { errText } from '@/lib/errText'
 import { setDocumentShared, setDocumentSubfolder } from '@/lib/queries/documents'
 import { signedDocumentUrl } from '@/lib/storage'
@@ -93,10 +94,16 @@ function DocumentItem({
   const [sharing, setSharing] = useState(false)
 
   // Founder/PM only, matching who may publish a photo (065). And NEVER for a
-  // confidential document: the curated view and the 068 storage policy both
-  // refuse one regardless of this flag, so offering the toggle would promise
-  // something the database would then decline.
-  const canShare = (role === 'founder' || role === 'pm') && !doc.is_confidential
+  // confidential document, nor for a kind that is internal by nature — an RFI
+  // to a consultant, a site instruction, an NCR, a PO or a rate comparison
+  // (075). The curated view, the storage policy and fn_set_document_shared all
+  // refuse those independently, so offering the toggle would promise something
+  // the database would then decline.
+  const shareableKind = isShareableKind(doc.doc_kind)
+  const canShare =
+    (role === 'founder' || role === 'pm') &&
+    !doc.is_confidential &&
+    shareableKind
 
   async function toggleShare() {
     setSharing(true)
@@ -197,6 +204,17 @@ function DocumentItem({
           {/* Sharing lives HERE, on the document, not on an Admin screen.
               Two places to manage visibility means the two eventually
               disagree, and the disagreement is silent. */}
+          {/* Say WHY there is no button, rather than leaving a silent gap.
+              Only to those who would otherwise have had one. */}
+          {!shareableKind &&
+            !doc.is_confidential &&
+            (role === 'founder' || role === 'pm') && (
+              <span className="text-[11px] text-muted-foreground">
+                {KIND_LABEL[doc.doc_kind ?? ''] ?? 'This'} — internal, not
+                shareable
+              </span>
+            )}
+
           {canShare && (
             <button
               type="button"

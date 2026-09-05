@@ -167,6 +167,10 @@ function VariationCard({
         await createDocument({
           project_id: vo.project_id,
           folder: 'contracts',
+          // 075: the KIND, not just the folder. An RFI files into `drawings`
+          // and a site instruction into `other`, so the folder alone cannot
+          // tell an internal record from a client-shareable one.
+          doc_kind: 'variation_order',
           title: `${vo.vo_number} · ${vo.title}`,
           file_path: path,
           file_type: fileType,

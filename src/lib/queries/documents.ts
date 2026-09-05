@@ -8,7 +8,7 @@ import type {
 } from '@/lib/types'
 
 const COLUMNS =
-  'id, project_id, folder, subfolder_id, title, file_path, file_type, is_confidential, client_visible, uploaded_by, created_at, po_id, profiles(full_name)'
+  'id, project_id, folder, subfolder_id, title, file_path, file_type, is_confidential, client_visible, doc_kind, uploaded_by, created_at, po_id, profiles(full_name)'
 
 type Joined = { profiles: { full_name: string } | { full_name: string }[] | null }
 
@@ -31,6 +31,7 @@ function mapRow(r: unknown): DocumentRow {
     po_status: null,
     subfolder_id: (row.subfolder_id as string | null) ?? null,
     client_visible: Boolean(row.client_visible),
+    doc_kind: (row.doc_kind as string | null) ?? null,
   }
 }
 

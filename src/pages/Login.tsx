@@ -1,5 +1,8 @@
 import { type FormEvent, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { toast } from 'sonner'
+import { errText } from '@/lib/errText'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,6 +18,36 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [sendingReset, setSendingReset] = useState(false)
+
+  /**
+   * Sends a recovery link. It lands on /set-password with `type=recovery`,
+   * which the same screen handles — a reset and an invite are the same act
+   * from the user's side, so they are the same screen.
+   *
+   * The success message is deliberately identical whether or not the address
+   * exists: telling a stranger "no account with that email" turns the login
+   * form into a way to enumerate who the firm works with.
+   */
+  async function sendReset() {
+    const addr = email.trim()
+    if (!addr) {
+      toast.error('Enter your email address first')
+      return
+    }
+    setSendingReset(true)
+    try {
+      await supabase.auth.resetPasswordForEmail(addr, {
+        redirectTo: `${window.location.origin}/set-password`,
+      })
+      toast.success('Check your email', {
+        description: 'If that address has an account, a reset link is on its way.',
+      })
+    } catch (err) {
+      toast.error('Could not send the reset link', { description: errText(err) })
+    }
+    setSendingReset(false)
+  }
 
   if (!loading && user) {
     const from = (location.state as { from?: string } | null)?.from
@@ -97,6 +130,18 @@ export default function Login() {
           >
             {busy ? 'Signing in…' : 'Sign in'}
           </Button>
+
+          {/* Without this, a recovery token can never be generated from inside
+              the app, and a client who forgets their password has to telephone
+              somebody. */}
+          <button
+            type="button"
+            onClick={() => void sendReset()}
+            disabled={sendingReset}
+            className="w-full text-center text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            {sendingReset ? 'Sending…' : 'Forgot your password?'}
+          </button>
         </form>
 
         <p className="mt-8 text-center text-xs text-muted-foreground">

@@ -322,7 +322,59 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   **074 WRITTEN, NOT YET APPLIED** — `v_client_photos` becomes a union of
   published site-log photos and shared image documents, each row carrying its
   `bucket`. One gallery whichever way a picture was shared.
-  Next migration = 075.
+  **075 WRITTEN, NOT YET APPLIED** — client review fixes: revised contract in
+  the portal (`v_client_spend_summary` gains contract / approved-variations /
+  revised, returned separately), and document sharing that is opt-in BY KIND
+  (`fn_doc_kind_shareable`, `fn_set_document_shared` refuses a non-shareable
+  kind, `v_client_documents` enforces it too, plus a backfill that stamps
+  existing RFI/SI/VO/PO documents and withdraws any already shared).
+  **076 WRITTEN, NOT YET APPLIED** — `v_client_roster` gains `email`,
+  `last_sign_in_at` and `has_signed_in` from auth.users, so the founder can send
+  a password reset and can tell an unaccepted invite from a forgotten password.
+  Ships with the "Send reset link" action on Admin -> Clients.
+  Next migration = 077.
+- **"Never signed in" and "forgot the password" are different problems (076).**
+  A reset link sent to somebody who never accepted their invitation is the wrong
+  email: they have no password to reset and end up exactly as stuck, while the
+  founder believes they have helped. `has_signed_in` is what separates the two,
+  and the card shows a sentence instead of a button in the case a button cannot
+  fix. **Before offering a remedy, check the state actually admits it.**
+- **A view built for one screen will be asked a second question (076).** 067's
+  roster carried names and exposure counts because that was all the screen
+  needed. Recovery then needed an email address, which meant a migration to add
+  a column that was always one join away. Not a mistake worth avoiding by
+  selecting everything — the discipline of taking only what the screen needs is
+  right — but worth knowing that the follow-up migration is normal, not a sign
+  the first cut was careless.
+- **A function reading a view by name is not a tracked dependency (076).**
+  `drop view` warns when a VIEW depends on it, and says nothing about a FUNCTION
+  that reads it — `fn_client_roster_summary` would have kept existing and failed
+  at call time against a view that no longer matched. 076 asserts the function
+  still resolves after the rebuild, which is the check 071 wishes it had had.
+- **A percentage needs a baseline the reader recognises (075).** The portal
+  measured spend against `projects.contract_value` — the ORIGINAL contract — so
+  a client who had approved three variations saw "112% of contract" and would
+  reasonably conclude the job was over budget. The three components are now
+  returned SEPARATELY and shown as arithmetic (original + approved variations =
+  revised), because one number the client has to trust is worse than three they
+  can check. Only APPROVED variations: a submitted VO is a proposal, and
+  including it would inflate the denominator to flatter the spend figure.
+- **A folder is not a type (075).** RFIs file into `drawings`, site
+  instructions into `other`, VOs into `contracts` — and none of the five filing
+  screens stamped `doc_kind`, so an RFI to a consultant was indistinguishable
+  from an architectural drawing. Sharing could not be gated on something the
+  data did not record. Stamp the kind AT CREATION; a classification derived
+  from a title or a folder is a guess that breaks the first time somebody
+  renames a file (the 049 lesson, again).
+- **An allow-list belongs in a function, not a settings table (075).** Which
+  document kinds may reach a client is a policy, and `comparative_statement` —
+  every vendor's quote — must never be on it. A settings screen would make that
+  one mis-click away. `fn_doc_kind_shareable` is IMMUTABLE, read by both the
+  RPC and the vault UI, so the button and the database cannot disagree.
+- **A new rule has to apply to what is already shared (075).** The backfill
+  stamps existing documents from their generated title prefix AND withdraws any
+  non-shareable kind that was already client-visible. Leaving an RFI visible
+  because it was shared before the rule existed would make the rule advisory.
 - **Do not make the user learn where to put things (074).** A founder uploaded
   eleven images to a vault folder literally called "Photos", ticked share, and
   found them in the portal's DOCUMENTS tab while the Photos tab said "No photos

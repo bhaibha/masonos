@@ -161,6 +161,15 @@ export interface ClientRosterRow {
   link_id: string
   user_id: string
   full_name: string
+  /** Where the invite went, and where a reset link goes (076). */
+  email: string
+  /**
+   * Null until the client actually arrives. This is what separates "never
+   * accepted the invite" from "forgot their password" — two different
+   * problems with two different emails to send (076).
+   */
+  last_sign_in_at: string | null
+  has_signed_in: boolean
   is_active: boolean
   project_id: string
   project_name: string
@@ -688,6 +697,13 @@ export interface DocumentRow {
    * 068 storage policy both check is_confidential as well as this flag.
    */
   client_visible: boolean
+  /**
+   * What KIND of record this is — 'rfi', 'site_instruction', 'variation_order',
+   * 'ncr', 'purchase_order', 'comparative_statement', 'qa_plan', or null for a
+   * plain upload. Decides whether it may be shared with a client (075); the
+   * folder alone cannot, because an RFI files into `drawings`.
+   */
+  doc_kind: string | null
 }
 
 // ---------- Document sub-folders (migration 031) ----------

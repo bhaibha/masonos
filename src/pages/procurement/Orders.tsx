@@ -116,6 +116,8 @@ async function archivePoDocument(poId: string): Promise<void> {
     await createDocument({
       project_id: po.project_id,
       folder: 'purchase_orders',
+      // 075: a PO carries rates, so it is never client-shareable.
+      doc_kind: 'purchase_order',
       title: `${po.po_number}${vsuffix}`,
       file_path: fullUp.path,
       file_type: fullUp.fileType,
@@ -130,6 +132,8 @@ async function archivePoDocument(poId: string): Promise<void> {
     await createDocument({
       project_id: po.project_id,
       folder: 'purchase_orders',
+      // 075: a PO carries rates, so it is never client-shareable.
+      doc_kind: 'purchase_order',
       title: `${po.po_number} · Delivery copy${vsuffix}`,
       file_path: delUp.path,
       file_type: delUp.fileType,

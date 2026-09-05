@@ -151,6 +151,10 @@ function InvoiceCard({
         await createDocument({
           project_id: inv.project_id,
           folder: 'invoices',
+          // 075: the KIND, not just the folder. An RFI files into `drawings`
+          // and a site instruction into `other`, so the folder alone cannot
+          // tell an internal record from a client-shareable one.
+          doc_kind: 'invoice',
           title: `${inv.invoice_number} · ${INVOICE_TYPE_LABEL[inv.inv_type]}`,
           file_path: path,
           file_type: fileType,

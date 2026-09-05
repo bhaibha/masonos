@@ -1,3 +1,8 @@
+// FIRST IMPORT, DELIBERATELY. This module captures an invite/recovery token
+// from the URL as a side effect of being loaded, before the router mounts and
+// before RequireAuth can redirect the hash away. Moving it down this list
+// re-introduces the bug it fixes.
+import { needsPasswordSetup } from '@/lib/authLink'
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/AppShell'
@@ -8,6 +13,7 @@ import {
   RequireInternal,
 } from '@/components/RequireInternal'
 import { RequireRole } from '@/components/RequireRole'
+import SetPassword from '@/pages/SetPassword'
 import PortalApprovals from '@/pages/portal/PortalApprovals'
 import PortalBills from '@/pages/portal/PortalBills'
 import PortalDocuments from '@/pages/portal/PortalDocuments'
@@ -82,11 +88,25 @@ export default function App() {
 
   useEffect(() => init(), [init])
 
+  // An invite link lands on whatever path Supabase redirected to — usually the
+  // site root. Computed once at module scope (not state), so a re-render cannot
+  // change the answer mid-flight and bounce somebody out of the flow.
+  const invite = needsPasswordSetup()
+
   return (
     <BrowserRouter>
       <Toaster />
+      {invite && window.location.pathname !== '/set-password' && (
+        <Navigate to="/set-password" replace />
+      )}
       <Routes>
         <Route path="/login" element={<Login />} />
+
+        {/* OUTSIDE RequireAuth on purpose. With the token_hash form there is no
+            session yet — the whole point of the screen is to create one — so a
+            guard here would bounce every invite straight back to /login, which
+            is the bug this route exists to fix. */}
+        <Route path="/set-password" element={<SetPassword />} />
 
         <Route element={<RequireAuth />}>
           {/* The client portal. Its own route tree and its own shell — a client

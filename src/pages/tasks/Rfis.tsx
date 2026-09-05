@@ -289,6 +289,10 @@ function RfiCard({
         await createDocument({
           project_id: rfi.project_id,
           folder: 'drawings',
+          // 075: the KIND, not just the folder. An RFI files into `drawings`
+          // and a site instruction into `other`, so the folder alone cannot
+          // tell an internal record from a client-shareable one.
+          doc_kind: 'rfi',
           title: `${rfi.rfi_number} · RFI`,
           file_path: path,
           file_type: fileType,

@@ -68,6 +68,8 @@ export interface ClientDocument {
   title: string
   file_path: string
   file_type: string | null
+  /** null = a plain upload. Non-shareable kinds never reach here (075). */
+  doc_kind: string | null
   created_at: string
 }
 
@@ -106,7 +108,13 @@ export interface ClientSpendCategory {
 
 export interface ClientSpendSummary {
   contract_value: number
+  /** Approved variations only — a submitted VO is a proposal (075). */
+  variations_value: number
+  variations_count: number
+  /** contract_value + variations_value, computed in Postgres. */
+  revised_contract_value: number
   spent: number
+  /** Measured against the REVISED contract, not the original. */
   pct_of_contract: number | null
 }
 
