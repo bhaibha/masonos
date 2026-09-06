@@ -350,7 +350,87 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   access to zero rows on every table and refused on every own-row write, then
   back to EXACTLY the same access on reactivation; client suspension empties
   the portal; founder unaffected; both guards confirmed firing.
-  **So: 001-078 ALL APPLIED.** Next migration = 079.
+  **So: 001-078 ALL APPLIED.**
+  **079 APPLIED** (confirmed 2026-09-06) — Supabase advisor cleanup. Converts
+  `v_labour_cost`, `v_labour_project_cost` and `v_pnl_by_category` to
+  `security_invoker` (proven row-identical for all five roles), and pins
+  `search_path` on the six SECURITY INVOKER functions that lacked it
+  (`is_founder`, `fn_storage_project`, `fn_doc_kind_shareable`,
+  `fn_learn_normalise_ref`, `fn_compliance_series`,
+  `fn_schedule_template_rows`). No behaviour change. Verified on a real
+  PostgreSQL with the ACTUAL 001-078 chain: three clean runs, and the full
+  22-view five-role sweep re-run afterwards unchanged. Confirmed live
+  2026-09-06 — the verify block returned 19 / 0 / 0 / 0 / 0 exactly:
+  19 owner-run views, no function with a mutable search_path, no table without
+  RLS, no table with RLS and no policy, no policy open to anon.
+  **So: 001-079 ALL APPLIED.**
+  **080 APPLIED** (confirmed 2026-09-06) — `v_client_roster` narrowed from
+  founder/pm/accounts to FOUNDER ONLY, and `fn_client_roster_summary` moved
+  with it. Answers the advisor's "Exposed Auth Users": the view carries
+  `auth.users.email` + `last_sign_in_at` since 076, and the only screen that
+  reads it (Admin -> Clients) is `ADMIN_ROLES = ['founder']`. Verified on a
+  real PostgreSQL: three clean runs, and the roster went 1/1/1/0/0 →
+  **1/0/0/0/0** across founder/pm/accounts/supervisor/client, with the summary
+  matching so a PM gets ZERO ROWS rather than a row of zeros. Confirmed live
+  2026-09-06 — verify block returned view_exists = 1, gates_on_founder = 1,
+  still_lists_pm_accounts = 0, summary_fn = 1.
+  **So: 001-080 ALL APPLIED.** Next migration = 081.
+- **A VIEW'S AUDIENCE IS A DECISION ABOUT ITS WIDEST COLUMN, AND ADDING A
+  COLUMN CAN INVALIDATE IT (080).** 067 gated `v_client_roster` at
+  founder/pm/accounts when it carried names and exposure counts, and a PM
+  seeing their own project's client was reasonable. 076 then added
+  `auth.users.email` and `last_sign_in_at` for the reset-link feature — which
+  is founder-only — and nobody re-asked who should see the view. The gate was
+  wider than EVERY consumer for two migrations. **Re-ask the audience question
+  whenever a view gains a field, not only when it is created**, and check the
+  answer against the app's route guard: `ADMIN_ROLES` had said `['founder']`
+  the whole time.
+- **The linter can be right about the wrong thing (080).** "Exposed Auth Users"
+  fires because the view JOINS auth.users and is granted to `authenticated`;
+  it cannot see the WHERE clause, so it would have fired just as loudly at a
+  perfectly gated view. It was still worth acting on — not because the door was
+  open, but because reading it forced the audience question above. **And it
+  will keep firing after 080**: the join is still there. Clearing the lint
+  itself would mean moving `email` behind a SECURITY DEFINER function, which is
+  more machinery for an exposure that is now one role wide. Recorded as a
+  known, accepted error rather than left to look unexamined.
+- **AUDIT THE 22, DO NOT TRUST THE LINTER OR THE COMMENT (079).** Supabase's
+  Security Advisor reports every non-`security_invoker` view as an ERROR
+  ("Security Definer View"), because such a view reads its base tables as the
+  OWNER and skips RLS. It cannot see that the WHERE clause IS the access
+  control in this app (the 010 -> 038 pattern), so all 22 were flagged and none
+  was actually leaking. The way to answer that is not to read the definitions —
+  it is to QUERY every one as founder / pm / accounts / supervisor / client on
+  a database carrying real rows. Result: every money view returned 0 to the
+  supervisor and 0 to the client; every `v_client_*` view returned 0 to all
+  four internal roles. **A linter that cannot read intent produces errors that
+  are neither true nor false until somebody measures.**
+- **A view with no gate in its own text can still be gated (079).**
+  `v_labour_project_cost` was the one view whose definition contained no
+  role predicate at all — it aggregates `v_labour_cost`, which is owner-run and
+  gated, so the filter is inherited. And because it uses GROUP BY rather than a
+  bare aggregate, an unauthorised caller gets ZERO ROWS, not the row of zeros
+  the 066 rule exists to prevent. Both facts were confirmed by query. When
+  auditing, follow the view's SOURCE before calling it ungated.
+- **An invoker function used by a POLICY still wants a fixed search_path
+  (079).** The usual reasoning — "search_path only matters for SECURITY
+  DEFINER, because an invoker function runs with the caller's own rights" — has
+  an exception: `is_founder()` is SECURITY INVOKER and calls `my_role()`
+  unqualified, and it is read by RLS policies across the database. Anyone able
+  to point search_path at their own schema would redirect that call and decide
+  their own role. PostgREST offers no way to do that today, so it is defence in
+  depth rather than a live hole; but a security predicate should not rest on a
+  client-side setting staying locked. Same for `fn_storage_project()`, which
+  the storage policies call.
+- **Say no to the big lint, with the number that justifies it (079).** ~152
+  policies call `auth.uid()` unwrapped instead of `(select auth.uid())`, so the
+  call is re-evaluated per row. That is a real optimisation at a hundred
+  thousand rows and worth nothing at four projects and fifteen users, where the
+  largest table is the audit log. Rewriting 152 security predicates to save
+  microseconds is a large diff across a correctness surface that is currently
+  proven. Recorded as a deliberate decision with the trigger for revisiting it
+  (a table past ~50k rows plus a screen that feels slow), so the next person
+  does not either re-litigate it or "fix" it blindly.
 - **A CONTROL THAT REPORTS SUCCESS AND DOES NOTHING IS A LIE THE APP TELLS ITS
   OWNER (078).** `profiles.is_active` has existed since 001 and Admin has
   offered a Deactivate button for months. NOT ONE POLICY OR HELPER READ THAT

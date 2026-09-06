@@ -1,6 +1,99 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## SECURITY ADVISOR AUDIT (2026-09-06, migration 079)
+
+**Run migration 079 before testing.** No behaviour change — it converts three
+views and pins search_path on six functions.
+
+### The 23 "Security Definer View" errors
+All 22 owner-run views in the database were queried as **founder / pm /
+accounts / supervisor / client** against a real PostgreSQL carrying real rows.
+**None leaks.** Every money-bearing view returns 0 rows to a supervisor and 0
+to a client; every `v_client_*` view returns 0 to all four internal roles and
+its own rows to the client.
+
+Three of them never needed owner rights and are now `security_invoker`:
+`v_labour_cost`, `v_labour_project_cost`, `v_pnl_by_category` — counts
+identical for all five roles before and after.
+
+The other 19 must stay owner-run: 8 read a column REVOKED from `authenticated`
+(`contract_value`, `management_fee_pct`, `po_lines.rate`,
+`material_inward.rate`, `budget_amount`), 10 serve the client portal where
+`is_member()` is false by construction, and `v_client_roster` reads
+`auth.users`. Converting any of them returns a permission error to the founder
+rather than tightening anything.
+
+### The warnings
+| finding | count | verdict |
+|---|---|---|
+| Functions with mutable search_path | 6 | **REAL — fixed in 079** |
+| Policies calling auth fns per row (`auth_rls_initplan`) | ~152 | performance lint, deliberately deferred |
+| Multiple permissive policies (`profiles` UPDATE) | 1 | safe by design — founder-edits-anyone OR edit-your-own |
+| Tables with RLS disabled | **0** | — |
+| Tables with RLS and no policy | **0** | — |
+| Policies granting to `anon` / `public` | **0** | — |
+| Extensions in `public` | **0** | — |
+
+All 107 SECURITY DEFINER functions already pinned their search_path; the six
+that did not were SECURITY INVOKER. Two of them (`is_founder`,
+`fn_storage_project`) are read by RLS policies, which is what made this worth
+fixing rather than dismissing.
+
+### The 20th error: "Exposed Auth Users" (migration 080)
+`v_client_roster` joins `auth.users` for `email` + `last_sign_in_at` (076).
+Not an open door — it was gated at founder/pm/accounts and proven to return
+zero rows to supervisors and clients. But the gate was **wider than every
+consumer**: the only screen reading it is Admin → Clients, and `ADMIN_ROLES`
+is `['founder']`. 080 narrows the view to `is_founder()` and moves
+`fn_client_roster_summary` with it, so a PM gets zero rows rather than a row
+of zeros. Roster access went **1/1/1/0/0 → 1/0/0/0/0** across
+founder/pm/accounts/supervisor/client.
+
+**The advisor will still show this error after 080** — it fires on the JOIN,
+not the gate. Clearing it outright means moving `email` behind a SECURITY
+DEFINER function; that is more machinery for an exposure now one role wide, so
+it is an accepted error rather than an unexamined one.
+
+### Dashboard toggles (cannot be set from SQL)
+- Auth → leaked password protection: **ON**
+- Auth → OTP / magic-link expiry: **≤ 1 hour**
+- Auth → MFA: enable TOTP for the founder at least
+- Postgres version: apply the patch upgrade when offered
+
+## TEST DATA CLEARED (2026-09-06)
+
+AADHYA and IHA were emptied of the records entered while checking the tabs —
+41 tables, everything from expenses and invoices to snags, site logs and labour
+attendance. **Kept:** both project rows, team assignments, client links,
+AADHYA's 18 budget lines and its 142-activity programme.
+
+All thirteen document sequences were then reset, so the firm's first real
+document on each register is PO-000001 / VO-0001 / SI-0001 / RFI-0001 /
+INV-P-0001. Verified: 11 of 11 registers report zero rows with the next number
+at 1.
+
+**Sequences do not roll back or reset on DELETE** — this is the thing to
+remember. Clearing rows leaves the counter where it was, and resetting a
+counter while numbered rows still exist causes a duplicate-key failure on the
+next document, because `vo_number`, `invoice_number` and `po_number` are all
+UNIQUE. Reproduced deliberately during this work. Order is always: clear first,
+then reset.
+
+Tools in `tools/`, all of which roll back by default:
+  `clear-project-records.sql`  empty a project, keep the project
+  `test-data-inventory.sql`    what is in the database, per project and user
+  `user-delete-audit.sql`      which users can actually be deleted
+  `remove-test-data.sql`       delete whole test projects and test users
+
+The report in `clear-project-records.sql` writes to a TEMP TABLE and is read by
+one final SELECT, **not `raise notice`** — the Supabase SQL editor does not
+display notices, so a dry run reported through them shows the founder nothing.
+Found the first time it was run for real.
+
+Storage was NOT cleared in the same pass: deleting a `documents` row leaves the
+object in the bucket. §4 of the clear script does it, commented out.
+
 ## "DEACTIVATE" NOW ACTUALLY DEACTIVATES (2026-09-06, migration 078)
 
 **Run migration 078 before testing. Redeploy the app after.**
@@ -39,6 +132,14 @@ curated view empties. Suspending a client, though, did nothing.
 Deliberately left open: `profiles_read` on your own row (or the app cannot tell
 you why it stopped), and the four `push_subscriptions` own-row policies (no
 company data, and the digest already filters `is_active`).
+
+### Admin -> Team now separates them (UI only, no migration)
+Deactivated staff move out of the working list into a collapsed **Deactivated
+(n)** section at the bottom. Separated rather than hidden: Reactivate lives on
+the card and users are not deletable (022), so hiding them outright would mean
+somebody returning from leave could only be restored with SQL. The toast names
+where the card went, because a row that simply vanishes reads as a delete.
+Admin -> Clients still shows suspended clients inline; ask if that should match.
 
 ### Verified on a real PostgreSQL (001-077 chain as fixtures, three clean runs)
 A PM with one project, before and after deactivation: `my_role()` pm → NULL,

@@ -1,5 +1,5 @@
-import { ShieldCheck, UserPlus, Users } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, ShieldCheck, UserPlus, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { CreateModePicker } from '@/components/CreateModePicker'
@@ -47,6 +47,28 @@ export default function AdminTeam() {
   const [projects, setProjects] = useState<Project[]>([])
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
+
+  /**
+   * Past staff are SEPARATED, not hidden. Since 078 a deactivated account is
+   * genuinely closed — my_role() returns NULL and every policy refuses — so
+   * these rows are nobody who can reach anything, and mixing them into the
+   * working list makes the founder read a name and think about it before
+   * noticing the badge.
+   *
+   * They still have to be REACHABLE, because Reactivate lives on the card and
+   * users are not deletable (022): hiding them outright would mean somebody
+   * coming back from leave could only be restored with SQL. Hence a collapsed
+   * section rather than a filter — the same reason 041 retires an overhead
+   * category instead of deleting it.
+   */
+  const [active, inactive] = useMemo(() => {
+    const list = team ?? []
+    return [
+      list.filter((m) => m.is_active),
+      list.filter((m) => !m.is_active),
+    ]
+  }, [team])
 
   const reload = useCallback(async () => {
     try {
@@ -100,9 +122,9 @@ export default function AdminTeam() {
         />
       )}
 
-      {team && team.length > 0 && (
+      {active.length > 0 && (
         <Stagger className="card-grid">
-          {team.map((m) => (
+          {active.map((m) => (
             <RevealItem key={m.id}>
               <MemberCard
                 member={m}
@@ -117,6 +139,73 @@ export default function AdminTeam() {
             </RevealItem>
           ))}
         </Stagger>
+      )}
+
+      {/* Everyone is deactivated — a real state, and one the big empty state
+          would describe wrongly ("No one on the team yet" is not true). */}
+      {team !== null && active.length === 0 && inactive.length > 0 && (
+        <p className="paper p-5 text-sm text-muted-foreground">
+          Nobody on the team is active. {inactive.length} deactivated{' '}
+          {inactive.length === 1 ? 'account is' : 'accounts are'} below.
+        </p>
+      )}
+
+      {inactive.length > 0 && (
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowInactive((v) => !v)}
+            aria-expanded={showInactive}
+            className="flex w-full items-center gap-2 border-t border-border pt-5 text-left"
+          >
+            {showInactive ? (
+              <ChevronDown
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+            ) : (
+              <ChevronRight
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+            )}
+            <span className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+              Deactivated
+            </span>
+            <span className="figure text-sm text-muted-foreground tabular-nums">
+              {inactive.length}
+            </span>
+          </button>
+
+          {showInactive && (
+            <>
+              <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                These accounts can still sign in but the app refuses every
+                screen. They are kept because their names are on work they
+                recorded — reactivate to restore exactly the access they had.
+              </p>
+
+              <Stagger className="card-grid mt-4">
+                {inactive.map((m) => (
+                  <RevealItem key={m.id}>
+                    <div className="opacity-70 transition-opacity hover:opacity-100">
+                      <MemberCard
+                        member={m}
+                        projects={projects}
+                        isMe={m.id === myId}
+                        expanded={editingId === m.id}
+                        onToggle={() =>
+                          setEditingId((cur) => (cur === m.id ? null : m.id))
+                        }
+                        onSaved={reload}
+                      />
+                    </div>
+                  </RevealItem>
+                ))}
+              </Stagger>
+            </>
+          )}
+        </div>
       )}
     </div>
   )
@@ -190,7 +279,14 @@ function MemberCard({
 
     try {
       await updateTeamMember(member.id, { is_active: next })
-      toast.success(next ? 'Reactivated' : 'Deactivated')
+      // Say WHERE the card went. Deactivating moves it out of the working list
+      // into the collapsed Deactivated section, and a row that simply vanishes
+      // reads as a delete — which is the one thing this is not.
+      toast.success(next ? 'Reactivated' : 'Deactivated', {
+        description: next
+          ? `${member.full_name} is back on the team with the access they had.`
+          : `${member.full_name} has moved to Deactivated, at the bottom of this page.`,
+      })
       await onSaved()
     } catch (err) {
       toast.error('Could not change the status', { description: errText(err) })

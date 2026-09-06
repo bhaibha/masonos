@@ -1,7 +1,8 @@
 -- ============================================================
 -- APPLY_pending.sql — nothing pending.
 --
--- Migrations 001-078 are all applied (confirmed 2026-09-06). The next session
--- that writes SQL concatenates its new migration(s) here, in order, so the
--- founder has one block to paste.
+-- Migrations 001-080 are all applied (080 confirmed 2026-09-06: view_exists 1,
+-- gates_on_founder 1, still_lists_pm_accounts 0, summary_fn 1). The next
+-- session that writes SQL concatenates its new migration(s) here, in order,
+-- so the founder has one block to paste.
 -- ============================================================
