@@ -2,7 +2,7 @@ import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/lib/types'
 
 const BASE = 'id, full_name, phone, role, is_active'
-const FULL = `${BASE}, designation`
+const FULL = `${BASE}, designation, must_change_password`
 
 function toProfile(r: Record<string, unknown>): Profile {
   return {
@@ -12,14 +12,16 @@ function toProfile(r: Record<string, unknown>): Profile {
     role: r.role as Profile['role'],
     is_active: Boolean(r.is_active),
     designation: (r.designation as string | null) ?? null,
+    // Absent until 077 is applied; absent means "nothing to force".
+    must_change_password: Boolean(r.must_change_password),
   }
 }
 
 /**
- * `designation` arrives with migration 019. Until that's applied PostgREST
- * rejects the column list, so we retry without it — the same pattern used for
- * v_project_spend's 007 columns. Sign-in must never break on a pending
- * migration.
+ * `designation` arrives with 019 and `must_change_password` with 077. Until
+ * those are applied PostgREST rejects the column list, so we retry without them
+ * — the same pattern used for v_project_spend's 007 columns. Sign-in must never
+ * break on a pending migration.
  */
 export async function fetchMyProfile(userId: string): Promise<Profile | null> {
   const full = await supabase

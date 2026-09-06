@@ -162,6 +162,9 @@ export async function createUser(input: NewUserInput): Promise<string> {
       role: input.role,
       designation: input.designation,
       project_ids: input.project_ids,
+      mode: input.mode,
+      // Where an invite link lands. Same screen an invited client uses (077).
+      redirect_to: `${window.location.origin}/set-password`,
     },
   })
 

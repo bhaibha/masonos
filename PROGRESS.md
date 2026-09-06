@@ -1,6 +1,43 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## ONBOARDING: DIRECT OR BY INVITE (2026-09-05, migration 077)
+
+**Run migration 077 and redeploy `admin-create-user`.**
+
+### What was already there
+Both Admin forms have always created accounts DIRECTLY with a founder-typed
+password. Roles map correctly, clients link to one project, staff link to
+project_members, and Team/Clients are already separate tabs with separate types
+and separate Edge Function branches. Three of the four requirements in the
+request were already satisfied — verified rather than assumed, see below.
+
+### What was actually missing
+1. **The invite option.** `admin-create-user` now takes `mode: 'direct' |
+   'invite'`; invite calls `inviteUserByEmail` with a redirect to
+   /set-password. Both forms get a shared `CreateModePicker` so the two cannot
+   drift. Direct is first and is the default, because an invite silently fails
+   until custom SMTP is configured — and the function detects that specific
+   failure and says to use "Set a password" instead.
+2. **Nothing enforced the password change.** The Team form has always said
+   "ask them to change it" and nothing made them. `profiles.must_change_password`
+   is now set on the direct path, `RequireAuth` routes those accounts to
+   /set-password, and `fn_clear_password_change` clears it once they have
+   actually chosen one.
+
+### Verified on a real PostgreSQL
+A directly-created **client**: `role=client`, `is_client=t`, `is_internal=f`,
+`is_member=f`, linked to one project — and **0 rows** on expenses, projects,
+tasks, vendors and v_project_pnl, with 1 row on v_client_project.
+
+A directly-created **supervisor**: `role=supervisor`, `is_internal=t`,
+`is_member=t` on their project, and **0 rows** on expenses, v_project_pnl and
+v_client_roster. (Tasks also read 0, but only because the test database has no
+tasks — that is data, not a permission result, and is not evidence either way.)
+
+`fn_clear_password_change` cleared only the CALLER's row: the supervisor's flag
+went false while the client's stayed true.
+
 ## PASSWORD RECOVERY, BOTH DIRECTIONS (2026-09-05, migration 076)
 
 **Run migration 076.**

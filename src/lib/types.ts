@@ -29,6 +29,13 @@ export interface Profile {
   is_active: boolean
   /** Job title, display only (migration 019). Permissions come from `role`. */
   designation: string | null
+  /**
+   * Created with a password somebody else chose (077). The app routes them to
+   * /set-password until they pick their own. Optional so a session still works
+   * if 077 has not been applied — sign-in must never break on a pending
+   * migration.
+   */
+  must_change_password?: boolean
 }
 
 // ---------- Admin (founder only) ----------
@@ -99,6 +106,8 @@ export function canAdminister(role: UserRole | null): boolean {
 }
 
 export interface TeamMember extends Profile {
+  /** Created with a founder-chosen password and has not changed it yet (077). */
+  must_change_password?: boolean
   /** ids of projects this person is assigned to */
   project_ids: string[]
 }
@@ -122,6 +131,18 @@ export interface NewProjectInput {
   plot_area_sqft: number | null
 }
 
+/**
+ * How an account is created. Both paths produce the same auth user, profile and
+ * links — they differ only in who chooses the password.
+ *
+ *   direct  the founder types one. Works with no email at all, and the account
+ *           is flagged `must_change_password` so that shared secret survives
+ *           exactly one sign-in (077).
+ *   invite  an email goes out and the person chooses their own, so nobody at
+ *           the firm ever knows it. Needs custom SMTP on the Supabase project.
+ */
+export type CreateMode = 'direct' | 'invite'
+
 export interface NewUserInput {
   email: string
   password: string
@@ -130,6 +151,7 @@ export interface NewUserInput {
   designation: string
   role: UserRole
   project_ids: string[]
+  mode: CreateMode
 }
 
 /**
@@ -154,6 +176,7 @@ export interface NewClientInput {
   full_name: string
   phone: string
   project_id: string
+  mode: CreateMode
 }
 
 /** Row shape of public.v_client_roster (067). Carries no money, by design. */

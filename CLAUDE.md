@@ -292,7 +292,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   surfaces zero for a client. Then verified LIVE — the client sweep reports
   147/147 refused or empty.
   So: **001-066 ALL APPLIED.**
-  **067 WRITTEN, NOT YET APPLIED** — the founder's client roster
+  **067 APPLIED** — the founder's client roster
   (`v_client_roster` with per-client EXPOSURE counts, `fn_set_client_active`,
   `fn_unlink_client`, `fn_link_client`, `fn_client_roster_summary`,
   `fn_projects_without_client`). Ships with a `client` branch in
@@ -300,39 +300,95 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   the `/admin/clients` tab. Verified on a real PostgreSQL with the ACTUAL
   001-066 chain: three clean runs, founder/pm/accounts see the roster,
   supervisor and client get zero rows, all three guards confirmed firing.
-  **068 WRITTEN, NOT YET APPLIED** — a client can DOWNLOAD what was shared
+  **068 APPLIED** — a client can DOWNLOAD what was shared
   (`site_photos_client_read`, `documents_client_read` on storage.objects).
   Ships with CP3 (the portal screens) and CP4 (the share toggles).
-  **069 WRITTEN, NOT YET APPLIED** — `documents` had NO UPDATE policy, so every
+  **069 APPLIED** — `documents` had NO UPDATE policy, so every
   update to a document has always been refused. Adds `fn_set_document_shared`
   and `fn_set_document_subfolder` (repairing 031, broken since it shipped).
-  **070 WRITTEN, NOT YET APPLIED** — 068's two storage policies could never
+  **070 APPLIED** — 068's two storage policies could never
   have worked; they query `public.documents` / `public.client_photos` directly,
   and a policy's subquery inherits THAT table's RLS. Re-emitted against the
   owner-run `v_client_documents` / `v_client_photos` views.
-  **071 WRITTEN, NOT YET APPLIED** — 065 clobbered 060's internal approvals
+  **071 APPLIED** — 065 clobbered 060's internal approvals
   register by reusing its view name. Restores it as `v_approval_register`.
-  **072 WRITTEN, NOT YET APPLIED** — `fn_mark_client_messages_read`, so the
+  **072 APPLIED** — `fn_mark_client_messages_read`, so the
   team side of the client thread can clear `read_at`. Ships with
   `/tasks/messages` (the thread + reply box) and `queries/clientMessages.ts`.
-  **073 WRITTEN, NOT YET APPLIED** — client attention signals
+  **073 APPLIED** — client attention signals
   (`client_approvals.team_seen_at` + partial index, `fn_mark_approvals_seen`,
   `fn_client_attention`). Ships with the "From your client" dashboard strip and
   seen-marking on the approvals register.
-  **074 WRITTEN, NOT YET APPLIED** — `v_client_photos` becomes a union of
+  **074 APPLIED** — `v_client_photos` becomes a union of
   published site-log photos and shared image documents, each row carrying its
   `bucket`. One gallery whichever way a picture was shared.
-  **075 WRITTEN, NOT YET APPLIED** — client review fixes: revised contract in
+  **075 APPLIED** — client review fixes: revised contract in
   the portal (`v_client_spend_summary` gains contract / approved-variations /
   revised, returned separately), and document sharing that is opt-in BY KIND
   (`fn_doc_kind_shareable`, `fn_set_document_shared` refuses a non-shareable
   kind, `v_client_documents` enforces it too, plus a backfill that stamps
   existing RFI/SI/VO/PO documents and withdraws any already shared).
-  **076 WRITTEN, NOT YET APPLIED** — `v_client_roster` gains `email`,
+  **076 APPLIED** — `v_client_roster` gains `email`,
   `last_sign_in_at` and `has_signed_in` from auth.users, so the founder can send
   a password reset and can tell an unaccepted invite from a forgotten password.
   Ships with the "Send reset link" action on Admin -> Clients.
-  Next migration = 077.
+  **077 APPLIED** — `profiles.must_change_password` +
+  `fn_clear_password_change`. Set by the DIRECT creation path so a
+  founder-chosen password survives exactly one sign-in. Ships with an
+  invite/direct mode picker on both Admin forms and an `inviteUserByEmail`
+  branch in `admin-create-user` (needs redeploy).
+  **So: 001-077 ALL APPLIED** (067-076 confirmed through the running app;
+  077 confirmed 2026-09-06 — its verify block returned col = 1, fn = 1,
+  flagged_now = 0, and that select is the last statement in the file).
+  Next migration = 078.
+- **The dashboard does not read config.toml, and the error says nothing about
+  it (077, found in production).** `verify_jwt = false` for admin-create-user
+  has been in `supabase/config.toml` since 058, with a comment explaining
+  exactly why. Redeploying the function FROM THE SUPABASE DASHBOARD ignores that
+  file and defaults the gateway check back ON — so the CORS preflight was
+  answered 401 with no CORS headers, the browser blocked the POST, and creating
+  a client failed with "Failed to send a request to the Edge Function": the
+  same sentence as a function that was never deployed, and pointing nowhere
+  near the cause. **Deploy Edge Functions with `supabase functions deploy`,
+  never the dashboard** — the CLI applies config.toml, the dashboard cannot.
+  Written down as a setting is not the same as enforced at deploy time.
+- **The thing that was already built was most of the ask (077).** "Add a create
+  directly option" — both Admin forms had ALWAYS created directly with a
+  founder-typed password; there was no invite path at all. Roles, project
+  linking and the Team/Clients separation were already correct and verified.
+  The real gaps were the invite option and the fact that nothing enforced the
+  Team form's own instruction to "ask them to change it". **Read the screen
+  before building what it says it needs** — three of the four numbered
+  requirements were already satisfied, and rebuilding them would have been
+  churn presented as progress.
+- **A password somebody else chose must survive exactly one sign-in (077).**
+  Direct creation stays, because no email can leave the project until custom
+  SMTP exists and a firm cannot stop onboarding while it waits on DNS. But the
+  founder knowing every staff and client password indefinitely is the actual
+  risk, so `must_change_password` is set on that path and `RequireAuth` routes
+  them to /set-password until they pick their own. Said plainly in the migration
+  header: this is a ROUTE, not a security boundary — RLS cannot refuse a query
+  because somebody skipped a prompt, and it protects against a shared secret
+  living for a year, not against the account's own owner.
+- **Not in auth metadata, because the user can write that (077).**
+  `raw_user_meta_data` is editable by the user through `updateUser({ data })`,
+  so a flag stored there could be cleared from the browser console by the very
+  person it constrains. On `profiles` it sits behind `profiles_admin`
+  (founder-only UPDATE) — which then needs `fn_clear_password_change`, because
+  otherwise the person changing their password could never clear their own flag
+  and would be locked in the prompt forever. Verified: clearing it as the
+  supervisor left the client's flag untouched.
+- **Existing accounts are NOT flagged (077).** Everyone who exists was created
+  the only way that existed, so flagging them all would lock the whole firm out
+  at their next sign-in until they chose new passwords. A migration should not
+  do that to a working business without being asked; the header gives the
+  one-line UPDATE for forcing a specific person.
+- **Offer the working path first (077).** The mode picker puts "Set a password"
+  first and defaults to it, because Supabase will not deliver mail to anybody
+  outside the project team until custom SMTP is configured — leading with the
+  invite would be leading with the one that silently fails. The Edge Function
+  also detects that specific failure and says what to do instead, rather than
+  passing through a raw SMTP error.
 - **"Never signed in" and "forgot the password" are different problems (076).**
   A reset link sent to somebody who never accepted their invitation is the wrong
   email: they have no password to reset and end up exactly as stuck, while the

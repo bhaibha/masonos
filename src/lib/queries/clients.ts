@@ -88,6 +88,8 @@ export async function createClient(input: NewClientInput): Promise<string> {
       phone: input.phone.trim(),
       role: 'client',
       client_project_id: input.project_id,
+      mode: input.mode,
+      redirect_to: `${window.location.origin}/set-password`,
     },
   })
 

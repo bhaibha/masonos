@@ -2,6 +2,7 @@ import { ShieldCheck, UserPlus, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { CreateModePicker } from '@/components/CreateModePicker'
 import { FieldRow, Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -36,6 +37,7 @@ const EMPTY: NewUserInput = {
   designation: 'Site Engineer',
   role: 'supervisor',
   project_ids: [],
+  mode: 'direct',
 }
 
 export default function AdminTeam() {
@@ -383,20 +385,30 @@ function NewUserForm({
         />
       </FieldRow>
 
-      <FieldRow
-        label="Temporary password"
-        htmlFor="u-pass"
-        hint="At least 8 characters. Give it to them directly and ask them to change it."
-      >
-        <Input
-          id="u-pass"
-          type="text"
-          value={form.password}
-          onChange={(e) => set('password', e.target.value)}
-          autoComplete="off"
-          className="h-12"
-        />
-      </FieldRow>
+      <CreateModePicker
+        value={form.mode}
+        onChange={(m) => set('mode', m)}
+        who="them"
+      />
+
+      {/* Only the direct path needs a password. Showing the field in invite
+          mode would ask for a secret that is never used. */}
+      {form.mode === 'direct' && (
+        <FieldRow
+          label="Temporary password"
+          htmlFor="u-pass"
+          hint="At least 8 characters. Give it to them directly — the app will make them change it the first time they sign in."
+        >
+          <Input
+            id="u-pass"
+            type="text"
+            value={form.password}
+            onChange={(e) => set('password', e.target.value)}
+            autoComplete="off"
+            className="h-12"
+          />
+        </FieldRow>
+      )}
 
       <FieldRow label="Phone" htmlFor="u-phone">
         <Input

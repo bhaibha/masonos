@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import { CreateModePicker } from '@/components/CreateModePicker'
 import { FieldRow, Select } from '@/components/Field'
 import { RevealItem, Stagger } from '@/components/Reveal'
 import { ListSkeleton } from '@/components/Skeleton'
@@ -45,6 +46,7 @@ const EMPTY: NewClientInput = {
   full_name: '',
   phone: '',
   project_id: '',
+  mode: 'direct',
 }
 
 /**
@@ -459,12 +461,24 @@ function NewClientForm({
       toast.error('Pick a project')
       return
     }
+    if (form.mode === 'direct' && form.password.length < 8) {
+      toast.error('Use at least 8 characters for the password')
+      return
+    }
     setSaving(true)
     try {
       await createClient(form)
-      toast.success(`${form.full_name.trim()} can now sign in`, {
-        description: 'Send them the email and password you just set.',
-      })
+      toast.success(
+        form.mode === 'invite'
+          ? `Invitation sent to ${form.email.trim()}`
+          : `${form.full_name.trim()} can now sign in`,
+        {
+          description:
+            form.mode === 'invite'
+              ? 'They choose their own password from the link.'
+              : 'Give them the email and password you just set. They will be asked to change it.',
+        },
+      )
       setForm(EMPTY)
       await onSaved()
     } catch (err) {
@@ -551,22 +565,30 @@ function NewClientForm({
         />
       </FieldRow>
 
-      <FieldRow
-        label="Password"
-        htmlFor="cl-pass"
-        hint="At least 8 characters. There is no invite email — tell them yourself, and they can change it later."
-      >
-        <Input
-          id="cl-pass"
-          type="password"
-          className="h-12"
-          autoComplete="new-password"
-          value={form.password}
-          onChange={(e) => set('password', e.target.value)}
-          required
-          minLength={8}
-        />
-      </FieldRow>
+      <CreateModePicker
+        value={form.mode}
+        onChange={(m) => set('mode', m)}
+        who="your client"
+      />
+
+      {form.mode === 'direct' && (
+        <FieldRow
+          label="Password"
+          htmlFor="cl-pass"
+          hint="At least 8 characters. Tell them yourself — the portal will make them choose their own the first time they sign in."
+        >
+          <Input
+            id="cl-pass"
+            type="text"
+            className="h-12"
+            autoComplete="off"
+            value={form.password}
+            onChange={(e) => set('password', e.target.value)}
+            required
+            minLength={8}
+          />
+        </FieldRow>
+      )}
 
       <div className="flex items-start gap-2.5 rounded-lg bg-secondary/60 p-3.5">
         <KeyRound

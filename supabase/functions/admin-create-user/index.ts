@@ -90,6 +90,17 @@ Deno.serve(async (req) => {
      * outsider eventually ends up on two jobs.
      */
     client_project_id?: string
+    /**
+     * 'direct' (default) — create with the password the founder typed. Works
+     *   today, needs no email, and sets must_change_password so that shared
+     *   secret survives exactly one sign-in (077).
+     * 'invite'  — send an invitation; the person chooses their own password and
+     *   nobody at the firm ever knows it. Requires custom SMTP on the Supabase
+     *   project, or the send fails and this returns the reason.
+     */
+    mode?: 'direct' | 'invite'
+    /** Where the invite link lands. Always the app's /set-password. */
+    redirect_to?: string
   }
   try {
     body = await req.json()
@@ -103,9 +114,14 @@ Deno.serve(async (req) => {
   const role = body.role ?? 'supervisor'
   const validRoles = ['founder', 'pm', 'supervisor', 'accounts', 'client']
   const isClient = role === 'client'
+  const mode = body.mode === 'invite' ? 'invite' : 'direct'
 
   if (!email || !email.includes('@')) return json({ error: 'A valid email is required' }, 400)
-  if (password.length < 8) return json({ error: 'Password must be at least 8 characters' }, 400)
+  // Only the direct path needs a password — an invited user chooses their own,
+  // and demanding one here would mean inventing a secret nobody uses.
+  if (mode === 'direct' && password.length < 8) {
+    return json({ error: 'Password must be at least 8 characters' }, 400)
+  }
   if (!fullName) return json({ error: 'Full name is required' }, 400)
   if (!validRoles.includes(role)) return json({ error: 'Unknown access role' }, 400)
 
@@ -137,14 +153,47 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const { data: created, error: createErr } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true, // internal tool — no confirmation round-trip
-    user_metadata: { full_name: fullName },
-  })
+  // TWO WAYS IN, ONE ACCOUNT SHAPE. Whichever path runs, what comes out is the
+  // same auth user + profile + links, so nothing downstream has to care which
+  // was used.
+  let created:
+    | { user: { id: string } | null }
+    | null = null
+  let createErr: { message: string } | null = null
 
-  if (createErr || !created.user) {
+  if (mode === 'invite') {
+    const res = await admin.auth.admin.inviteUserByEmail(email, {
+      data: { full_name: fullName },
+      redirectTo: body.redirect_to,
+    })
+    created = res.data
+    createErr = res.error
+    // The single most likely failure, and the message Supabase gives for it is
+    // not obvious. Say what to do about it.
+    if (createErr && /smtp|not authorized|rate/i.test(createErr.message)) {
+      return json(
+        {
+          error:
+            'The invitation could not be sent. Supabase only emails members of ' +
+            'the project team until custom SMTP is configured. Use "Set a ' +
+            'password" instead, or configure SMTP first. (' +
+            createErr.message + ')',
+        },
+        400,
+      )
+    }
+  } else {
+    const res = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // internal tool — no confirmation round-trip
+      user_metadata: { full_name: fullName },
+    })
+    created = res.data
+    createErr = res.error
+  }
+
+  if (createErr || !created?.user) {
     return json({ error: createErr?.message ?? 'Could not create the account' }, 400)
   }
 
@@ -160,6 +209,10 @@ Deno.serve(async (req) => {
       role,
       designation: body.designation?.trim() || null,
       is_active: true,
+      // 077. A password somebody else chose is a shared secret and must survive
+      // exactly one sign-in. An INVITED user picks their own, so there is
+      // nothing to force.
+      must_change_password: mode === 'direct',
     })
     .eq('id', newId)
 
@@ -187,7 +240,7 @@ Deno.serve(async (req) => {
       return json({ error: `Portal access failed: ${linkErr.message}` }, 400)
     }
 
-    return json({ id: newId, email, full_name: fullName, role }, 200)
+    return json({ id: newId, email, full_name: fullName, role, mode }, 200)
   }
 
   // ---- 4b. Staff project assignments ----
@@ -205,5 +258,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ id: newId, email, full_name: fullName, role }, 200)
+  return json({ id: newId, email, full_name: fullName, role, mode }, 200)
 })

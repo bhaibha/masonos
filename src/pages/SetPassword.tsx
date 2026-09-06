@@ -13,6 +13,7 @@ import {
 } from '@/lib/authLink'
 import { errText } from '@/lib/errText'
 import { fetchMyProfile } from '@/lib/queries/profile'
+import { useAuth } from '@/store/auth'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -35,9 +36,17 @@ export default function SetPassword() {
   const navigate = useNavigate()
   const link = useRef<AuthLink | null>(getAuthLink()).current
 
-  const [phase, setPhase] = useState<Phase>(link ? 'consuming' : 'dead')
+  // THE THIRD WAY IN. No link, but a signed-in account created with a password
+  // somebody else chose (077). Same screen, different sentence — a forced
+  // change and an invitation are the same act from the user's side.
+  const profile = useAuth((st) => st.profile)
+  const forced = !link && profile?.must_change_password === true
+
+  const [phase, setPhase] = useState<Phase>(
+    link ? 'consuming' : forced ? 'ready' : 'dead',
+  )
   const [dead, setDead] = useState<{ title: string; body: string } | null>(
-    link ? null : {
+    link || forced ? null : {
       title: 'Nothing to set up here',
       body:
         'This page is reached from an invitation email. If you already have a ' +
@@ -48,7 +57,11 @@ export default function SetPassword() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [saving, setSaving] = useState(false)
-  const [email, setEmail] = useState<string | null>(null)
+  // In the forced case there is already a session, so the address is known
+  // without a round trip.
+  const sessionEmail = useAuth((st) => st.user?.email ?? null)
+  const refreshProfile = useAuth((st) => st.refreshProfile)
+  const [email, setEmail] = useState<string | null>(forced ? sessionEmail : null)
 
   /* ---------------- phase 1: consume the token ---------------- */
   useEffect(() => {
@@ -135,6 +148,15 @@ export default function SetPassword() {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
 
+      // 077. Only after the password actually changed — clearing it first would
+      // let somebody escape the prompt by failing.
+      await supabase.rpc('fn_clear_password_change').then(({ error: e }) => {
+        // Not fatal: they HAVE changed their password, which is the point. The
+        // prompt reappearing once is better than blocking them here.
+        if (e) console.error('[set-password] could not clear the flag', e)
+      })
+      await refreshProfile()
+
       toast.success('Password set', {
         description: 'You are signed in. Welcome.',
       })
@@ -220,12 +242,14 @@ export default function SetPassword() {
                 />
                 <div>
                   <p className="font-heading text-[19px] leading-tight font-semibold">
-                    Choose a password
+                    {forced ? 'Choose your own password' : 'Choose a password'}
                   </p>
                   <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                    {email
-                      ? `You are setting the password for ${email}.`
-                      : 'Set the password you will use to sign in.'}
+                    {forced
+                      ? 'Your account was set up with a password somebody else chose. Pick your own before you carry on — it takes a moment and nobody else will know it.'
+                      : email
+                        ? `You are setting the password for ${email}.`
+                        : 'Set the password you will use to sign in.'}
                   </p>
                 </div>
               </div>
