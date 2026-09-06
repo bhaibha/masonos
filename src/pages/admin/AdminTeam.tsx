@@ -179,8 +179,11 @@ function MemberCard({
     if (
       !next &&
       !window.confirm(
-        `Deactivate ${member.full_name}? They keep their login but you should ` +
-          `also remove their project assignments to cut off data access.`,
+        `Deactivate ${member.full_name}? They can still sign in, but every ` +
+          `screen is refused by the database and they see a closed-account ` +
+          `notice instead. Their project assignments are kept, so ` +
+          `reactivating restores exactly what they had. If they are leaving ` +
+          `on bad terms, reset their password in Supabase as well.`,
       )
     )
       return

@@ -340,7 +340,61 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   **So: 001-077 ALL APPLIED** (067-076 confirmed through the running app;
   077 confirmed 2026-09-06 — its verify block returned col = 1, fn = 1,
   flagged_now = 0, and that select is the last statement in the file).
-  Next migration = 078.
+  **078 APPLIED** (confirmed 2026-09-06) — "Deactivate" has to actually deactivate
+  (`is_active_user()`, `my_role()` and `is_member()` hardened to return
+  NULL/false for an inactive profile, the twelve own-row policies that grant on
+  `auth.uid()` re-emitted with the active check, `fn_profile_active_guard` +
+  BEFORE UPDATE trigger on profiles). Ships with `AccountClosed.tsx` and the
+  RequireAuth branch. Verified on a real PostgreSQL with the ACTUAL 001-077
+  chain as fixtures: three clean runs, and a live PM proven going from full
+  access to zero rows on every table and refused on every own-row write, then
+  back to EXACTLY the same access on reactivation; client suspension empties
+  the portal; founder unaffected; both guards confirmed firing.
+  **So: 001-078 ALL APPLIED.** Next migration = 079.
+- **A CONTROL THAT REPORTS SUCCESS AND DOES NOTHING IS A LIE THE APP TELLS ITS
+  OWNER (078).** `profiles.is_active` has existed since 001 and Admin has
+  offered a Deactivate button for months. NOT ONE POLICY OR HELPER READ THAT
+  COLUMN. A deactivated staff member could still sign in and see every expense,
+  every vendor rate and every document their role allowed; the button removed
+  them from assignee dropdowns and the push digest, and that was all. Worse
+  than no button, because the founder believed the account was closed and so
+  nobody reset a password. Same family as 069 (no UPDATE policy, refuses
+  silently) and 072 (a column nothing writes) — this one pointed the other way:
+  the write happened, the read never did. **When a screen offers to change
+  state, grep for something that READS that state before believing it works.**
+- **Harden the function, not the two hundred policies (078, the 065 lesson
+  again).** `my_role()` returning NULL for an inactive profile closes almost
+  everything at once — is_founder(), is_internal(), is_client() and every
+  role-named policy go false together, and `fn_client_project()` returns null so
+  every curated client view empties. One function, nothing to keep in step.
+- **The fall-through is what a role check cannot reach (078).** `is_member()`
+  ends in `exists (select 1 from project_members where user_id = auth.uid())`,
+  which stays TRUE for a deactivated PM — their assignment row does not vanish,
+  and it must not, or reactivation could not restore what they had. So the
+  active check goes at the TOP of is_member(), exactly where 065 put the client
+  check. Any function whose last arm is a membership table needs the same.
+- **ASK pg_policies, DO NOT GREP (078, and a grep did miss two).** Twelve
+  policies grant on `auth.uid()` without asking what role the caller is, so
+  my_role() going null never touches them — including a DELETE on `documents`.
+  A line-based grep found ten; the two petty-cash ones reach the holder through
+  a SUBQUERY spanning several lines and were invisible to it. The catalogue
+  query is in 078's header and in its verify block, so a policy added later
+  that needs the same treatment shows up as a number that changed. The 066
+  rule, restated: enumerate the surface from the schema, never from memory.
+- **Say which guard actually fires (078).** The trigger refuses deactivating
+  yourself AND deactivating the last active founder. Both were confirmed
+  firing — but only the first is reachable through the app, because to
+  deactivate the last founder you would have to be a founder, and then there
+  are two. The second only triggers from the SQL editor or a service-role
+  script. Written down that way in the header rather than implying both are
+  live protections.
+- **A closed account must be TOLD, not shown zeros (078).** A deactivated user
+  still signs in — Supabase issues a JWT whatever `is_active` says — and would
+  land on a dashboard where every card reads zero. That is the 056/063/066
+  failure exactly: a row of zeros reads as a fact about the company rather than
+  a refusal. `AccountClosed.tsx` says it in a sentence. And `profile === null`
+  deliberately does NOT route there — that is a failed fetch, and treating it
+  as deactivation would lock the whole firm out on one bad request.
 - **The dashboard does not read config.toml, and the error says nothing about
   it (077, found in production).** `verify_jwt = false` for admin-create-user
   has been in `supabase/config.toml` since 058, with a comment explaining

@@ -1,6 +1,63 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## "DEACTIVATE" NOW ACTUALLY DEACTIVATES (2026-09-06, migration 078)
+
+**Run migration 078 before testing. Redeploy the app after.**
+
+### The bug
+Asked how to delete a user, the honest answer is that they are not deletable —
+`profiles.id` is referenced by 104 foreign keys across 36 migrations and none of
+them cascade, so Postgres refuses to remove anybody who has ever created a
+record. CLAUDE.md has said "deactivate instead" since 022.
+
+Checking that the alternative worked showed it did not. **`profiles.is_active`
+was read by exactly nothing in the database** — not one policy, not one helper.
+A deactivated staff member could still sign in and see every expense, vendor
+rate and document their role allowed. The button removed them from assignee
+dropdowns and from the daily push digest, and that was the whole of it.
+
+Clients were the exception and were already safe: "Remove portal access" deletes
+the `client_projects` row, so `fn_client_project()` returns null and every
+curated view empties. Suspending a client, though, did nothing.
+
+### The fix
+- `is_active_user()`, and `my_role()` returns NULL for an inactive profile —
+  which closes is_founder / is_internal / is_client / fn_client_project and
+  every role-named policy at once.
+- `is_member()` checks it FIRST, because it otherwise falls through to
+  `project_members`, whose rows are deliberately kept so reactivation restores
+  exactly what the person had.
+- The twelve own-row policies that grant on `auth.uid()` re-emitted with the
+  active check. Found by querying `pg_policies`, not by grepping — two of them
+  (petty cash entries, reached through a subquery) were invisible to a grep.
+- `fn_profile_active_guard` refuses deactivating yourself or the last active
+  founder, as a BEFORE UPDATE trigger because Admin PATCHes the table directly.
+- `AccountClosed.tsx` + a RequireAuth branch, so a deactivated user is TOLD
+  rather than shown a dashboard of zeros.
+
+Deliberately left open: `profiles_read` on your own row (or the app cannot tell
+you why it stopped), and the four `push_subscriptions` own-row policies (no
+company data, and the digest already filters `is_active`).
+
+### Verified on a real PostgreSQL (001-077 chain as fixtures, three clean runs)
+A PM with one project, before and after deactivation: `my_role()` pm → NULL,
+`is_member()` t → f, and expenses / tasks / documents / projects / vendors /
+v_project_pnl / petty cash accounts / petty cash entries / client_projects all
+went from non-zero to **0 rows**. Updating their own expense, deleting their own
+document and updating their own profile all went from 1 row to 0, and inserting
+a petty-cash entry was refused outright. Reactivating restored **every one of
+those numbers exactly**. A suspended client: `is_client()` t → f,
+`fn_client_project()` → NULL, `v_client_project` 1 → 0, message insert refused.
+The founder's own figures were unchanged throughout.
+
+Both guards fired. Only the self-deactivation one is reachable through the app —
+see CLAUDE.md for why.
+
+**Not a substitute for revoking the password.** The account can still sign in;
+the JWT simply buys nothing. For a hostile departure, deactivate here AND reset
+the password in Supabase.
+
 ## ONBOARDING: DIRECT OR BY INVITE (2026-09-05, migration 077)
 
 **Run migration 077 and redeploy `admin-create-user`.**

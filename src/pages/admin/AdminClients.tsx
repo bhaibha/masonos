@@ -219,8 +219,10 @@ function ClientCard({
     if (
       !next &&
       !window.confirm(
-        `Suspend ${client.full_name}? They can no longer sign in. Everything ` +
-          `they approved stays on record, and you can restore access later.`,
+        `Suspend ${client.full_name}? They can still sign in, but the portal ` +
+          `is refused and they see a closed-account notice instead. ` +
+          `Everything they approved stays on record, and you can restore ` +
+          `access later.`,
       )
     )
       return
