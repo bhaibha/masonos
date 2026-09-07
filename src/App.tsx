@@ -24,6 +24,8 @@ import PortalProgress from '@/pages/portal/PortalProgress'
 import { ADMIN_ROLES, BUDGET_WRITE_ROLES, MONEY_ROLES } from '@/lib/types'
 import Dashboard from '@/pages/Dashboard'
 import Login from '@/pages/Login'
+import MfaChallenge from '@/pages/MfaChallenge'
+import Security from '@/pages/Security'
 import ProjectDetail from '@/pages/ProjectDetail'
 import AdminClients from '@/pages/admin/AdminClients'
 import AdminLayout from '@/pages/admin/AdminLayout'
@@ -109,6 +111,17 @@ export default function App() {
         <Route path="/set-password" element={<SetPassword />} />
 
         <Route element={<RequireAuth />}>
+          {/* The second step at sign-in. INSIDE RequireAuth (a session exists —
+              it is just at aal1) and above both trees, because RequireAuth
+              sends every role here while a code is owed. Rendering it inside
+              AppShell would put the nav around a screen nobody may pass. */}
+          <Route path="/mfa" element={<MfaChallenge />} />
+
+          {/* Own-account security, for whoever is signed in — internal or
+              client. Not under RequireInternal: "only the boss may protect
+              their login" is not a rule that makes sense. */}
+          <Route path="/security" element={<Security />} />
+
           {/* The client portal. Its own route tree and its own shell — a client
               never renders AppShell, so they never see the internal nav. */}
           <Route element={<RequireClient />}>

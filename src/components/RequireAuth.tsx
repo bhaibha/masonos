@@ -6,6 +6,7 @@ export function RequireAuth() {
   const user = useAuth((s) => s.user)
   const loading = useAuth((s) => s.loading)
   const profile = useAuth((s) => s.profile)
+  const mfaPending = useAuth((s) => s.mfaPending)
   const location = useLocation()
 
   if (loading) {
@@ -18,6 +19,22 @@ export function RequireAuth() {
 
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  /**
+   * MFA. Checked FIRST of the three, because it is the only one that answers
+   * "is this really them". A password alone got us this far: signInWithPassword
+   * succeeds for a user with a verified factor and hands back an aal1 session.
+   * Sending somebody to set a password, or telling them their account is
+   * closed, before they have proved who they are would be answering the wrong
+   * question in the wrong order.
+   *
+   * The gate lives here rather than in the login form because an aal1 session
+   * survives a reload — a check that only ran after the password was typed
+   * could be walked past by refreshing.
+   */
+  if (mfaPending && location.pathname !== '/mfa') {
+    return <Navigate to="/mfa" replace />
   }
 
   /**

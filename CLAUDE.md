@@ -375,6 +375,44 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   2026-09-06 — verify block returned view_exists = 1, gates_on_founder = 1,
   still_lists_pm_accounts = 0, summary_fn = 1.
   **So: 001-080 ALL APPLIED.** Next migration = 081.
+- **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
+  (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
+  with a verified TOTP factor; it is simply at assurance level **aal1**.
+  Nothing about the password is rejected. So the second factor is only worth
+  anything if something refuses to proceed, and that something is
+  `RequireAuth` — NOT the login form, because an aal1 session survives a reload
+  and a form-only check is walked past by refreshing. Checked FIRST of the
+  three branches there (before deactivation and before the password prompt),
+  because "is this really them" is the question that has to be answered before
+  any of the others make sense. Recorded plainly, like 077: this is a ROUTE.
+  RLS could demand `auth.jwt()->>'aal' = 'aal2'`, but that would lock out
+  everyone who has not enrolled, so it stays off until enrolment is universal.
+- **Clean up the abandoned enrolment before starting a new one (MFA).**
+  Supabase refuses a second factor with the same friendly name, so a founder
+  who closed the tab half way through could never start again — and the error
+  names a row they cannot see and have no way to delete from the UI.
+  `startEnrolment` unenrols any UNVERIFIED factor first. An unverified factor
+  also does not raise `nextLevel` to aal2, so a half-finished setup can never
+  lock anybody out — worth knowing before writing a "repair" that is not needed.
+- **Name the switch, do not pass through the error (MFA).** The most likely
+  first failure is that TOTP is not enabled on the Supabase project, and the
+  raw message ("MFA enrollment is disabled") reads like an app bug rather than
+  a setting somebody has to flip. The screen matches on it and says where to go.
+  Same family as 058's 404 handler naming the likely cause.
+- **The remedy has to exist before the feature ships (MFA).** Losing the phone
+  locks the account out permanently unless somebody can reach
+  `auth.mfa_factors`. That DELETE is written down in PROGRESS.md as the
+  break-glass, because a security feature with no recovery path is one the firm
+  will be too frightened to turn on — and the day they need it is not the day
+  to work it out.
+- **`email_confirm: true` was already there (2026-09-07).** "Make direct-created
+  users auto-confirmed" needed no code: `admin-create-user` has always passed
+  that flag to `createUser`, and it confirms the address regardless of the
+  project's "Confirm email" setting. The invite branch deliberately does NOT
+  set it — an invitation exists precisely to prove the address, and clicking it
+  is the proof. **Read the function before changing it** — second time in this
+  repo (the 077 lesson), and the honest answer to "make it do X" is sometimes
+  "it does, here is the line".
 - **A VIEW'S AUDIENCE IS A DECISION ABOUT ITS WIDEST COLUMN, AND ADDING A
   COLUMN CAN INVALIDATE IT (080).** 067 gated `v_client_roster` at
   founder/pm/accounts when it carried names and exposure counts, and a PM

@@ -1,6 +1,59 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## TWO-FACTOR (TOTP) — 2026-09-07
+
+**No migration. App only — redeploy after `npm run build`.**
+**One dashboard switch first: Authentication → Multi-Factor → enable TOTP.**
+Without it `enroll()` refuses and the Security screen says so in words rather
+than passing through "MFA enrollment is disabled".
+
+`src/lib/mfa.ts` wraps the Supabase MFA API · `/security` enrols (QR + manual
+key + verify) and removes · `/mfa` is the sign-in challenge · `RequireAuth`
+routes to it.
+
+### The thing to understand
+`signInWithPassword` **succeeds** for a user with a verified factor — it hands
+back a real session at **aal1**. The password is never refused. What the app
+does is refuse to go anywhere until the session reaches aal2. So the gate is in
+`RequireAuth`, checked BEFORE the 078 deactivation branch and the 077 password
+branch: an aal1 session survives a reload, and a check that only ran in the
+login form could be skipped by refreshing the page.
+
+**This is an app-level gate, not RLS.** A determined holder of a stolen password
+plus the anon key could still talk to PostgREST on an aal1 session. Enforcing
+`auth.jwt()->>'aal' = 'aal2'` in RLS is possible but would lock out every user
+who has NOT enrolled, so it is not on until enrolment is universal. Same shape
+as 077: this protects against a password alone at the front door.
+
+### Break-glass — lost phone
+Only somebody with database access can undo it:
+```sql
+delete from auth.mfa_factors
+ where user_id = (select id from auth.users where email = 'them@example.com');
+```
+They then sign in with the password alone and enrol again.
+
+## "CONFIRM EMAIL" IS ON — direct-created users were ALREADY fine
+`admin-create-user` has always passed `email_confirm: true` to
+`admin.auth.admin.createUser`, so a directly-created team member or client is
+confirmed at the moment of creation and can sign in immediately. Turning on
+"Confirm email" does not change that — the admin flag confirms regardless.
+**Nothing needed building.** Invited users confirm by clicking the invitation,
+which is correct: an invite exists precisely to prove the address.
+
+Check nobody is stranded from before:
+```sql
+select u.email, u.created_at, p.role
+from auth.users u left join public.profiles p on p.id = u.id
+where u.email_confirmed_at is null order by u.created_at;
+```
+Any row there predates the flag or was made by hand in the dashboard. Fix:
+```sql
+update auth.users set email_confirmed_at = now()
+ where email = 'them@example.com' and email_confirmed_at is null;
+```
+
 ## SECURITY ADVISOR AUDIT (2026-09-06, migration 079)
 
 **Run migration 079 before testing.** No behaviour change — it converts three

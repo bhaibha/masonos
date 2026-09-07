@@ -5,11 +5,12 @@ import {
   LogOut,
   MessageSquare,
   Receipt,
+  ShieldCheck,
   Stamp,
 } from 'lucide-react'
 import { motion } from 'motion/react'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 
@@ -55,6 +56,19 @@ export default function PortalLayout() {
             <p className="hidden truncate text-xs text-muted-foreground sm:block">
               {profile?.full_name ?? ''}
             </p>
+            {/* A client's login reaches their bills and their approvals, so
+                they get the same option to protect it. */}
+            <Link
+              to="/security"
+              aria-label="Security"
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'icon-lg' }),
+                'text-muted-foreground',
+              )}
+            >
+              <ShieldCheck className="size-[18px]" />
+            </Link>
+
             <Button
               variant="ghost"
               size="icon-lg"

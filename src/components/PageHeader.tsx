@@ -1,5 +1,6 @@
-import { LogOut } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { LogOut, ShieldCheck } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
 
@@ -42,15 +43,35 @@ export function PageHeader({
           </p>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon-lg"
-          aria-label="Sign out"
-          onClick={() => void signOut()}
-          className="text-muted-foreground"
-        >
-          <LogOut className="size-[18px]" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Two-factor lives next to sign out because that is where people
+              look for anything about their own account, and it is the only
+              other thing in this header that is about the PERSON rather than
+              the project. */}
+          {/* A Link wearing the button's own classes — this Button has no
+              `asChild`, and nesting an anchor inside a <button> is invalid
+              HTML that breaks keyboard navigation. */}
+          <Link
+            to="/security"
+            aria-label="Security"
+            className={cn(
+              buttonVariants({ variant: 'ghost', size: 'icon-lg' }),
+              'text-muted-foreground',
+            )}
+          >
+            <ShieldCheck className="size-[18px]" />
+          </Link>
+
+          <Button
+            variant="ghost"
+            size="icon-lg"
+            aria-label="Sign out"
+            onClick={() => void signOut()}
+            className="text-muted-foreground"
+          >
+            <LogOut className="size-[18px]" />
+          </Button>
+        </div>
       </div>
     </header>
   )
