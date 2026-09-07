@@ -6,6 +6,7 @@ import { FieldRow } from '@/components/Field'
 import { FadeUp } from '@/components/Reveal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { APP_NAME } from '@/lib/appName'
 import { errText } from '@/lib/errText'
 import { type MfaFactor, answerChallenge, firstVerifiedFactor } from '@/lib/mfa'
 import { useAuth } from '@/store/auth'
@@ -82,7 +83,7 @@ export default function MfaChallenge() {
             Your Masons
           </p>
           <h1 className="font-heading mt-0.5 text-2xl font-semibold tracking-tight">
-            Mason OS
+            {APP_NAME}
           </h1>
         </div>
 

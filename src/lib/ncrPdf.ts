@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { APP_NAME_FULL } from '@/lib/appName'
 import { COMPANY } from '@/lib/company'
 import {
   NCR_SEVERITY_LABEL,
@@ -225,7 +226,7 @@ function buildNcrDoc(opts: NcrPdfOpts): jsPDF {
     doc.setFontSize(9)
     doc.setTextColor(...muted)
     doc.text(
-      `${ncr.photos.length} photograph${ncr.photos.length === 1 ? '' : 's'} held against this report in Mason OS.`,
+      `${ncr.photos.length} photograph${ncr.photos.length === 1 ? '' : 's'} held against this report in ${APP_NAME_FULL}.`,
       M,
       y,
     )

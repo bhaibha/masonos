@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { toast } from 'sonner'
+import { APP_NAME } from '@/lib/appName'
 import { errText } from '@/lib/errText'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -71,7 +72,7 @@ export default function Login() {
       <div className="mx-auto w-full max-w-sm">
         <div className="mb-10">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Mason OS
+            {APP_NAME}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Your Masons — internal site management

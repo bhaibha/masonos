@@ -11,6 +11,7 @@ import {
   describeLinkError,
   getAuthLink,
 } from '@/lib/authLink'
+import { APP_NAME } from '@/lib/appName'
 import { errText } from '@/lib/errText'
 import { fetchMyProfile } from '@/lib/queries/profile'
 import { useAuth } from '@/store/auth'
@@ -192,7 +193,7 @@ export default function SetPassword() {
             Your Masons
           </p>
           <h1 className="font-heading mt-0.5 text-[26px] leading-none font-semibold">
-            Mason OS
+            {APP_NAME}
           </h1>
         </div>
       </header>

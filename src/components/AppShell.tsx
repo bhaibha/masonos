@@ -8,6 +8,7 @@ import {
 import { motion } from 'motion/react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AssistantLauncher } from '@/components/AssistantPanel'
+import { APP_NAME } from '@/lib/appName'
 import { cn } from '@/lib/utils'
 import { INTERNAL_ROLES, type UserRole } from '@/lib/types'
 import { useAuth } from '@/store/auth'
@@ -75,7 +76,7 @@ export function AppShell() {
             Your Masons
           </p>
           <p className="font-heading mt-0.5 text-[19px] leading-tight font-semibold">
-            Mason OS
+            {APP_NAME}
           </p>
         </div>
 

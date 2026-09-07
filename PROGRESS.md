@@ -1,6 +1,35 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## RENAMED TO "YMS" (2026-09-07) — app only, redeploy
+
+`short_name` **YMS** (under the home-screen icon) · `name` **YMS — Your
+Masons** (install prompt and splash) · tab title, `apple-mobile-web-app-title`,
+service-worker push fallback all match.
+
+**The name was in nine places, not one.** `src/lib/appName.ts` now holds
+`APP_NAME` / `APP_NAME_FULL` and the five screens, the NCR PDF and the project
+archive read from it. Three files still carry the string literally because they
+are outside the TypeScript build and cannot import it — **`index.html`,
+`public/manifest.webmanifest`, `public/sw.js`** — those are what to grep if the
+name changes again.
+
+External documents (NCR PDF, project archive) use `APP_NAME_FULL`: a consultant
+reading an NCR should not meet a bare acronym.
+
+`CACHE_VERSION` bumped `mason-os-v2` → `yms-v3`. The activate handler deletes
+every cache not starting with the current version, so the old shell — holding
+an index.html with the old title — goes with it. **Without the bump the rename
+would not have appeared.**
+
+### Two things to expect after deploying
+- **An already-installed home-screen icon keeps its old label.** The OS reads
+  the manifest at install time. Remove it and re-add to get "YMS".
+- The in-app wordmark now reads **Your Masons / YMS**, which is slightly
+  redundant. If you would rather the eyebrow went, it is one line in
+  `AppShell.tsx`, `Login.tsx`, `MfaChallenge.tsx`, `SetPassword.tsx` and
+  `AccountClosed.tsx`.
+
 ## TWO-FACTOR (TOTP) — 2026-09-07
 
 **No migration. App only — redeploy after `npm run build`.**

@@ -2,6 +2,7 @@ import { Lock } from 'lucide-react'
 import { useState } from 'react'
 import { FadeUp } from '@/components/Reveal'
 import { Button } from '@/components/ui/button'
+import { APP_NAME } from '@/lib/appName'
 import { useAuth } from '@/store/auth'
 
 /**
@@ -36,7 +37,7 @@ export function AccountClosed() {
             Your Masons
           </p>
           <h1 className="font-heading mt-0.5 text-[26px] leading-none font-semibold">
-            Mason OS
+            {APP_NAME}
           </h1>
         </div>
       </header>
@@ -55,7 +56,7 @@ export function AccountClosed() {
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                   {profile?.full_name ? `${profile.full_name}, your ` : 'Your '}
-                  access to Mason OS has been switched off. Nothing here will
+                  access to {APP_NAME} has been switched off. Nothing here will
                   load until somebody at Your Masons turns it back on.
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">

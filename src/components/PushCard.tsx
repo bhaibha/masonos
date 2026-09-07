@@ -2,6 +2,7 @@ import { Bell, BellOff } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { APP_NAME } from '@/lib/appName'
 import { errText } from '@/lib/errText'
 import {
   currentPushState,
@@ -85,7 +86,7 @@ export function PushCard() {
             : state === 'denied'
               ? 'This browser is blocking notifications. Allow them for this site in your browser settings, then come back.'
               : state === 'needs-install'
-                ? 'On iPhone, add Mason OS to your Home Screen first — Apple only allows notifications for installed apps. Share → Add to Home Screen, then open it from there.'
+                ? `On iPhone, add ${APP_NAME} to your Home Screen first — Apple only allows notifications for installed apps. Share → Add to Home Screen, then open it from there.`
                 : 'Get your task list on this phone each morning at 7am.'}
         </p>
 

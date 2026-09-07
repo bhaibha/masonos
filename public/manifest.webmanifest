@@ -1,6 +1,6 @@
 {
-  "name": "Mason OS — Your Masons",
-  "short_name": "Mason OS",
+  "name": "YMS — Your Masons",
+  "short_name": "YMS",
   "description": "Internal construction management for Your Masons.",
   "id": "/",
   "start_url": "/dashboard",

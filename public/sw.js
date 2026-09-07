@@ -1,4 +1,4 @@
-/* Mason OS service worker — hand-written, no Workbox.
+/* YMS service worker — hand-written, no Workbox.
  *
  * Deliberately narrow: it caches the app shell and Vite's content-hashed
  * assets, and nothing else. Every Supabase request (REST, auth, storage) is
@@ -10,7 +10,10 @@
  * Bump CACHE_VERSION on any change to this file.
  */
 
-const CACHE_VERSION = 'mason-os-v2'
+// Renamed as well as bumped: the activate handler deletes every cache whose
+// key does not start with CACHE_VERSION, so the old `mason-os-v2-*` shells go
+// with it rather than sitting there holding an index.html with the old title.
+const CACHE_VERSION = 'yms-v3'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
@@ -74,7 +77,9 @@ self.addEventListener('push', (event) => {
     data = {}
   }
 
-  const title = data.title || 'Mason OS'
+  // Literal, not the APP_NAME constant — a service worker is not part of the
+  // TypeScript build and cannot import from src/.
+  const title = data.title || 'YMS'
   const options = {
     body: data.body || 'You have tasks waiting.',
     icon: '/icon-192.png',
