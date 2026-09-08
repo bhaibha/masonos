@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { amountInWords } from '@/lib/amountInWords'
 import { COMPANY } from '@/lib/company'
+import { drawLetterhead, drawPageFooters } from '@/lib/pdf/letterhead'
 import { RA_STATUS_LABEL, type RaBillLine, type RaBillRow } from '@/lib/types'
 
 const inr = new Intl.NumberFormat('en-IN', {
@@ -48,34 +49,7 @@ function buildRaDoc(opts: RaBillPdfOpts): jsPDF {
   const muted: [number, number, number] = [107, 101, 96]
   const brass: [number, number, number] = [166, 124, 82]
   const danger: [number, number, number] = [155, 61, 61]
-  let y = M
-
-  // ---------- Letterhead ----------
-  doc.setTextColor(...ink)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(22)
-  doc.text(COMPANY.name, M, y)
-  y += 16
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...muted)
-  if (COMPANY.tagline) {
-    doc.text(COMPANY.tagline, M, y)
-    y += 12
-  }
-  for (const line of COMPANY.addressLines) {
-    doc.text(line, M, y)
-    y += 11
-  }
-  doc.text(`GSTIN: ${COMPANY.gstin}`, M, y)
-  y += 11
-  doc.text(`${COMPANY.phone}  ·  ${COMPANY.email}`, M, y)
-  y += 18
-
-  doc.setDrawColor(...brass)
-  doc.setLineWidth(1.2)
-  doc.line(M, y, W - M, y)
-  y += 26
+  let y = drawLetterhead(doc, { margin: M })
 
   // ---------- Title ----------
   doc.setTextColor(...ink)
@@ -288,6 +262,10 @@ function buildRaDoc(opts: RaBillPdfOpts): jsPDF {
   doc.text(`For ${COMPANY.name}`, W - M, sy + 14, { align: 'right' })
   doc.text('Certified by', W - M, sy + 28, { align: 'right' })
   doc.text('This is a computer-generated document.', M, sy + 28)
+
+  // Only appears when the measurement lines actually spilled onto a second
+  // page; a certificate that fits on one does not need telling.
+  drawPageFooters(doc, { margin: M })
 
   return doc
 }

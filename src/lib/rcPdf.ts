@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { COMPANY } from '@/lib/company'
+import { drawLetterhead, drawPageFooters } from '@/lib/pdf/letterhead'
 import type {
   ComparisonCell,
   ComparisonItem,
@@ -67,28 +68,7 @@ function buildRcDoc(opts: RcPdfOpts): jsPDF {
   for (const c of cells) cellAt.set(`${c.item_id}|${c.vendor_col_id}`, c)
   const totalFor = new Map(totals.map((t) => [t.vendor_col_id, t]))
 
-  // ---- Letterhead ----
-  doc.setTextColor(...ink)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(20)
-  doc.text(COMPANY.name, M, y)
-  y += 15
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.setTextColor(...muted)
-  doc.text(COMPANY.tagline, M, y)
-  y += 12
-  for (const line of COMPANY.addressLines) {
-    doc.text(line, M, y)
-    y += 11
-  }
-  doc.text(`GSTIN: ${COMPANY.gstin}  ·  ${COMPANY.phone}`, M, y)
-  y += 12
-
-  doc.setDrawColor(...brass)
-  doc.setLineWidth(1.2)
-  doc.line(M, y, W - M, y)
-  y += 22
+  y = drawLetterhead(doc, { margin: M, scale: 'compact' })
 
   // ---- Title + meta ----
   doc.setTextColor(...ink)
@@ -358,6 +338,11 @@ function buildRcDoc(opts: RcPdfOpts): jsPDF {
   doc.setTextColor(...muted)
   doc.text(`For ${COMPANY.name}`, W - M, sy + 13, { align: 'right' })
   doc.text('Authorised signatory', W - M, sy + 25, { align: 'right' })
+
+  // A comparative statement routinely runs to several pages — one page per
+  // vendor block once there are more than three or four — so the reader needs
+  // to know whether they are holding all of it.
+  drawPageFooters(doc, { margin: M })
 
   return doc
 }

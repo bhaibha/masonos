@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf'
-import { COMPANY } from '@/lib/company'
+import { drawLetterhead, drawPageFooters } from '@/lib/pdf/letterhead'
 import type {
   MisCategory,
   MisCompany,
@@ -93,21 +93,7 @@ function buildMisDoc(opts: MisPdfOpts): jsPDF {
     y += 16
   }
 
-  // ---- Letterhead ----
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(21)
-  doc.setTextColor(...ink)
-  doc.text(COMPANY.name, M, y)
-  y += 15
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.setTextColor(...muted)
-  doc.text(COMPANY.addressLines[0], M, y)
-  y += 11
-  doc.text(`GSTIN ${COMPANY.gstin}  ·  ${COMPANY.phone}`, M, y)
-  y += 12
-  rule()
-  y += 24
+  y = drawLetterhead(doc, { margin: M, scale: 'compact' })
 
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(15)
@@ -350,19 +336,12 @@ function buildMisDoc(opts: MisPdfOpts): jsPDF {
   }
 
   // ---- Footer ----
-  const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) {
-    doc.setPage(p)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6.5)
-    doc.setTextColor(...muted)
-    doc.text(
-      'Internal management report. Figures are computed from the live database and cover only the projects the preparer may see.',
-      M,
-      H - 24,
-    )
-    doc.text(`Page ${p} of ${pages}`, W - M, H - 24, { align: 'right' })
-  }
+  drawPageFooters(doc, {
+    margin: M,
+    bottom: 24,
+    onlyIfMultiPage: false,
+    note: 'Internal management report. Figures are computed from the live database and cover only the projects the preparer may see.',
+  })
 
   return doc
 }

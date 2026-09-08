@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { COMPANY } from '@/lib/company'
+import { drawLogoMark, drawPageFooters } from '@/lib/pdf/letterhead'
 import type { BbsBar, BbsMember, BbsSteelByDia } from '@/lib/types'
 
 const n2 = (v: number) =>
@@ -117,6 +118,13 @@ function buildBbsDoc(opts: BbsPdfOpts): jsPDF {
   // Title + the two boxes
   // ------------------------------------------------------------------
   function titleBlock() {
+    // The mark only, at the left margin — NOT the full letterhead. This sheet
+    // is the firm's own printed form, transcribed in 053, and replacing its
+    // heading with our stationery would be improving somebody's document
+    // without being asked. A small mark identifies who issued it and disturbs
+    // nothing else.
+    drawLogoMark(doc, M, y - 6, 30)
+
     doc.setTextColor(...ink)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(18)
@@ -420,20 +428,18 @@ function buildBbsDoc(opts: BbsPdfOpts): jsPDF {
   doc.text('Excludes wastage and lap lengths.', M, y + 15)
 
   // ---- Footer: the constants this was cut to, on every page ----
-  const pages = doc.getNumberOfPages()
-  for (let p = 1; p <= pages; p++) {
-    doc.setPage(p)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6)
-    doc.setTextColor(...muted)
-    doc.text(constantsNote, M, H - 20)
-    doc.text(`Page ${p} of ${pages}`, right, H - 20, { align: 'right' })
-    doc.text(
+  // `onlyIfMultiPage: false` — a one-page schedule still has to carry the
+  // constants and the IS 2502 caution; they are the document's provenance, not
+  // decoration.
+  drawPageFooters(doc, {
+    margin: M,
+    bottom: 12,
+    onlyIfMultiPage: false,
+    note: [
+      constantsNote,
       'Cutting lengths computed to IS 2502. Piece count is a straight ceiling of total length, not a cutting optimisation. Check against the structural drawing before cutting.',
-      M,
-      H - 12,
-    )
-  }
+    ],
+  })
 
   return doc
 }

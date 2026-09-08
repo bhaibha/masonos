@@ -1,6 +1,73 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## LETTERHEAD (2026-09-08) — one definition, ten documents
+
+`src/lib/pdf/letterhead.ts` is now the only letterhead in the app. Ten
+generators each carried their own copy of the same block — same colours, same
+brass rule, six slightly different sets of y-increments and three different
+opinions about whether the tagline was optional. Changing the company's phone
+number meant editing ten files and hoping.
+
+`drawLetterhead(doc, { margin, scale })` draws it and **returns the y where the
+caller's content starts**, so a generator never has to know how tall the header
+is. `scale: 'compact'` is the landscape/dense variant (comparative statement,
+MIS board pack). Layout is mark top-left, name and tagline beside it, the
+postal and GSTIN block right-aligned, brass rule under the lot — about 20pt
+shorter than the stacked version it replaces, so every portrait document gained
+two lines of body space.
+
+**The BBS sheet gets the mark only, NOT the letterhead** (`drawLogoMark`). That
+sheet is the firm's own printed form, transcribed verbatim in 046/053; replacing
+its heading with our stationery would be improving somebody's document without
+being asked.
+
+### The one thing that will bite whoever edits this
+**jsPDF writes embedded bitmaps UNCOMPRESSED unless told otherwise.** The same
+mark costs **347 KB** per document with no compression argument and **47.6 KB**
+with `compression: 'FAST'` — measured, not estimated. That is the difference
+between a purchase order a vendor can be emailed and one they cannot. Both
+`drawLetterhead` and `drawLogoMark` pass it; anything that calls `addImage`
+directly must too. jsPDF keys images by alias, so a three-page bar bending
+schedule pays the 47.6 KB once, not three times.
+
+### Why the artwork is base64 in a .ts file
+Every generator is SYNCHRONOUS (`generatePoPdf(opts): void`). Loading the PNG
+from `public/` would need an `Image.onload` and an async signature rippling
+through ten generators and every call site. Inlining keeps them synchronous —
+and a PO still prints with its letterhead on a site phone that is offline.
+
+The format was MEASURED rather than guessed: seven candidates were embedded
+through real jsPDF, rasterised at 300 dpi and compared at 4x magnification.
+403x440 **palette PNG (colour type 3) with a tRNS alpha table**, 64 colours,
+19 KB on disk / 26 KB of base64. At the letterhead's 46pt that is ~690 dpi, so
+it stays crisp on a 600 dpi office laser. Full RGBA is 126 KB and
+indistinguishable; 32 colours starts to show tonal steps in the gradient.
+Palette + alpha is the risky combination in jsPDF, which is exactly why it was
+tested through the library rather than reasoned about.
+
+`drawLogoMark` catches a throw from `addImage` and returns 0, and the text block
+slides left into the space. A document that refuses to generate because of its
+logo is a far worse failure than one that prints without it.
+
+### Footers
+`drawPageFooters(doc, …)` must be called LAST — the page count is not known
+until the body is laid out — and it restores the page pointer afterwards so a
+caller that keeps drawing is not silently writing onto page 1. Default is
+**multi-page only**: "Page 1 of 1" on a one-page invoice is noise, and this
+firm's invoices are almost always one page. The BBS sheet and the MIS report
+pass `onlyIfMultiPage: false`, because their notes (the constants a schedule was
+cut to; that the MIS is scoped to the preparer) are the document's provenance
+rather than decoration.
+
+### Verified by rendering, not by reading
+All ten were generated headlessly through the real modules (esbuild-bundled,
+`jsPDF.API.save` patched to write to disk), rasterised with pdftoppm and looked
+at: PO, delivery order, progress bill, VO, SI, RFI, RA bill (2 pages),
+NCR, comparative statement (2 pages), MIS, BBS (3 pages). Header crisp at
+300 dpi, no collisions, footers on the multi-page ones only, mark clear of the
+BBS title box. Documents run 55–75 KB.
+
 ## BRAND MARK (2026-09-08) — the YM monogram wired in
 
 Source artwork: 2048×2048 gold-on-charcoal, carrying a Gemini watermark

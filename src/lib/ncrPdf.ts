@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf'
 import { APP_NAME_FULL } from '@/lib/appName'
 import { COMPANY } from '@/lib/company'
+import { drawLetterhead } from '@/lib/pdf/letterhead'
 import {
   NCR_SEVERITY_LABEL,
   NCR_STATUS_LABEL,
@@ -43,37 +44,9 @@ function buildNcrDoc(opts: NcrPdfOpts): jsPDF {
   const M = 48
   const ink: [number, number, number] = [26, 26, 24]
   const muted: [number, number, number] = [107, 101, 96]
-  const brass: [number, number, number] = [166, 124, 82]
   const danger: [number, number, number] = [155, 61, 61]
   const positive: [number, number, number] = [47, 111, 79]
-  let y = M
-
-  // ---------- Letterhead ----------
-  doc.setTextColor(...ink)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(22)
-  doc.text(COMPANY.name, M, y)
-  y += 16
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(...muted)
-  if (COMPANY.tagline) {
-    doc.text(COMPANY.tagline, M, y)
-    y += 12
-  }
-  for (const line of COMPANY.addressLines) {
-    doc.text(line, M, y)
-    y += 11
-  }
-  doc.text(`GSTIN: ${COMPANY.gstin}`, M, y)
-  y += 11
-  doc.text(`${COMPANY.phone}  ·  ${COMPANY.email}`, M, y)
-  y += 18
-
-  doc.setDrawColor(...brass)
-  doc.setLineWidth(1.2)
-  doc.line(M, y, W - M, y)
-  y += 26
+  let y = drawLetterhead(doc, { margin: M })
 
   // ---------- Title ----------
   doc.setTextColor(...ink)
