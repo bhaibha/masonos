@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type {
+  GrnLine,
   InvoiceLineInput,
   MatchRow,
   NewPurchaseOrder,
@@ -227,6 +228,45 @@ export async function fetchReceivedByLine(
     out.set(id, (out.get(id) ?? 0) + Number(r.qty_received))
   }
   return out
+}
+
+/**
+ * The lines of ONE goods receipt, for the printed GRN.
+ *
+ * Selects `qty_ordered` and never `rate` or `line_total` — those two columns
+ * are revoked from `authenticated` at the column level (012), so asking for
+ * them would fail for the supervisor who actually receives the delivery. The
+ * GRN carries no money by design; see the note on `GrnLine`.
+ *
+ * Deliberately does NOT compute a running balance. `grn_lines` rows survive a
+ * void (voiding reverses the material_inward rows, not the receipt lines), so
+ * summing them in the browser would overstate what has arrived. The correct
+ * cumulative figure is `v_po_match.qty_received`, computed in Postgres, and it
+ * belongs on the match screen rather than on a note recording one delivery.
+ */
+export async function fetchGrnLines(grnId: string): Promise<GrnLine[]> {
+  const { data, error } = await supabase
+    .from('grn_lines')
+    .select(
+      'id, qty_received, po_line_id, po_lines(qty_ordered, materials(name, unit))',
+    )
+    .eq('grn_id', grnId)
+
+  if (error) throw error
+
+  return (data ?? []).map((r) => {
+    const line = r.po_lines as unknown as
+      | { qty_ordered: number; materials: { name: string; unit: string } | null }
+      | null
+    return {
+      id: r.id as string,
+      po_line_id: r.po_line_id as string,
+      material_name: line?.materials?.name ?? '—',
+      material_unit: line?.materials?.unit ?? '',
+      qty_ordered: Number(line?.qty_ordered ?? 0),
+      qty_received: Number(r.qty_received),
+    }
+  })
 }
 
 /**

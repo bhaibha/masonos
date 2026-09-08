@@ -187,7 +187,7 @@ export async function fetchGoodsReceipts(
   const { data, error } = await supabase
     .from('goods_receipts')
     .select(
-      'id, po_id, received_date, note, voided_at, voided_by, void_reason, grn_lines(count)',
+      'id, grn_no, po_id, received_date, note, voided_at, voided_by, void_reason, grn_lines(count)',
     )
     .eq('po_id', poId)
     .order('received_date', { ascending: false })
@@ -198,6 +198,7 @@ export async function fetchGoodsReceipts(
     const counted = r.grn_lines as unknown as { count: number }[] | null
     return {
       id: r.id as string,
+      grn_no: r.grn_no as string,
       po_id: r.po_id as string,
       received_date: r.received_date as string,
       note: (r.note as string | null) ?? null,

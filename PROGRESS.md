@@ -1,6 +1,92 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## GRN + SNAG DOCUMENTS (2026-09-08) — the two that didn't exist
+
+The letterhead pass covered every letterhead in the repo, but two document types
+the firm asked for had no generator at all: **goods receipt notes** and **snag
+reports**. Built now, on the shared letterhead.
+
+### Migration 081 — a GRN needs a number
+`goods_receipts` has had no human-readable reference since 012. Fine while the
+GRN only appeared beside its PO in the app; not fine once it is a printed sheet
+somebody files. `GRN-0001` from a sequence, matching PO-000042 / SNG-0001 /
+NCR-0001 / CA-0001 / CLH-0001.
+
+**The order of the backfill and the setval IS the migration.** Number the
+existing rows first, then advance the sequence past the highest number used —
+the other way round hands the next real receipt a number a historical row
+already holds, and the UNIQUE refuses the insert. That is exactly the collision
+the September test-data clear produced. The setval is wrapped in `greatest()` so
+a re-run cannot wind the sequence backwards and reintroduce it.
+
+**No guard trigger, and that is a decision.** 060 and 062 both refuse changes to
+their document number with a BEFORE UPDATE trigger, because those tables have
+writable UPDATE policies. `goods_receipts` has SELECT and INSERT and **no UPDATE
+policy at all** — the 069 lesson inverted: here the absence of a policy is
+already the protection, and a trigger would guard a welded door.
+
+Verified with the ACTUAL 001–080 chain as fixtures (pgserver, one process):
+three clean runs, verify block `1/1/1/1/0/0/t`, three receipts inserted OUT of
+chronological order and numbered correctly, and the next receipt taking
+**GRN-0004** without collision.
+
+### The GRN carries no money, and that is why there is only one of it
+The PO needs two variants — priced office copy, rate-free delivery copy —
+because supervisors may not see rates. A GRN needs one, because a goods receipt
+has nothing to hide: it records what physically arrived. `po_lines.rate` is
+revoked at the column level (012) anyway, so a priced variant would fail for the
+very people who receive deliveries. Ordered vs received per line, with short and
+over **named on the line** rather than left to be worked out by subtracting two
+columns. Three signature blocks, not two: the driver, our store, and the office.
+
+**No running balance, deliberately.** `grn_lines` rows survive a void (voiding
+reverses the material_inward rows it created, not the receipt lines), so a
+browser-side sum of received-to-date would overstate. The correct cumulative
+figure is `v_po_match.qty_received`, computed in Postgres, and it belongs on the
+match screen. A delivery note that quietly disagreed with the match screen would
+be worse than one that doesn't try.
+
+A voided GRN still prints, with the VOID watermark — the stock was reversed, but
+the note is the record that a lorry once turned up.
+
+### Two snag documents, because there are two readers
+- **Snag list** (`generateSnagListPdf`) — grouped **by work area**, because a
+  punch list is walked rather than read. Prints what the on-screen filter is
+  showing and says so on the sheet; an ambiguous scope starts an argument. The
+  DLP window is stated in words. Descriptions elide at two lines: a punch list
+  whose rows run to a paragraph stops being walkable.
+- **Snag sheet** (`generateSnagPdf`) — one defect, NCR-shaped, with ruled lines
+  in the rectification block so it can be completed by hand on site and
+  photographed back.
+
+**Photos are counted, not embedded** — the NCR precedent. Embedding means
+downloading each object from storage, which turns these into async functions,
+and fifty snags at two pictures each is a document nobody can email.
+
+An empty list says *"This states that nothing is recorded, not that the works
+have been inspected."* The 063 rule: an empty result must not read as an
+all-clear.
+
+### Role gates
+Downloading either document is open to every role that can see the record —
+there is no money on them. **Filing to the vault is gated on `canUploadDocs`**,
+because `docs_write` (003) excludes supervisors, and offering a button RLS will
+refuse is the thing this codebase keeps deciding not to do. The new
+`doc_kind`s (`grn`) are not on `fn_doc_kind_shareable`'s allow-list (075), so
+they can never be ticked visible to a client — the right default, and it needs
+no migration because an unknown kind is refused.
+
+### Found by rendering, not by reading
+The GRN's material column collided with the right-aligned ordered quantity —
+"TMT bar Fe500D 16mm — IS 1786, supplied in 12 m" printed straight through
+"1,800.00 kg". The wrap width was computed from the column position, ignoring
+that a right-aligned number grows leftwards into it. Fixed by measuring the
+widest quantity with `getTextWidth` and reserving it; a fixed guess would be
+right until somebody orders 12,000.00 kg of something. **The same latent bug
+exists in poPdf's line table** — its quantities are shorter so it has not fired,
+and it is left alone rather than changed without a case that reproduces it.
+
 ## LETTERHEAD (2026-09-08) — one definition, ten documents
 
 `src/lib/pdf/letterhead.ts` is now the only letterhead in the app. Ten

@@ -554,10 +554,30 @@ export interface MovementRow extends VoidFields {
 
 export interface GoodsReceiptRow extends VoidFields {
   id: string
+  /** GRN-0001 — migration 081. Backfilled chronologically for older receipts. */
+  grn_no: string
   po_id: string
   received_date: string
   note: string | null
   line_count: number
+}
+
+/**
+ * One line of a goods receipt, for the printed GRN.
+ *
+ * Carries NO rate and no amount, and that is the whole design: `po_lines.rate`
+ * is revoked from `authenticated` at the column level (012), and the people who
+ * receive goods are supervisors. A GRN is the record of what physically
+ * arrived, so there is nothing on it to hide — which means one document that
+ * every role can print, rather than the priced/unpriced pair the PO needs.
+ */
+export interface GrnLine {
+  id: string
+  po_line_id: string
+  material_name: string
+  material_unit: string
+  qty_ordered: number
+  qty_received: number
 }
 
 // ---------- Tasks & site log ----------

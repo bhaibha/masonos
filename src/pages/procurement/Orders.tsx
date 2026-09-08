@@ -352,7 +352,7 @@ function OrderCard({
               {withRates &&
                 (po.status === 'receiving' || po.status === 'received') && (
                   <div className="mt-4 border-t border-border pt-4">
-                    <InvoiceMatch poId={po.id} />
+                    <InvoiceMatch po={po} />
                   </div>
                 )}
 

@@ -10,15 +10,21 @@ import {
 } from '@/components/VoidDialog'
 import { errText } from '@/lib/errText'
 import { formatInr } from '@/lib/format'
+import { generateGrnFile, generateGrnPdf } from '@/lib/grnPdf'
 import {
   createInvoice,
+  fetchGrnLines,
   fetchInvoices,
   fetchMatch,
   postInvoice,
 } from '@/lib/queries/procurement'
+import { createDocument } from '@/lib/queries/documents'
+import { fetchProject } from '@/lib/queries/projects'
+import { uploadDocument } from '@/lib/storage'
 import { fetchGoodsReceipts, fetchUserNames } from '@/lib/queries/voids'
 import {
   canPostInvoice,
+  canUploadDocs,
   canVoid,
   isVoid,
   MATCH_STATUS_LABEL,
@@ -26,6 +32,7 @@ import {
   type MatchRow,
   type MatchStatus,
   type PoInvoiceRow,
+  type PurchaseOrder,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { todayIst } from '@/lib/useSelectedDate'
@@ -39,7 +46,8 @@ const MATCH_TONE: Record<MatchStatus, string> = {
   both: 'bg-destructive/10 text-destructive',
 }
 
-export default function InvoiceMatch({ poId }: { poId: string }) {
+export default function InvoiceMatch({ po }: { po: PurchaseOrder }) {
+  const poId = po.id
   const role = useAuth((s) => s.role)
   const [match, setMatch] = useState<MatchRow[] | null>(null)
   const [invoices, setInvoices] = useState<PoInvoiceRow[]>([])
@@ -78,6 +86,59 @@ export default function InvoiceMatch({ poId }: { poId: string }) {
     setMatch(null)
     void reload()
   }, [reload])
+
+  /**
+   * The printed goods receipt note.
+   *
+   * Available to every role that can see the delivery, unlike the PO document
+   * next to it — a GRN carries no rates, so there is nothing on it to gate.
+   * Filing to the vault is gated separately, because `docs_write` excludes
+   * supervisors (003) and offering a button that RLS will refuse is the thing
+   * this codebase keeps deciding not to do.
+   */
+  async function grnPdf(g: GoodsReceiptRow, file: boolean) {
+    try {
+      const [lines, project] = await Promise.all([
+        fetchGrnLines(g.id),
+        fetchProject(po.project_id),
+      ])
+      const opts = {
+        grn: g,
+        lines,
+        po,
+        // The full vendor row isn't loaded on this screen; `vendor_display`
+        // already resolves registered-or-free-text, and a GRN does not need
+        // the vendor's GSTIN.
+        vendor: null,
+        projectName: project?.name ?? 'Project',
+        siteAddress: project?.site_address ?? null,
+      }
+
+      if (!file) {
+        generateGrnPdf(opts)
+        toast.success(`${g.grn_no} downloaded`)
+        return
+      }
+
+      const f = generateGrnFile(opts)
+      const { path, fileType } = await uploadDocument(po.project_id, f)
+      await createDocument({
+        project_id: po.project_id,
+        folder: 'purchase_orders',
+        title: `${g.grn_no} · ${po.po_number}`,
+        file_path: path,
+        file_type: fileType,
+        is_confidential: false,
+        // Not on fn_doc_kind_shareable's allow-list (075), so a GRN can never
+        // be ticked visible to a client. That is the right default and needs
+        // no migration — an unknown kind is refused.
+        doc_kind: 'grn',
+      })
+      toast.success('Filed to Docs → Purchase Orders')
+    } catch (err) {
+      toast.error('Could not build the GRN', { description: errText(err) })
+    }
+  }
 
   async function post(invoiceId: string) {
     try {
@@ -171,21 +232,43 @@ export default function InvoiceMatch({ poId }: { poId: string }) {
                 >
                   <span className="flex min-w-0 items-center gap-2 truncate">
                     <span className="truncate">
+                      <span className="font-medium">{g.grn_no}</span> ·{' '}
                       {g.received_date} · {g.line_count}{' '}
                       {g.line_count === 1 ? 'line' : 'lines'}
                     </span>
                     {voided && <VoidBadge className="no-underline" />}
                   </span>
-                  {!voided && mayVoidGrn && (
+                  <span className="flex shrink-0 items-center gap-1">
+                    {/* A voided GRN still prints — the stock was reversed, but
+                        the note is the record that a lorry turned up. */}
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setVoidingGrn(g)}
-                      className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => void grnPdf(g, false)}
                     >
-                      Void
+                      PDF
                     </Button>
-                  )}
+                    {canUploadDocs(role) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void grnPdf(g, true)}
+                        className="text-muted-foreground"
+                      >
+                        File
+                      </Button>
+                    )}
+                    {!voided && mayVoidGrn && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setVoidingGrn(g)}
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        Void
+                      </Button>
+                    )}
+                  </span>
                 </div>
                 {voided && (
                   <VoidNote

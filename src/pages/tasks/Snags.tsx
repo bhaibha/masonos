@@ -23,6 +23,8 @@ import {
   setSnagStatus,
   verifySnag,
 } from '@/lib/queries/snags'
+import { fetchProject } from '@/lib/queries/projects'
+import { generateSnagListPdf, generateSnagPdf } from '@/lib/snagPdf'
 import { PhotoHelper } from '@/components/PhotoHelper'
 import { compressImage, signedSitePhotoUrl, uploadSitePhoto } from '@/lib/storage'
 import {
@@ -108,6 +110,36 @@ export default function Snags() {
     return s.status === 'open' || s.status === 'in_progress'
   })
 
+  const FILTER_NOTE: Record<Filter, string> = {
+    outstanding: 'Outstanding items only (open and in progress).',
+    dlp: 'Snags raised during the defects liability period.',
+    all: 'All snags recorded on this project, whatever their status.',
+  }
+
+  async function snagList() {
+    if (!projectId || !shown) return
+    try {
+      const project = await fetchProject(projectId)
+      generateSnagListPdf({
+        snags: shown,
+        projectName: project?.name ?? 'Project',
+        siteAddress: project?.site_address ?? null,
+        clientName: project?.client_name ?? null,
+        filterNote: FILTER_NOTE[filter],
+        dlp: summary
+          ? {
+              start: summary.dlp_start,
+              end: summary.dlp_end,
+              active: summary.dlp_active,
+            }
+          : null,
+      })
+      toast.success('Snag list downloaded')
+    } catch (err) {
+      toast.error('Could not build the snag list', { description: errText(err) })
+    }
+  }
+
   return (
     <div className="space-y-4 pb-6">
       {mayRaise && (
@@ -134,6 +166,18 @@ export default function Snags() {
             {f === 'outstanding' ? 'Outstanding' : f === 'dlp' ? 'In DLP' : 'All'}
           </button>
         ))}
+
+        {/* Prints exactly what the filter is showing, and says so on the sheet
+            — a punch list whose scope is ambiguous starts an argument. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto text-muted-foreground"
+          disabled={!shown || shown.length === 0}
+          onClick={() => void snagList()}
+        >
+          Snag list
+        </Button>
       </div>
 
       {rows === null && <ListSkeleton rows={4} />}
@@ -312,6 +356,23 @@ function SnagCard({
     setBusy(false)
   }
 
+  async function sheet() {
+    setBusy(true)
+    try {
+      const p = await fetchProject(projectId)
+      generateSnagPdf({
+        snag,
+        projectName: p?.name ?? 'Project',
+        siteAddress: p?.site_address ?? null,
+        clientName: p?.client_name ?? null,
+      })
+      toast.success(`${snag.snag_number} downloaded`)
+    } catch (err) {
+      toast.error('Could not build the PDF', { description: errText(err) })
+    }
+    setBusy(false)
+  }
+
   async function sign() {
     setBusy(true)
     try {
@@ -463,6 +524,11 @@ function SnagCard({
 
       {!resolving && (
         <div className="mt-4 flex flex-wrap gap-2">
+          {/* One defect issued to one trade. Every role that can see the snag
+              can print it — there is no money on the sheet. */}
+          <Button variant="ghost" disabled={busy} onClick={() => void sheet()}>
+            PDF
+          </Button>
           {mayRaise && snag.status === 'open' && (
             <Button
               variant="outline"

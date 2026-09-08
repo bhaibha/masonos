@@ -374,7 +374,23 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   matching so a PM gets ZERO ROWS rather than a row of zeros. Confirmed live
   2026-09-06 — verify block returned view_exists = 1, gates_on_founder = 1,
   still_lists_pm_accounts = 0, summary_fn = 1.
-  **So: 001-080 ALL APPLIED.** Next migration = 081.
+  **081 WRITTEN, NOT YET APPLIED** — a goods receipt gets a number of its own
+  (`grn_no_seq`, `goods_receipts.grn_no` defaulting to `GRN-0001`, a
+  chronological backfill of receipts already recorded, a guarded `setval`, then
+  NOT NULL + a unique index). Needed because the GRN is now a printed document
+  and "the receipt against PO-000042 on the 3rd" is a description, not a
+  reference. **No guard trigger, deliberately**: `goods_receipts` has SELECT and
+  INSERT policies and NO UPDATE POLICY (012), so a PATCH is refused by RLS
+  before a trigger would fire — the 069 lesson inverted, where the absence of a
+  policy IS the protection. `fn_receive_goods` needs no change; its insert never
+  names the column, so the default supplies it.
+  Verified on a real PostgreSQL with the ACTUAL 001-080 chain as fixtures:
+  three clean runs under ON_ERROR_STOP=1, the verify block returning
+  `1/1/1/1/0/0/t`, three pre-existing receipts inserted OUT of order and
+  numbered chronologically, and — the point of the whole migration — the next
+  receipt taking GRN-0004 without colliding with the backfill.
+  **Run migration 081 before using the GRN PDF button.**
+  **So: 001-080 ALL APPLIED.** Next migration = 082.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.
