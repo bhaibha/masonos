@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { APP_NAME } from '@/lib/appName'
 import { errText } from '@/lib/errText'
 import { supabase } from '@/lib/supabase'
+import { Logo } from '@/components/Logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -70,8 +71,12 @@ export default function Login() {
   return (
     <div className="flex min-h-svh flex-col justify-center px-6 py-12">
       <div className="mx-auto w-full max-w-sm">
-        <div className="mb-10">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+        {/* The one screen with room for the full mark. Centred rather than
+            left-aligned with the form: the sign-in page is the only place in
+            the app that is a front door rather than a working surface. */}
+        <div className="mb-10 flex flex-col items-center text-center">
+          <Logo variant="full" height={104} />
+          <h1 className="font-heading mt-6 text-2xl font-semibold tracking-tight">
             {APP_NAME}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

@@ -1,6 +1,93 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## BRAND MARK (2026-09-08) — the YM monogram wired in
+
+Source artwork: 2048×2048 gold-on-charcoal, carrying a Gemini watermark
+bottom-right. Pipeline (scripts were scratch, the outputs are in `public/`):
+
+1. **Watermark painted out BEFORE measuring**, with the sampled field colour
+   `[30,30,32]`. Measuring first would have dragged the bounding box into the
+   corner and off-centred every icon.
+2. Gold lifted onto transparency — alpha from `max(R,G,B)` with LO=60/HI=200
+   (measured: field ≤56, gold ≥143 at p90), then **un-composited**
+   `G = (C − (1−a)·B) / a`. Without that step every edge keeps a dark fringe,
+   which is invisible on charcoal and obvious the moment the mark sits on cream.
+3. Tight crop → 1126×1230. **Thinnest stroke 8px**, i.e. 3.64px at 512,
+   1.36px at 192, **0.23px at 32**. That measurement is why there are two
+   variants rather than one file scaled down — it is not a judgement call.
+4. Connected-component labelling to split the artwork: comps 4/5 are the
+   columns, comp 6 the **Y**, comp 7 the **M**. A flood fill from the centre had
+   caught only the Y (the letters are separate components) and a guessed crop
+   window had caught column fragments; both were visible on a contact sheet and
+   neither was visible in the code.
+
+**Two forms, and which is which:**
+- `logo-full.png` (440×481, 25KB) — monogram inside the arch. Legible from
+  about 80px. Login screen at 104px, and the 512 icon.
+- `logo-mark.png` (160×202, 6KB) — monogram alone. Portal header at 38px, and
+  the 192/maskable/favicon icons, thickened by a 3px max-filter **on the alpha
+  channel only** so the letterforms fatten without the gold going flat.
+
+Both are gold on TRANSPARENT. The charcoal tile belongs to the app icon, where
+the OS owns the surface behind it; on screen the mark sits on the page.
+
+Icons generated: `icon-512` (full mark, 0.78 coverage), `icon-192` (mark,
+0.72), `icon-maskable-512` (**full mark at 0.58** — Android crops to a circle of
+80% diameter, so the safe zone is much smaller than it looks),
+`apple-touch-icon`, `favicon-32`, `favicon.ico` (16/32/48).
+
+Manifest: `theme_color` **#1A1A18**, `background_color` #FAF8F5, short_name YMS.
+**Known consequence, chosen deliberately**: the Android splash draws the icon on
+the background colour, so a charcoal tile appears on cream for a beat. The
+alternative — a charcoal background — would flash dark before a cream app.
+
+`public/favicon.svg` was the old generic mark and is DELETED, not merely
+unreferenced: leaving it means the previous logo is still served at a path
+browsers ask for by habit. `sw.js` bumped `yms-v3` → **`yms-v4`** and its SHELL
+list now carries the logos — the login screen is the first thing an offline user
+sees, and a missing mark there reads as a broken app rather than a dead network.
+The files are referenced by LITERAL path, never imported: a Vite-hashed URL
+could not appear in that list. Renaming one means editing `sw.js` too.
+
+## CYBER REVIEW (2026-09-07) — proportionate to 15 users
+
+### Assistant prompt-injection audit — it holds
+Read line by line, not assumed:
+- Built ONLY from the caller's Authorization header. No service-role key
+  anywhere in the assistant. Every query is the caller's own.
+- Role read from `profiles`; a **client is refused outright** before the model
+  is reached.
+- **`runTool` re-checks `def.roles.includes(role)` at EXECUTION**, not just when
+  building the declarations. This is the load-bearing line: a model that
+  hallucinates or is talked into calling `project_spend` as a supervisor is
+  refused by the server, not by the prompt.
+- No text-to-SQL. Nineteen named tools, each one hard-coded query.
+- Writes are propose → human confirm → `fn_assistant_execute`, which is
+  **SECURITY INVOKER** (064 line 312) — an assistant write obeys the caller's
+  own policies exactly as if they had typed the form.
+
+**The genuine injection surface is `search_knowledge`**: it returns passages
+from PDFs somebody uploaded, into the model's context. A poisoned document
+could steer an ANSWER or produce a bogus proposal card. It cannot exceed RLS,
+cannot call a tool the role lacks, and cannot write anything without a human
+clicking confirm. Bounded, and worth knowing about.
+
+### Real gap found and FIXED
+No cap on inbound size. `message` and each `history` entry came from the
+browser uncapped; the daily counter limited turns, not their size. Now clipped
+to 4000 characters each (~1000 tokens). Cost, not security — but 60 turns a day
+of megabyte prompts is a real bill.
+
+### Still unbounded (recommended, not done)
+`learn-draft` has **no per-user quota** — a PM can click Draft repeatedly. One
+line reusing `fn_assistant_quota` would fix it, at the cost of sharing one
+daily budget with the assistant. `photo-analyse` is naturally capped by the
+unique index on `photo_path` (061): one analysis per photo, ever.
+
+### Deploy note
+`supabase functions deploy assistant` for the input cap.
+
 ## RENAMED TO "YMS" (2026-09-07) — app only, redeploy
 
 `short_name` **YMS** (under the home-screen icon) · `name` **YMS — Your

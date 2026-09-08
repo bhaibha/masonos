@@ -13,7 +13,7 @@
 // Renamed as well as bumped: the activate handler deletes every cache whose
 // key does not start with CACHE_VERSION, so the old `mason-os-v2-*` shells go
 // with it rather than sitting there holding an index.html with the old title.
-const CACHE_VERSION = 'yms-v3'
+const CACHE_VERSION = 'yms-v4'
 const SHELL_CACHE = `${CACHE_VERSION}-shell`
 const ASSET_CACHE = `${CACHE_VERSION}-assets`
 
@@ -21,11 +21,16 @@ const SHELL = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
-  '/favicon.svg',
+  '/favicon.ico',
+  '/favicon-32.png',
   '/icon-192.png',
   '/icon-512.png',
   '/icon-maskable-512.png',
   '/apple-touch-icon.png',
+  // The login screen is the first thing an offline user sees, and a missing
+  // logo there reads as a broken app rather than a missing network.
+  '/logo-full.png',
+  '/logo-mark.png',
 ]
 
 self.addEventListener('install', (event) => {

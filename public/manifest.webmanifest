@@ -8,11 +8,17 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#FAF8F5",
-  "theme_color": "#FAF8F5",
+  "theme_color": "#1A1A18",
   "lang": "en-IN",
   "dir": "ltr",
   "categories": ["business", "productivity"],
   "icons": [
+    {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icon-192.png",
       "sizes": "192x192",

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Logo } from '@/components/Logo'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -44,13 +45,19 @@ export default function PortalLayout() {
     <div className="min-h-svh bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
         <div className="page-w-wide flex items-center justify-between gap-3 px-5 pt-5 pb-4">
-          <div className="min-w-0">
-            <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-              Your Masons
-            </p>
-            <h1 className="font-heading mt-0.5 text-[22px] leading-none font-semibold">
-              Client portal
-            </h1>
+          {/* The mark, not the full arch: this header is sticky and 44px of
+              vertical space is all it can spend, which is below the point at
+              which the columns hold together. */}
+          <div className="flex min-w-0 items-center gap-3">
+            <Logo variant="mark" height={38} className="shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Your Masons
+              </p>
+              <h1 className="font-heading mt-0.5 text-[22px] leading-none font-semibold">
+                Client portal
+              </h1>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <p className="hidden truncate text-xs text-muted-foreground sm:block">

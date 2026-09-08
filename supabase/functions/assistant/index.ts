@@ -263,6 +263,19 @@ Deno.serve(async (req) => {
   const message = (body.message ?? '').trim()
   if (!message) return json({ error: 'Say something first.' }, 400)
 
+  // COST, NOT SECURITY. The daily counter below limits how many TURNS a person
+  // gets; nothing limited how BIG a turn was. `message` and every entry in
+  // `history` arrive from the browser, so a signed-in user — or a script
+  // holding their token — could post megabytes and be billed for every token
+  // of it, sixty times a day, without breaking a single rule.
+  //
+  // 4000 characters is roughly 1000 tokens: far more than anybody types into a
+  // chat box, and small enough that the worst day costs pennies. Truncated
+  // rather than refused, because a refusal over a length nobody can see is
+  // baffling, and a question with its tail cut off still gets a useful answer.
+  const MAX_CHARS = 4000
+  const clip = (s: string) => (s.length > MAX_CHARS ? s.slice(0, MAX_CHARS) : s)
+
   // Rate limit BEFORE the model call, so a refused turn does not cost quota
   // it did not use. The counter is SECURITY DEFINER and has no write policy,
   // so it cannot be reset by the thing being counted.
@@ -285,10 +298,10 @@ Deno.serve(async (req) => {
   for (const h of (body.history ?? []).slice(-10)) {
     contents.push({
       role: h.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: h.content }],
+      parts: [{ text: clip(String(h.content ?? '')) }],
     })
   }
-  contents.push({ role: 'user', parts: [{ text: message }] })
+  contents.push({ role: 'user', parts: [{ text: clip(message) }] })
 
   const encoder = new TextEncoder()
 
