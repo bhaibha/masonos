@@ -416,6 +416,175 @@ export function canViewCloseout(role: UserRole | null): boolean {
   return role !== null && CLOSEOUT_READ_ROLES.includes(role)
 }
 
+// ---------- M13-A Material Quantity Calculator (migration 086) ----------
+
+/**
+ * THE UNIT TOGGLE STOPS HERE.
+ *
+ * Everything sent to Postgres is metric and everything stored is metric. Feet
+ * exist only between the keyboard and `toMetres`. A unit switch that reached
+ * the database would eventually store a 30 ft wall as 30 m.
+ */
+export type LengthUnit = 'm' | 'ft'
+
+export const FT_TO_M = 0.3048
+export const SQFT_TO_SQM = 0.09290304
+
+/** Feet (or square feet) as typed -> metres (or square metres) for the RPC. */
+export function toMetres(value: number, unit: LengthUnit): number {
+  return unit === 'ft' ? value * FT_TO_M : value
+}
+
+export function toSqMetres(value: number, unit: LengthUnit): number {
+  return unit === 'ft' ? value * SQFT_TO_SQM : value
+}
+
+/** Metric back out to whatever the person is reading in. */
+export function fromMetres(value: number, unit: LengthUnit): number {
+  return unit === 'ft' ? value / FT_TO_M : value
+}
+
+export const LENGTH_UNIT_LABEL: Record<LengthUnit, string> = { m: 'm', ft: 'ft' }
+export const AREA_UNIT_LABEL: Record<LengthUnit, string> = { m: 'sqm', ft: 'sqft' }
+
+export type EstimateKind =
+  | 'concrete'
+  | 'masonry'
+  | 'plaster'
+  | 'tiling'
+  | 'steel'
+  | 'paint'
+  | 'waterproofing'
+  | 'excavation'
+
+export const ESTIMATE_KINDS: { value: EstimateKind; label: string; blurb: string }[] = [
+  { value: 'concrete', label: 'Concrete', blurb: 'Volume to cement, sand and aggregate by nominal mix' },
+  { value: 'masonry', label: 'Blockwork & brickwork', blurb: 'Wall area to units, cement and sand' },
+  { value: 'plaster', label: 'Plaster', blurb: 'Area and thickness to cement and sand' },
+  { value: 'tiling', label: 'Tiling', blurb: 'Area to tiles and adhesive' },
+  { value: 'steel', label: 'Steel', blurb: 'Bars to kilograms, on the BBS divisor' },
+  { value: 'paint', label: 'Paint', blurb: 'Area and coats to litres, with primer' },
+  { value: 'waterproofing', label: 'Waterproofing', blurb: 'Area and coats to kilograms' },
+  { value: 'excavation', label: 'Excavation', blurb: 'Pits to cubic metres, and soil to cart away' },
+]
+
+export const ESTIMATE_KIND_LABEL = Object.fromEntries(
+  ESTIMATE_KINDS.map((k) => [k.value, k.label]),
+) as Record<EstimateKind, string>
+
+/** One row of the answer. `orderable` marks what can go on a purchase order. */
+export interface CalcLine {
+  item: string
+  qty: number
+  unit: string
+  orderable: boolean
+}
+
+/**
+ * What every `fn_calc_*` returns. `working` is built inside the same function
+ * from the same variables as `lines`, so the explanation on screen cannot
+ * describe arithmetic the database is no longer doing.
+ */
+export interface CalcResult {
+  ok: boolean
+  error?: string
+  warning?: string | null
+  lines: CalcLine[]
+  detail: Record<string, unknown>
+  working: string
+}
+
+export interface CalcConstant {
+  code: string
+  label: string
+  value: number
+  unit: string
+  ref: string | null
+  note: string | null
+  updated_at: string
+}
+
+export interface CalcMix {
+  code: string
+  kind: 'concrete' | 'mortar'
+  label: string
+  cement: number
+  sand: number
+  aggregate: number
+  /** false for M25 — offered, but not an IS 456 Table 5 figure */
+  is_nominal: boolean
+  note: string | null
+  sort: number
+}
+
+export interface MasonryUnit {
+  code: string
+  label: string
+  length_mm: number
+  height_mm: number
+  width_mm: number
+  default_joint_mm: number | null
+  is_active: boolean
+  note: string | null
+  sort: number
+}
+
+export interface SavedEstimate {
+  id: string
+  project_id: string
+  kind: EstimateKind
+  title: string
+  work_area: string | null
+  inputs: Record<string, unknown>
+  working: string | null
+  notes: string | null
+  created_by: string
+  created_by_name: string | null
+  created_at: string
+  lines: SavedEstimateLine[]
+}
+
+export interface SavedEstimateLine {
+  id: string
+  material_id: string | null
+  item: string
+  qty: number
+  unit: string
+  is_orderable: boolean
+}
+
+/**
+ * Estimated against what the store actually moved. `received` and `issued` are
+ * separate because they answer different questions — did we over-ORDER, and
+ * did we over-USE. `variance` is issued − estimated: positive means the site
+ * has consumed more than was worked out.
+ */
+export interface EstimateVsActual {
+  material_id: string
+  material_name: string
+  unit: string
+  estimated: number
+  received: number
+  issued: number
+  variance: number
+  estimates_n: number
+}
+
+/**
+ * EVERY INTERNAL ROLE, SUPERVISORS INCLUDED. There is no money on this screen —
+ * a quantity is not a cost, there are no rates anywhere in migration 086, and
+ * the supervisor is the person standing in front of the wall who needs to know
+ * how many blocks to order. Constants are founder-write, which is the only
+ * narrower gate in the module.
+ */
+export function canUseCalculator(role: UserRole | null): boolean {
+  return role !== null && INTERNAL_ROLES.includes(role)
+}
+
+export function canEditCalcConstants(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
 // ---------- M18 Site Visits (migration 084) ----------
 
 export type VisitType =

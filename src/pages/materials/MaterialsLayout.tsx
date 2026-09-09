@@ -36,6 +36,11 @@ export default function MaterialsLayout() {
     { to: '/materials/movements', label: 'Movements' },
     { to: '/materials/orders', label: 'Orders' },
     { to: '/materials/master', label: 'Materials' },
+    // M13-A. Leaves this section, the same way Docs links out to Learn — the
+    // calculator has its own ten-tab sub-nav and two rows of tabs on a phone is
+    // one row too many. It sits here because "how much do I need to order" is
+    // the question you arrive at Materials holding.
+    { to: '/calculator', label: 'Calculator' },
   ]
 
   return (

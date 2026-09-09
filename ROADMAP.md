@@ -424,7 +424,46 @@ Order within group:
        **Open question for next session:** whether the firm's drawings carry beam/column SCHEDULE
        TABLES. If they do, importing that table from a CAD PDF is deterministic and is the next
        reliable step — no vision model needed.
-- [ ] B4b. M13-A/B Estimation / BOQ generator (quantity take-off — the other half of Module 13)
+- [x] **B4b. M13-A Material Quantity Calculator — migration 086. Run it before testing.**
+       A field tool with a metres/feet toggle: eight estimators — concrete, blockwork/brickwork,
+       plaster, tiling, steel, paint, waterproofing, excavation. `/calculator`, reached from the
+       Materials tab row, available to EVERY internal role including supervisors.
+       **The arithmetic is in Postgres, and that is the whole design.** The output becomes a
+       purchase order, and the factors behind it — 1.54 dry volume, 1440 kg/cum, a 10 mm joint,
+       5% wastage — are firm policy rather than physics. So `calc_constants` (16 rows),
+       `calc_mixes` (11) and `masonry_units` (7) are TABLES a founder can edit and audit, and
+       every function returns its WORKING in the same jsonb as its answer, built from the same
+       variables — the explanation on screen is a by-product of the calculation, never a second
+       one that could drift. The form is a 300 ms debounced round trip for the 051 reason: a
+       TypeScript copy is the copy nobody re-checks after somebody changes a constant.
+       **Metres are the only thing stored.** The unit toggle stops at `toMetres` in the form.
+       **No rates, no money, nowhere** — which is why supervisors are in rather than out. The
+       supervisor is the one standing in front of the wall who has to order the blocks.
+       **It refuses M30.** IS 456 Table 5 gives nominal proportions to M20 only; M25 is offered
+       with `is_nominal = false` and the caveat printed, and above that the function returns a
+       refusal naming the reason rather than inventing a ratio.
+       **The steel divisor is read from `bbs_constants`**, so the calculator and the bar bending
+       schedule cannot disagree about a 12 mm bar. Steel also offers the project's BBS totals
+       outright rather than asking anybody to re-type a schedule that already exists.
+       **A saved estimate is a frozen snapshot** whose lines optionally map to a stock material,
+       and `fn_estimate_vs_actual` then reports estimated / received / issued side by side —
+       received answers "did we over-order", issued answers "did we over-use", and one combined
+       figure would answer neither.
+       **`fn_calc_selftest()` — 12 cases, and it caught a real bug on its first run.** A brick
+       row with height and width swapped (trade names are not consistent: a block called
+       400×200×150 is 200 high, a brick called 230×110×75 is 75 high) AND a count taken by
+       volume that over-counts a two-leaf wall by 4% because it ignores the collar joint. Now
+       counted per square metre of face × leaves. Cases 4 and 5 are bricks, so case 7 is a block.
+       **VERIFIED AGAINST A REAL POSTGRES** — three clean runs, 12/12, RLS proven by query for
+       all five roles, and every calculator cross-checked against a separate implementation
+       written in Python, because a self-test only proves the code agrees with its author.
+       **Deliberately not done:** no BOQ document, no rates, no bill of quantities export. That
+       is M13-B and it is a different thing — a priced document is a commercial record, and it
+       belongs with the rate comparison and the PO, not in a field calculator.
+       **Not yet exercised in the app:** the feet toggle against a real measurement, saving from
+       each of the eight tabs, the material auto-match on save, estimate-vs-actual after a real
+       issue, a founder editing a constant and watching the self-test go red, and the supervisor
+       pass (calculator usable, constants read-only).
 - [x] **B5. M24 Contract Labour — migration 054. Run it before testing.**
        Contractor register, daily gang attendance, the statutory registers as data, and a labour
        cost figure that reaches the P&L exactly once.

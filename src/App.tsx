@@ -46,6 +46,7 @@ import Pnl from '@/pages/money/Pnl'
 import RaBills from '@/pages/money/RaBills'
 import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
+import Calculator from '@/pages/Calculator'
 import CloseOut from '@/pages/CloseOut'
 import PettyCash from '@/pages/PettyCash'
 import ClientLog from '@/pages/tasks/ClientLog'
@@ -159,6 +160,13 @@ export default function App() {
                   <Route path="clients" element={<AdminClients />} />
                 </Route>
               </Route>
+
+              {/* M13-A quantity calculator. No role guard and not inside a
+                  section layout: it is a FIELD TOOL every internal role uses,
+                  it carries no money at all, and it is reached from Tools
+                  rather than from Money or Tasks. RequireInternal (065) above
+                  is what keeps a client out. */}
+              <Route path="/calculator" element={<Calculator />} />
 
               {/* C1 Mason Learn. Not project-scoped and no role guard: it is
                   reference material every role reads, and drafts are hidden from

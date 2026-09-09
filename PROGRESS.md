@@ -1,6 +1,115 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M13-A MATERIAL QUANTITY CALCULATOR (2026-09-09) — the module that most wanted to be a .ts file
+
+Migration 086. Three reference tables, two record tables, eight estimators, a
+comparison function and a twelve-case self-test. The screen is `/calculator`,
+reached from the Materials tab row.
+
+### Why none of the arithmetic is in the browser
+This is the 051 decision and it deserved re-arguing, because a calculator is
+exactly where somebody reaches for a TypeScript module: it is a field tool, the
+round trip costs 300 ms, and the maths is not hard.
+
+The reason it lost is that the output becomes a purchase order. "Order 47 bags"
+is a consequential sentence, and the factors behind it — 1.54 dry volume,
+1440 kg/cum, a 10 mm joint, 5% wastage — are **firm policy, not physics**. The
+founder will want to argue with them. A constant in a `.ts` file is one only the
+person who wrote it can find.
+
+So `calc_constants` (16 rows), `calc_mixes` (11) and `masonry_units` (7) are
+tables, founder-write and audited, each row carrying its reference and a note.
+Every function returns its **working in the same jsonb as its answer**, built
+from the same variables, so the explanation printed under the result cannot
+describe arithmetic the database is no longer doing. Editing a constant restates
+all eight calculators at once, which is what the self-test exists to make safe.
+
+### The self-test found a real bug on its first run — two bugs, in one row
+Case 5 came back at 463 bricks against a hand figure of 445.6. Two separate
+causes, both invisible to a re-read:
+
+1. **Trade names are not consistent about which dimension is which.** A block
+   called 400×200×150 is 400 long, 200 **high**, 150 thick. A brick called
+   230×110×75 is 230 long, 110 **thick**, 75 high. Reading both the same way put
+   the brick's height and width the wrong way round. The modular brick
+   (190×90×90) and the blocks are symmetric in the two swapped dimensions, so
+   the error was invisible everywhere except the one row — and cases 4 and 5
+   were both bricks, so the block family was untested by accident. There is now
+   a block case, and the labels spell out L/H/W rather than repeating the trade
+   name.
+2. **Counting by volume over-counts a multi-leaf wall.** A 230 wall of 110-thick
+   brick is two leaves with a 10 mm **collar joint** between them, so the wall
+   contains mortar that the per-unit volume knows nothing about. Dividing wall
+   volume by unit volume inflates the count by about 4%. It is now counted per
+   square metre of face × number of leaves — which is also how a mason counts —
+   with leaves as `(thickness + joint) / (width + joint)`, so a 230 wall of 110
+   brick comes out at exactly 2 rather than 2.09 and does not trip its own
+   warning.
+
+Both survived writing and re-reading. Same family as the 052 regex.
+
+### The self-test is not enough on its own, so there is a second implementation
+Twelve cases passing only proves the code agrees with the person who wrote the
+expectations. Every calculator was therefore also cross-checked against a
+**separate implementation written in Python** from the formulas — 15 figures
+across all eight, all matching to four decimal places. That is what makes the
+expectations trustworthy rather than merely consistent.
+
+### What it refuses
+- **M30 and above.** IS 456 Table 5 gives nominal proportions to M20 only. M25
+  (1:1:2) is included because the firm asked for it, with `is_nominal = false`
+  and the caveat printed on screen. Above that the function returns a refusal
+  naming the reason instead of a plausible ratio — a design mix is somebody's
+  professional judgement (the 044 rule).
+- **Rates, and money of any kind.** There is not a currency column in the
+  migration. That is precisely why `canUseCalculator` is every internal role
+  including supervisors: a quantity is not a cost, and the supervisor is the
+  person standing in front of the wall who has to order the blocks. Constants
+  are founder-write, the only narrower gate in the module.
+- **Deciding dimensions.** It multiplies what somebody measured.
+- **A BOQ.** That is M13-B. A priced document is a commercial record and belongs
+  with the rate comparison and the PO, not in a field calculator.
+
+### Metres are the only thing stored
+The brief asked for a metres/feet toggle. It stops at `toMetres` in the form —
+every parameter is named `_m` or `_mm` and everything crossing to Postgres is
+metric. A unit switch that reached the database would eventually store a 30 ft
+wall as 30 m. Wall thickness and tile sizes are always millimetres whatever the
+toggle says, because nobody types 0.492 ft.
+
+### The steel divisor is read, not re-seeded
+053 moved the firm's unit-weight divisor to their own 162.2. Seeding a second
+copy in this module is exactly how the calculator and the bar bending schedule
+would come to disagree about a 12 mm bar, so `fn_calc_steel` reads
+`bbs_constants` and self-test case 9 asserts it. The steel tab also offers the
+project's BBS totals outright rather than asking anybody to re-type a schedule
+that already exists.
+
+### A saved estimate is frozen, and comparable
+`estimate_lines` stores the answer **as computed**, not the inputs to be re-run:
+change a factor next year and what was ordered this year must still read as it
+did (032/045). The inputs and working are kept alongside so it can still be
+explained.
+
+`material_id` is nullable because "cement" maps to a stock material and "mortar
+volume" never will — `is_orderable` marks the difference.
+`fn_estimate_vs_actual` compares only the mapped lines and returns **received
+and issued separately**: received answers "did we over-order", issued answers
+"did we over-use", and one combined figure would answer neither. Zero rows when
+nothing has been estimated, so the panel disappears rather than showing noughts
+(073).
+
+### One small thing worth noting
+`calc_const_read` uses `public.is_internal()`, not the `using (true)` that 051
+gave `bbs_constants`. These are only mix ratios, but 065's lesson is that a
+policy written when every account belonged to the firm becomes an open door the
+day a client role exists — and it costs nothing to close it on the day the table
+is created rather than in a later audit. The client sweep confirms it: 0 rows on
+constants, mixes, units and estimates.
+
+**Run migration 086 before opening the Calculator.**
+
 ## M28 PROJECT CLOSE-OUT (2026-09-09) — a close that can refuse
 
 Migration 085. Two tables (`project_closeouts`, `closeout_items`), five

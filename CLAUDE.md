@@ -476,7 +476,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_visit_open_actions` counting **2 not 3** because an ordinary task is not a
   visit action, zero rows for a project with no visits, and deleting a visit
   leaving all three tasks intact (SET NULL, not cascade).
-  **085 WRITTEN, NOT YET APPLIED** — M28 Project Close-Out. `project_closeouts`
+  **085 APPLIED** (confirmed 2026-09-09) — M28 Project Close-Out. `project_closeouts`
   (one per project, UNIQUE on project_id — survey score/method/comments/date,
   lessons, closed_at/closed_by, `close_waiver_reason`) and `closeout_items`
   (category enum, label, `is_required`, `received` + `received_on`, an optional
@@ -524,8 +524,68 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   returning it to active, and a supervisor reading 0 and refused the open.
   Mounted at `/money/closeout`: `CLOSEOUT_READ_ROLES` IS `MONEY_ROLES`, so the
   parent route guard is the only gate and the page does not restate it.
-  **Run migration 085 before opening Close-out.**
-  **So: 001-084 ALL APPLIED.** Next migration = 086.
+  **086 APPLIED** (confirmed 2026-09-09) — M13-A Material Quantity Calculator.
+  `calc_constants` (16 rows), `calc_mixes` (11), `masonry_units` (7),
+  `material_estimates` + `estimate_lines`, eight `fn_calc_*` estimators,
+  `fn_estimate_vs_actual`, `fn_calc_selftest` (12 cases), `fn_n`.
+  **THE ARITHMETIC IS IN POSTGRES — THE 051 DECISION, RESTATED FOR THE MODULE
+  MOST LIKELY TO TEMPT A .ts FILE.** The output becomes a purchase order, and
+  the factors behind it (1.54 dry volume, 1440 kg/cum, a 10 mm joint, 5%
+  wastage) are FIRM POLICY rather than physics — the founder must be able to
+  argue with them, and a constant in a TypeScript file is one only its author
+  can find. So constants, mixes and wall units are TABLES; each function
+  returns its WORKING in the same jsonb as its answer, built from the same
+  variables, so the explanation cannot drift from the arithmetic; and the form
+  is a 300 ms debounced round trip.
+  **METRES ARE THE ONLY THING STORED.** The metres/feet toggle stops at
+  `toMetres` in the form. Every parameter is named `_m` or `_mm`. A unit switch
+  that reached the database would eventually store a 30 ft wall as 30 m.
+  **NO RATES AND NO MONEY ANYWHERE**, which is why `canUseCalculator` is every
+  internal role INCLUDING SUPERVISORS — a quantity is not a cost, and the
+  supervisor is the person in front of the wall who has to order the blocks.
+  Constants are founder-write, the only narrower gate in the module. Reads use
+  `public.is_internal()`, NOT the `using (true)` that 051 gave `bbs_constants`
+  — the 065 lesson applied to a new table rather than left for a later audit.
+  **IT REFUSES M30.** IS 456 Table 5 gives nominal proportions to M20 only.
+  M25 (1:1:2) is offered because the firm asked, with `is_nominal = false` and
+  a note printed on screen; above that the function returns a refusal naming
+  the reason instead of a plausible ratio (the 044 rule).
+  **THE STEEL DIVISOR IS READ FROM `bbs_constants`, NOT RE-SEEDED** — 053 moved
+  it to the firm's own 162.2, and a second copy here is exactly how the
+  calculator and the BBS would come to disagree about a 12 mm bar. Self-test
+  case 9 asserts it.
+  **A SAVED ESTIMATE IS A FROZEN SNAPSHOT** (`estimate_lines`), not a view over
+  the calculator — change a factor next year and what was ordered this year
+  must still read as it did (032/045). `material_id` is NULLABLE because
+  "cement" maps to stock and "mortar volume" never will;
+  `fn_estimate_vs_actual` compares only the mapped lines and returns RECEIVED
+  and ISSUED separately, because "did we over-order" and "did we over-use" are
+  different questions. Zero rows when nothing has been estimated (073).
+  **THE SELF-TEST FOUND A REAL BUG ON ITS FIRST RUN — twice over, in one row.**
+  Case 5 came back 463 against a hand figure of 445.6. Two causes: (a) trade
+  names are NOT consistent about which dimension is which — a block called
+  400×200×150 is 200 HIGH, a brick called 230×110×75 is 75 high — so the brick
+  row had height and width swapped; and (b) the count was being taken as wall
+  volume ÷ unit volume, which over-counts a multi-leaf wall by ~4% because the
+  wall contains a COLLAR JOINT the per-unit volume knows nothing about. Now
+  counted per square metre of face × leaves, with leaves computed as
+  (thickness + joint) / (width + joint) so a 230 wall of 110 brick is exactly
+  2 and not 2.09. Cases 4 and 5 were both bricks, so case 7 is a BLOCK — the
+  swap could otherwise have come back on the other side untested.
+  Verified on a real PostgreSQL 16 with the ACTUAL 001-085 chain as fixtures:
+  three clean runs under ON_ERROR_STOP=1, verify block `3|11|7|10|13|16`,
+  12/12 self-test, and **every calculator cross-checked against a SEPARATE
+  implementation written in Python** — 15 figures, all matching (the self-test
+  only proves the code agrees with my expectations; the Python proves the
+  expectations). RLS by query: founder/pm/supervisor/accounts on the project
+  read 1 estimate / 3 lines / 16 constants / 2 vs-actual rows, **the client 0
+  on all four**, a supervisor on ANOTHER project 0 estimates but 16 constants
+  (correct — constants are not project-scoped), a supervisor INSERT on their
+  own project accepted and on another refused, a client INSERT refused, a PM
+  constant edit `UPDATE 0` and a founder's `UPDATE 1`. Editing the dry factor
+  1.54 → 1.62 turned 3 self-test cases red and putting it back returned 12/12,
+  with both edits landing in `audit_log`.
+  **So: 001-086 ALL APPLIED.** Next migration = 087.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.
