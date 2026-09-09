@@ -70,6 +70,9 @@ export default function TasksLayout() {
     // The team half of the client portal thread. Under Tasks, not Admin: this
     // is project conversation, and it belongs beside the work being discussed.
     { to: '/tasks/messages', label: 'Client messages' },
+    // M36. Supervisors get here too — cce_read gives them their project's
+    // non-commercial entries and the commitments the site has to deliver.
+    { to: '/tasks/client-log', label: 'Client log' },
   ]
 
   return (

@@ -319,6 +319,144 @@ export function canEditBudgets(role: UserRole | null): boolean {
   return role !== null && BUDGET_WRITE_ROLES.includes(role)
 }
 
+// ---------- M36 Client Communication Log (migration 083) ----------
+
+export type CommChannel =
+  | 'call'
+  | 'meeting'
+  | 'whatsapp'
+  | 'email'
+  | 'site_visit'
+  | 'letter'
+
+export const COMM_CHANNELS: { value: CommChannel; label: string }[] = [
+  { value: 'call', label: 'Phone call' },
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'site_visit', label: 'Site visit' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'email', label: 'Email' },
+  { value: 'letter', label: 'Letter' },
+]
+
+export const COMM_CHANNEL_LABEL = Object.fromEntries(
+  COMM_CHANNELS.map((c) => [c.value, c.label]),
+) as Record<CommChannel, string>
+
+export type CommitmentState = 'pending' | 'done' | 'dropped'
+export type ComplaintState = 'open' | 'resolved' | 'withdrawn'
+
+export const COMMITMENT_STATE_LABEL: Record<CommitmentState, string> = {
+  pending: 'Pending',
+  done: 'Done',
+  dropped: 'Dropped',
+}
+
+export const COMPLAINT_STATE_LABEL: Record<ComplaintState, string> = {
+  open: 'Open',
+  resolved: 'Resolved',
+  withdrawn: 'Withdrawn',
+}
+
+export interface CommEntry {
+  id: string
+  comm_no: string
+  project_id: string
+  channel: CommChannel
+  /** the day it HAPPENED, not the day it was typed up */
+  occurred_on: string
+  occurred_at: string | null
+  client_person: string | null
+  summary: string
+  /**
+   * Hidden from supervisors by `cce_read`. Defaults TRUE in the database, and
+   * is FORCED true by a trigger when the entry links to a VO or an approval.
+   */
+  is_commercial: boolean
+  approval_id: string | null
+  approval_no: string | null
+  variation_id: string | null
+  vo_number: string | null
+  document_id: string | null
+  document_title: string | null
+  logged_by: string
+  logged_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NewCommEntry {
+  project_id: string
+  channel: CommChannel
+  occurred_on: string
+  client_person: string
+  summary: string
+  is_commercial: boolean
+  approval_id: string | null
+  variation_id: string | null
+  document_id: string | null
+}
+
+export interface Commitment {
+  id: string
+  project_id: string
+  entry_id: string | null
+  promise: string
+  due_on: string | null
+  state: CommitmentState
+  closed_on: string | null
+  closing_note: string | null
+  owner_id: string | null
+  owner_name: string | null
+  created_by: string
+  created_at: string
+}
+
+export interface Complaint {
+  id: string
+  project_id: string
+  entry_id: string | null
+  raised_on: string
+  subject: string
+  detail: string | null
+  state: ComplaintState
+  resolved_on: string | null
+  resolution: string | null
+  created_by: string
+  created_at: string
+}
+
+/** Return shape of fn_client_comm_attention. ZERO ROWS when nothing waits. */
+export interface CommAttention {
+  overdue_commitments: number
+  due_soon_commitments: number
+  open_complaints: number
+  oldest_complaint_days: number | null
+}
+
+/**
+ * Who may LOG an interaction — `cce_write` is founder/pm/accounts. A supervisor
+ * who took the call tells the office; they can read their project's
+ * non-commercial entries and write nothing.
+ */
+export const CLIENT_LOG_WRITE_ROLES: UserRole[] = ['founder', 'pm', 'accounts']
+
+export function canLogClientComm(role: UserRole | null): boolean {
+  return role !== null && CLIENT_LOG_WRITE_ROLES.includes(role)
+}
+
+/**
+ * The window in which an entry can still be corrected. Enforced by
+ * `fn_comm_entry_freeze` in the database — this constant only decides whether
+ * the app OFFERS the edit, so the two must agree. Changing one means changing
+ * the other.
+ */
+export const COMM_EDIT_WINDOW_HOURS = 24
+
+export function commEntryEditable(e: { created_at: string }): boolean {
+  const age = Date.now() - new Date(e.created_at).getTime()
+  return age < COMM_EDIT_WINDOW_HOURS * 60 * 60 * 1000
+}
+
 // ---------- M21 Petty Cash (migrations 002 · 020 · 078 · 082) ----------
 
 export type PcEntryType = 'top_up' | 'spend' | 'return'

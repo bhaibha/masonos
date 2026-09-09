@@ -47,6 +47,7 @@ import RaBills from '@/pages/money/RaBills'
 import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
 import PettyCash from '@/pages/PettyCash'
+import ClientLog from '@/pages/tasks/ClientLog'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
 import DocsLayout from '@/pages/docs/DocsLayout'
@@ -217,6 +218,10 @@ export default function App() {
                 {/* Founder/PM reply; a supervisor may read. Enforced by
                     client_messages_write (065), not by this route. */}
                 <Route path="messages" element={<ClientMessages />} />
+                {/* M36. Next to the client thread, because both are about the
+                    same relationship — but this one is the firm's record OF
+                    the client, not a surface the client can reach. */}
+                <Route path="client-log" element={<ClientLog />} />
               </Route>
 
               {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

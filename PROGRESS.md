@@ -1,6 +1,71 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M36 CLIENT COMMUNICATION LOG (2026-09-09) — dispute material
+
+Three tables, one screen under Tasks: the log itself, a commitments tracker and
+a complaint register. Migration 083.
+
+### The commercial flag is the money rule applied to free text
+A client log is mostly commercial — "they think the terrace railing is too
+expensive", "agreed ₹2L for the extra bathroom". A summary field **cannot be
+column-gated** the way `po_lines.rate` is (012); there is no column to revoke.
+
+So the row carries `is_commercial`, `cce_read` hides those rows from
+supervisors, and **the default is TRUE**. That direction is the whole safety of
+it: a hurried entry is hidden rather than exposed, and somebody has to
+deliberately mark a conversation as site-only. A BEFORE trigger also forces it
+true whenever the entry links to a VO or an approval, so the person typing does
+not have to remember. Same family as 023's `has_cost_implication` — flag the
+row, let the policy hide it, never restate the money rule where it can drift.
+
+Supervisors read their project's non-commercial entries and **cannot write at
+all**. A supervisor who took the call tells the office, which is how the firm
+works anyway.
+
+### The 24-hour freeze
+"Append-only-feel, edits tracked in audit" needed a decision about how long an
+edit stays possible. Editable-forever means the entry AS DISPLAYED can be
+silently rewritten in 2028 and a reader has to dig through `audit_log` to know —
+which makes "append-only" a description of the UI rather than a property of the
+data. Never-editable makes a typo permanent.
+
+So: 24 hours, enforced by `fn_comm_entry_freeze`, a TRIGGER rather than a form
+rule — a form-only check disappears the first time anything talks to the API
+(the 050 lesson). The error names the remedy: log a new entry correcting it.
+No DELETE policy at all.
+
+Deliberately NOT applied to commitments and complaints: those describe an OPEN
+state that is supposed to change. Freezing them would make the registers
+useless.
+
+### Three tables, not one
+A commitment has a due date and a done/pending state; a complaint has a
+resolution note and an open/resolved state. One table behind a `kind` column
+would leave half the columns null on every row and make "show me everything
+overdue" a query about which nulls matter. Both link to an entry through a
+NULLABLE `entry_id` — a promise made on a call points at it, one that arrives
+another way is still tracked — and ON DELETE SET NULL, because deleting the
+record of a phone call must not delete the promise made during it (031).
+
+Closing constraints do the work the form only asks for: `ccm_closed_has_date`
+refuses a commitment marked done with no date, `ccp_resolved_needs_both`
+refuses a complaint marked resolved with no account of how.
+
+### A test that proved nothing, caught
+The first run of the constraint tests reported both as "refused" — but they had
+failed on `created_by` being null, because the test ran as `postgres` where
+`auth.uid()` is null. Neither CHECK constraint had been exercised at all. Fixed
+by supplying `created_by` and asserting the valid version is also accepted. The
+066 lesson in miniature: a test proves only what it thought to ask, and a green
+result is worth checking twice when it comes for free.
+
+### Verified by query, not by reading
+Founder sees 2 entries, **the supervisor sees only the non-commercial 1**, the
+client 0. A supervisor INSERT refused. A VO link forcing `is_commercial` true
+even when sent false. An edit inside the window accepted, one at 30 hours
+refused with the readable message. `DELETE 0`.
+
 ## M21 PETTY CASH (2026-09-09) — the module that had a backend and no screen
 
 Built since 002, reachable by nobody. Now: account list with the live balance,

@@ -413,8 +413,36 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   refused, `UPDATE 0` / `DELETE 0` for the founder. The frozen figure was proven
   by voiding an entry: the live balance moved 21750 → 24750 while both stored
   `book_balance` values stayed at 22000.
-  **Run migration 082 before opening Petty cash.**
-  **So: 001-081 ALL APPLIED.** Next migration = 083.
+  **083 WRITTEN, NOT YET APPLIED** — M36 Client Communication Log.
+  `client_comm_entries` (COM-0001 series, channel, occurred_on vs created_at,
+  nullable FKs to approval/VO/document, **`is_commercial` defaulting TRUE**),
+  plus `client_commitments` and `client_complaints` as SEPARATE registers with a
+  NULLABLE `entry_id` — a commitment has a due date and a done state, a
+  complaint has a resolution and an open state, and folding both behind a `kind`
+  column would leave half the columns null on every row (the 060 explicit-beats-
+  generic rule). `fn_client_comm_attention` with the 066 wrapper and the 073
+  zero-rows behaviour.
+  **THE COMMERCIAL FLAG IS THE MONEY RULE FOR FREE TEXT.** A client log is
+  mostly commercial and a summary CANNOT be column-gated the way `po_lines.rate`
+  is — there is no column to revoke. So the row carries the flag, `cce_read`
+  hides those rows from supervisors, and the DEFAULT IS TRUE: a hurried entry is
+  hidden rather than exposed, and a BEFORE trigger forces it true whenever a VO
+  or approval is linked. Same family as 023's `has_cost_implication`.
+  **THE 24-HOUR FREEZE** (`fn_comm_entry_freeze`) makes "append-only-feel" a
+  property of the data rather than of the UI: editable while you are still
+  typing it up, fixed by the time anyone would want to rewrite it, and the
+  error names the remedy (log a new entry). Deliberately NOT applied to
+  commitments and complaints — those describe an OPEN state that is meant to
+  change. No DELETE policy on entries at all.
+  Verified on a real PostgreSQL with the ACTUAL 001-082 chain: three clean runs,
+  verify block `3/3/7/0/1/1/3/1/1`, and by query — founder sees 2 entries,
+  **the supervisor sees only the non-commercial 1**, the client 0, a supervisor
+  INSERT refused, a VO link forcing `is_commercial` true even when sent false,
+  an edit inside the window accepted and one at 30 hours refused with the
+  readable message, `DELETE 0`, and both closing CHECK constraints firing.
+  **Run migration 083 before opening Client log.**
+  **Run migrations 082 and 083 before testing.**
+  **So: 001-081 ALL APPLIED.** Next migration = 084.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.

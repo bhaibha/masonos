@@ -677,6 +677,19 @@ phone layout below `lg` does not move.
 - [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
       thumb-sized targets.
 
+## Client relationship (internal record — not the portal, not client-facing)
+
+- [x] **M36. Client Communication Log — BUILT 2026-09-09 (migration 083).**
+      Per-project timestamped log of calls, meetings, WhatsApp, email, site visits and letters,
+      with optional links to an approval / VO / document; a commitments tracker (promise, due date,
+      done/dropped with a closing note); and a complaint register (raised/resolved with a mandatory
+      resolution). `/tasks/client-log`. Founder/PM/accounts log and manage; supervisors read.
+      **Dispute material, so the shape is the point**: entries frozen 24 hours after logging by
+      `fn_comm_entry_freeze`, no DELETE policy at all, audit triggers on all three tables.
+      **`is_commercial` defaults TRUE** and is forced true by a trigger when a VO or approval is
+      linked — a free-text summary cannot be column-gated the way a rate is, so the row is flagged
+      and `cce_read` hides it from supervisors.
+
 ## Client portal (new workstream — M25 was CUT as a public website; this is not that)
 
 An internal-app client role: one project, curated read-only surface plus approve. No public site.
