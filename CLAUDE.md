@@ -374,7 +374,9 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   matching so a PM gets ZERO ROWS rather than a row of zeros. Confirmed live
   2026-09-06 — verify block returned view_exists = 1, gates_on_founder = 1,
   still_lists_pm_accounts = 0, summary_fn = 1.
-  **081 WRITTEN, NOT YET APPLIED** — a goods receipt gets a number of its own
+  **081 APPLIED** (confirmed 2026-09-08 — verify block returned
+  `1/1/1/1/0/0/t`, and the GRN list renders numbered receipts with a working
+  PDF button in the running app) — a goods receipt gets a number of its own
   (`grn_no_seq`, `goods_receipts.grn_no` defaulting to `GRN-0001`, a
   chronological backfill of receipts already recorded, a guarded `setval`, then
   NOT NULL + a unique index). Needed because the GRN is now a printed document
@@ -389,8 +391,30 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `1/1/1/1/0/0/t`, three pre-existing receipts inserted OUT of order and
   numbered chronologically, and — the point of the whole migration — the next
   receipt taking GRN-0004 without colliding with the backfill.
-  **Run migration 081 before using the GRN PDF button.**
-  **So: 001-080 ALL APPLIED.** Next migration = 082.
+  **082 WRITTEN, NOT YET APPLIED** — M21 Petty Cash gets its screen, and the
+  module gets the one thing the database could not already answer:
+  `petty_cash_counts` (counted_on, counted_amount, **book_balance FROZEN at the
+  moment of counting**, a GENERATED `variance`, a mandatory note once the two
+  disagree, append-only — SELECT and INSERT policies only, no UPDATE and no
+  DELETE, the 069 shape). RLS lifted verbatim from `pce_read` so the counts and
+  the entries cannot drift about who may see them.
+  **§0 REPAIRS A BUG LIVE SINCE 002.** `fn_pc_to_expense` mirrored a spend with
+  `coalesce(new.category_id, 999)` — but `expense_categories.id` is a SERIAL and
+  the 002 seed gives 'Misc' **id 18 with sort 999**. There has never been a
+  category with id 999, so an uncategorised petty cash spend raised
+  `expenses_category_id_fkey` and, because the trigger shares the transaction,
+  THE ENTRY WAS REFUSED. Unreported for seven months because M21 had no screen
+  — the 069 lesson exactly. Now resolves Misc BY NAME, and raises a sentence
+  naming the fix if it is ever absent rather than inventing master data (050).
+  Verified on a real PostgreSQL with the ACTUAL 001-081 chain as fixtures:
+  three clean runs, verify block `1/0/1/1/2/0/1/1/1`, the uncategorised spend
+  now accepted and filed under Misc, the note CHECK firing, and the RLS proven
+  by query — holder 2 counts, founder 2, **a second supervisor 0**, their INSERT
+  refused, `UPDATE 0` / `DELETE 0` for the founder. The frozen figure was proven
+  by voiding an entry: the live balance moved 21750 → 24750 while both stored
+  `book_balance` values stayed at 22000.
+  **Run migration 082 before opening Petty cash.**
+  **So: 001-081 ALL APPLIED.** Next migration = 083.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.

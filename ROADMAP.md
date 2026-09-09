@@ -23,10 +23,18 @@ what's unverified. Audited honestly on 2026-07-28.
 ## ALREADY BUILT (migrations 001–023)
 - [x] M01 Command Dashboard + Project Detail
 - [x] M06 Financial / Open Book (expenses, budgets, receipts) — void tested via the ledger
-- [~] **M21 Petty Cash — BACKEND ONLY, NO SCREEN.** `petty_cash_accounts` / `petty_cash_entries`,
-      the spend→expense mirror trigger, `v_petty_cash_balance` and the void path all exist and are
-      correct. **There is no UI anywhere** — no page, no route, no query file. Nothing in the app
-      can reach it. Was ticked in error. Decide: build the screen, or drop the module.
+- [x] **M21 Petty Cash — BUILT 2026-09-09 (migration 082).** Account list with the live balance
+      from `v_petty_cash_balance`, open an imprest account (founder/accounts), daily entry form
+      (top-up / spend / return, category, camera-first receipt compressed to ≤300KB), entry list
+      with a running balance and the void path, and reconciliation against a physical count.
+      **One component, two doorways**: `/money/petty-cash` for the office and `/tasks/petty-cash`
+      for the holder — `/money` is MONEY_ROLES and the person holding the tin is usually a
+      supervisor, whom `pca_read` has always allowed. RLS does the scoping; nothing filters by
+      role in the browser.
+      **The build found a bug live since 002**: `fn_pc_to_expense` fell back to category id 999,
+      but `expense_categories.id` is a SERIAL and 'Misc' is id 18 with *sort* 999 — so an
+      uncategorised spend raised a foreign key violation and the entry was refused. Never reported
+      because the module had no screen. Repaired in 082 §0 (resolve Misc by name).
 - [x] M03 Site Management / Daily Log
 - [x] M16 Material Usage Tracker (inward/issue/stock) + Movements history
 - [x] M09 Document Vault

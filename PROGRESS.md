@@ -1,6 +1,76 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M21 PETTY CASH (2026-09-09) — the module that had a backend and no screen
+
+Built since 002, reachable by nobody. Now: account list with the live balance,
+open an imprest (founder/accounts), daily entry form, entry list with a running
+balance and the void path, and reconciliation.
+
+### A bug that had been live for seven months
+`fn_pc_to_expense` mirrors a petty cash SPEND into the ledger with
+`coalesce(new.category_id, 999)` — meaning "fall back to Misc". But
+`expense_categories.id` is a **SERIAL** and the 002 seed inserts `(name, sort)`
+without ids, so 'Misc' is **id 18 with sort 999**. There has never been a
+category with id 999.
+
+So an uncategorised petty cash spend raised
+`expenses_category_id_fkey`, and because the trigger runs in the same
+transaction **the entry itself was refused**. `petty_cash_entries.category_id`
+is nullable, so the schema openly invites the case that breaks it.
+
+Nobody reported it because there was no screen — it would have fired on the
+first spend logged through the UI this session was written to build. The 069
+lesson again: a capability nobody exercises is a capability nobody discovers is
+broken. Found by RUNNING the migration chain, not by reading it. Repaired in
+082 §0: resolve Misc by NAME, and raise a sentence naming the fix if it is ever
+absent rather than inventing master data (050).
+
+### Migration 082 — a count is a record
+`petty_cash_counts`. The design decision is `book_balance` being **stored and
+frozen** rather than derived on read: a reconciliation is evidence about a
+moment, and voiding an entry from three weeks ago must not silently restate
+what last month's count was checked against. Proven by test — voiding an entry
+moved the live balance 21750 → 24750 while both stored counts stayed at 22000.
+
+`variance` is GENERATED, because it is a consequence of two columns on the same
+row and nobody should have a field to type it into (033). A variance with no
+note is refused by a CHECK constraint, not only by the form.
+
+**No adjusting entry, deliberately.** A count that disagrees is REPORTED and
+nothing else. One line would write a `spend` for the difference — and that line
+would move real money in the project ledger because two numbers did not match.
+`pc_entry_type` is left alone for the same reason: an 'adjustment' value would
+create a category of spend that never had a receipt.
+
+**Append-only**: SELECT and INSERT policies, no UPDATE and no DELETE. A
+mis-typed count is corrected by counting again, which is also what happens with
+actual cash.
+
+### One component, two doorways
+`/money/petty-cash` for the office and `/tasks/petty-cash` for the holder.
+`/money` is MONEY_ROLES, which excludes the supervisor who usually holds the
+tin — while `pca_read`/`pce_read` (002, re-emitted in 078) have always granted
+a HOLDER their own account, and the roles matrix has always said "petty-cash
+entry". The permission existed and was unreachable.
+
+The same component serves both because **RLS already separates them**. Nothing
+filters by role to decide which accounts appear; a client-side filter would be
+a second copy of the policy and the two would drift. Role decides only which
+BUTTONS exist — opening an account is founder/accounts (`pca_write`), voiding
+is founder/accounts (021) — and they are hidden rather than shown-and-refused.
+The Tasks tab is supervisor-only, because everyone else already has the screen
+under Money.
+
+### Two smaller judgements
+- **Topping up is an ENTRY, never an edit to `imprest_amount`.** Raising the
+  imprest figure would restate every historical balance and the tin would
+  appear to have held more money last month than it did.
+- **The running balance is walked BACKWARDS from `v_petty_cash_balance`**, not
+  summed forwards from the imprest. Summing would be a second implementation of
+  the view's arithmetic in TypeScript, and the two would eventually disagree
+  about a voided row.
+
 ## GRN + SNAG DOCUMENTS (2026-09-08) — the two that didn't exist
 
 The letterhead pass covered every letterhead in the repo, but two document types

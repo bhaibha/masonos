@@ -46,6 +46,7 @@ import Pnl from '@/pages/money/Pnl'
 import RaBills from '@/pages/money/RaBills'
 import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
+import PettyCash from '@/pages/PettyCash'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
 import DocsLayout from '@/pages/docs/DocsLayout'
@@ -170,6 +171,8 @@ export default function App() {
                 <Route index element={<TaskList />} />
                 <Route path="new" element={<TaskForm />} />
                 <Route path="log" element={<SiteLog />} />
+                {/* M21 holder view — see the note on /money/petty-cash. */}
+                <Route path="petty-cash" element={<PettyCash />} />
                 {/* B1 Schedule + EVM. No role guard: every project member reads
                     the programme. The cost half is closed off inside Postgres —
                     budget_amount is revoked from authenticated and the EVM
@@ -222,6 +225,12 @@ export default function App() {
                   <Route index element={<Ledger />} />
                   <Route path="new" element={<ExpenseForm />} />
                   <Route path="budget" element={<BudgetVsActual />} />
+                  {/* M21. The SAME component is also mounted under /tasks —
+                      /money is MONEY_ROLES, which excludes the supervisor who
+                      usually holds the tin, and pca_read grants a holder their
+                      own account. Two doorways, one screen; RLS decides what
+                      each caller sees. */}
+                  <Route path="petty-cash" element={<PettyCash />} />
                   {/* D3 health signals. The parent MONEY_ROLES guard is the
                       outer layer; fn_project_health_flags decides which
                       categories each role is computed — accounts gets cost and

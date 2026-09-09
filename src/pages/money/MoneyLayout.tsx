@@ -41,6 +41,7 @@ export default function MoneyLayout() {
       : []),
     { to: '/money/new', label: 'Add' },
     { to: '/money/budget', label: 'Budget' },
+    { to: '/money/petty-cash', label: 'Petty cash' },
     ...(canEditBudgets(role)
       ? [{ to: '/money/budget/edit', label: 'Set budgets' }]
       : []),

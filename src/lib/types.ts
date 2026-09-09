@@ -319,6 +319,133 @@ export function canEditBudgets(role: UserRole | null): boolean {
   return role !== null && BUDGET_WRITE_ROLES.includes(role)
 }
 
+// ---------- M21 Petty Cash (migrations 002 · 020 · 078 · 082) ----------
+
+export type PcEntryType = 'top_up' | 'spend' | 'return'
+
+export const PC_ENTRY_TYPES: { value: PcEntryType; label: string; hint: string }[] =
+  [
+    {
+      value: 'spend',
+      label: 'Spend',
+      hint: 'Money out of the tin. Posts to the project ledger.',
+    },
+    {
+      value: 'top_up',
+      label: 'Top up',
+      hint: 'Cash handed to the holder. Raises the balance.',
+    },
+    {
+      value: 'return',
+      label: 'Return',
+      hint: 'Unspent cash handed back to the office.',
+    },
+  ]
+
+export const PC_ENTRY_LABEL: Record<PcEntryType, string> = {
+  top_up: 'Top up',
+  spend: 'Spend',
+  return: 'Return',
+}
+
+/**
+ * `petty_cash_accounts` + the live figure from `v_petty_cash_balance` (020).
+ * `balance` is null only when the view refused the row — which is a permission
+ * result, not an empty tin, so the screen must say so rather than print ₹0.00.
+ */
+export interface PettyCashAccount {
+  id: string
+  project_id: string
+  project_name: string
+  holder: string
+  holder_name: string
+  /** the OPENING float; topping up is an entry, never an edit to this */
+  imprest_amount: number
+  balance: number | null
+}
+
+export interface PettyCashEntry {
+  id: string
+  account_id: string
+  entry_date: string
+  entry_type: PcEntryType
+  amount: number
+  category_id: number | null
+  category_name: string | null
+  description: string | null
+  receipt_path: string | null
+  created_by: string
+  created_by_name: string | null
+  created_at: string
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+  /** balance as it stood after this entry; filled by withRunningBalance */
+  running_balance: number | null
+}
+
+export interface NewPettyCashEntry {
+  account_id: string
+  entry_date: string
+  entry_type: PcEntryType
+  amount: number
+  /** only a spend reaches the ledger, so only a spend carries one */
+  category_id: number | null
+  description: string
+  receipt_path: string | null
+}
+
+/** A physical cash count — migration 082. Append-only. */
+export interface PettyCashCount {
+  id: string
+  account_id: string
+  counted_on: string
+  counted_amount: number
+  /** FROZEN at the moment of counting, never recomputed */
+  book_balance: number
+  /** generated column: counted − book. Positive = more cash than expected. */
+  variance: number
+  note: string | null
+  counted_by: string
+  counted_by_name: string | null
+  created_at: string
+}
+
+export interface NewPettyCashCount {
+  account_id: string
+  counted_on: string
+  counted_amount: number
+  book_balance: number
+  note: string
+}
+
+/**
+ * Who may open the petty cash screens.
+ *
+ * Wider than MONEY_ROLES on purpose: `pca_read` / `pce_read` (002, re-emitted
+ * in 078) grant an account's HOLDER access to their own tin, and the holder on
+ * site is normally a supervisor — which is also what the roles matrix in
+ * CLAUDE.md has always said ("petty-cash entry"). A supervisor reaching this
+ * route sees only the accounts they hold, because RLS says so; they are not
+ * granted a money screen, they are granted their own cash box.
+ */
+export const PETTY_CASH_ROLES: UserRole[] = [
+  'founder',
+  'accounts',
+  'pm',
+  'supervisor',
+]
+
+/**
+ * Who may OPEN an account and hand out an imprest — `pca_write` is
+ * `for all … my_role() in ('founder','accounts')`. A pm can look, not create.
+ */
+export const PETTY_CASH_ADMIN_ROLES: UserRole[] = ['founder', 'accounts']
+
+export function canManagePettyCash(role: UserRole | null): boolean {
+  return role !== null && PETTY_CASH_ADMIN_ROLES.includes(role)
+}
+
 // ---------- Void / reverse (migration 020) ----------
 
 /**
