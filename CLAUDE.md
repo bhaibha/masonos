@@ -440,7 +440,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   INSERT refused, a VO link forcing `is_commercial` true even when sent false,
   an edit inside the window accepted and one at 30 hours refused with the
   readable message, `DELETE 0`, and both closing CHECK constraints firing.
-  **084 WRITTEN, NOT YET APPLIED** — M18 Site Visits Tracker. `site_visits`
+  **084 APPLIED** (confirmed 2026-09-09) — M18 Site Visits Tracker. `site_visits`
   (SV-0001 series, `visit_type` enum, visit_date vs created_at, visitor as
   PLAIN TEXT, photos text[], nullable `comm_entry_id` pointing at the M36 entry
   when the visit also produced a conversation), plus **one nullable column on an
@@ -476,8 +476,56 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `fn_visit_open_actions` counting **2 not 3** because an ordinary task is not a
   visit action, zero rows for a project with no visits, and deleting a visit
   leaving all three tasks intact (SET NULL, not cascade).
-  **Run migration 084 before opening Site visits.**
-  **So: 001-083 ALL APPLIED.** Next migration = 085.
+  **085 WRITTEN, NOT YET APPLIED** — M28 Project Close-Out. `project_closeouts`
+  (one per project, UNIQUE on project_id — survey score/method/comments/date,
+  lessons, closed_at/closed_by, `close_waiver_reason`) and `closeout_items`
+  (category enum, label, `is_required`, `received` + `received_on`, an optional
+  `document_id` into the vault), plus `fn_open_closeout`,
+  `fn_project_final_account`, `fn_closeout_blockers`, `fn_close_project`,
+  `fn_reopen_project`.
+  **THE FINAL ACCOUNT IS TWO SIDES, NOT ONE RUNNING TOTAL.** The brief said
+  "contract + approved VOs − certified − paid". Netting those is wrong: what the
+  client owes the firm and what the firm owes its contractors move in opposite
+  directions, and one combined figure answers no question anybody has. So
+  `fn_project_final_account` returns them SEPARATELY — client side (contract +
+  approved variations = revised, less invoiced, less received → `still_to_bill`
+  and `still_to_collect`) and contractor side (`certified`, `retention_held`) —
+  and the card renders them under two headings. Two remedies (raise an invoice /
+  chase a payment) need two numbers. **Only APPROVED variations** (the 075
+  rule — a submitted VO is a proposal and would flatter the denominator), and
+  cancelled invoices excluded on both sides. SECURITY DEFINER because it reads
+  `projects.contract_value` (the 010 → 038 owner-run pattern, role check as the
+  first line of the body), returning **zero rows** to an unauthorised caller
+  rather than a row of zeros (066) — "₹0 outstanding" reads as settled.
+  **A BLOCKER CARRIES A `waivable` FLAG AND THE HARD ONES ARE TRULY HARD.**
+  A missing REQUIRED document and an open snag cannot be waived by anybody,
+  founder included — they are exactly what the handover pack exists to
+  guarantee, and a checklist you can walk past is not a checklist (the 043
+  hold-point rule). Money IS waivable, because "₹30,000 in dispute" is a real
+  reason to hand over, but only by a **founder with a written reason** stored in
+  `close_waiver_reason` and printed on the closed project.
+  `fn_close_project(p_project, p_force, p_reason)` enforces the role, the force
+  flag and the non-empty reason; the screen mirrors the rule and is never the
+  rule. `fn_reopen_project` is founder-only — a close made in error must be
+  undoable or the remedy is a support request into the SQL editor.
+  **`fn_open_closeout` IS IDEMPOTENT** (seven seeded items, four required), so a
+  double tap on a site connection cannot make two handover packs for one job.
+  Added items default to OPTIONAL — a list where everything is mandatory is one
+  people learn to force past. Evidence is OFFERED, never demanded: a warranty
+  booklet is a physical original, and refusing the tick without a file would buy
+  a photograph of a cover. `cli_received_has_date` does insist on a date.
+  Verified on a real PostgreSQL with the ACTUAL 001-084 chain as fixtures:
+  three clean runs, verify block `2|1|5|0|5|4|2|1`, the arithmetic exact against
+  a hand calculation (`100000|20000|120000|80000|50000|40000|30000|40000|3000` —
+  submitted VO 50000 excluded, cancelled invoice 99000 excluded, retention =
+  5000 certified − 2000 released), founder 1 row / pm 1 / supervisor 0 /
+  client 0, every guard confirmed firing with its real message, a forced close
+  setting `projects.status = 'completed'` and recording the waiver, reopen
+  returning it to active, and a supervisor reading 0 and refused the open.
+  Mounted at `/money/closeout`: `CLOSEOUT_READ_ROLES` IS `MONEY_ROLES`, so the
+  parent route guard is the only gate and the page does not restate it.
+  **Run migration 085 before opening Close-out.**
+  **So: 001-084 ALL APPLIED.** Next migration = 086.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.

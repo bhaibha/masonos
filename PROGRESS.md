@@ -1,6 +1,108 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M28 PROJECT CLOSE-OUT (2026-09-09) — a close that can refuse
+
+Migration 085. Two tables (`project_closeouts`, `closeout_items`), five
+policies, and four functions. The screen is `/money/closeout`.
+
+### The final account is TWO SIDES, and that is the whole design
+The brief said "contract + approved VOs − certified − paid". Written literally
+that is one running total, and it is wrong: what the client owes the firm and
+what the firm owes its contractors are money moving in opposite directions.
+Netting them produces a number that is never the answer to any question
+somebody actually has.
+
+So `fn_project_final_account` returns both sides separately and the card renders
+them under two headings:
+
+- **From the client** — original contract + approved variations = revised
+  contract, then invoiced, then received, giving **still to bill** and **still
+  to collect**.
+- **To contractors** — certified on RA bills, and **retention still held**.
+
+`still_to_bill` and `still_to_collect` are two different problems with two
+different remedies (raise an invoice / chase a payment), and a single
+"outstanding" figure would hide which one you have.
+
+**Only APPROVED variations count**, the 075 rule again: a submitted VO is a
+proposal, and including it would inflate the revised contract to flatter the
+billing position. Cancelled invoices are excluded on both the invoiced and
+received sides. Retention is `certified − released`, derived from
+`v_retention_ledger`'s own arithmetic rather than restated here.
+
+Owner-run (SECURITY DEFINER) because it reads `projects.contract_value`, which
+010 revoked — the 010 → 038 pattern, with `is_member() and my_role() in (...)`
+as the first line of the body. It returns **zero rows** to anyone unauthorised
+rather than a row of zeros (066), because a final account reading "₹0
+outstanding" is read as settled, not as refused.
+
+Verified against a hand calculation on a real PostgreSQL:
+`100000 | 20000 | 120000 | 80000 | 50000 | 40000 | 30000 | 40000 | 3000` —
+submitted VO 50000 excluded, cancelled invoice 99000 excluded, retention =
+5000 certified − 2000 released.
+
+### Blockers have a `waivable` flag, and it is not decoration
+`fn_closeout_blockers` returns one row per blocker. Two of them are **hard**:
+
+- a required documentation item not yet received, and
+- a snag still open or in progress.
+
+Those cannot be waived by anybody, including a founder. They are precisely what
+a handover pack exists to guarantee, and a checklist you can walk past is not a
+checklist (the 043 hold-point rule). The screen says so in words rather than
+just disabling the button.
+
+Money is the **waivable** one, because "the client still owes ₹30,000 and it is
+in dispute" is a real and common reason to hand over anyway. Waiving needs
+**founder + a written reason**, the reason is stored in `close_waiver_reason`,
+and the closed project prints it. `fn_close_project` enforces all three parts —
+the role, the force flag and the non-empty reason — so the screen mirrors the
+rule but never *is* the rule.
+
+Verified with the real messages firing:
+"Open the close-out checklist before closing the project." /
+"Cannot close yet — Still to receive: As-built drawings…" /
+"Cannot close yet — 1 snag still open or in progress" /
+"Cannot close yet — Rs. 40000.00 still to bill and Rs. 30000.00 still to
+collect; Rs. 3000.00 of contractor retention is still held. A founder may close
+anyway with a written reason." /
+"Closing with money outstanding needs a written reason." /
+"Only a founder may close past an unsettled balance." /
+"This project is already closed." /
+"Only a founder may reopen a closed project."
+
+### `fn_open_closeout` seeds the pack and is idempotent
+Seven items, four required. Calling it twice returns the same row, so a double
+tap on a site connection cannot produce two handover packs for one job (the 054
+unique-index lesson, one layer up). Added items default to **optional** — a list
+where everything is mandatory is one people learn to force past.
+
+Evidence is **offered, never demanded**: an item can link to a vault document,
+but a warranty booklet is a physical original and refusing the tick without a
+file would push people to upload a photograph of a cover to satisfy the form.
+`cli_received_has_date` does insist on a date, because recording that something
+arrived without recording when is the thing the constraint exists to stop.
+
+### Reopen exists, and it is founder-only
+A close made in error must be undoable, or the remedy is a support request into
+the SQL editor. `fn_reopen_project` returns the project to active and the audit
+keeps both acts. Same reasoning as the MFA break-glass: a one-way door people
+are frightened of is a door they stop using.
+
+### Where it lives
+Under `/money`, not `/tasks`. `CLOSEOUT_READ_ROLES` is founder/pm/accounts,
+which **is** `MONEY_ROLES`, so the parent route guard is the only gate and the
+page does not restate it. The final account is the half nobody can compute
+anywhere else, and it is the reason accounts needs read access at all.
+
+A strip appears on Project Detail once a pack is opened — never before, so a
+project mid-build is not told it is missing a close-out (073) — and it leads
+with **what is still missing** rather than "4 of 7 received", because a fraction
+reads as progress and a missing warranty is what stops a handover.
+
+**Run migration 085 before opening Close-out.**
+
 ## M18 SITE VISITS (2026-09-09) — one new table, one new column
 
 Migration 084. `site_visits` plus **one nullable column on `tasks`** — and that

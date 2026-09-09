@@ -7,6 +7,7 @@ import {
   ClipboardList,
   FileText,
   Package,
+  PackageCheck,
   Receipt,
   Activity,
   ShieldCheck,
@@ -35,6 +36,7 @@ import { fetchSafetySummary } from '@/lib/queries/safety'
 import { fetchQaSummary } from '@/lib/queries/qa'
 import { fetchSnagSummary } from '@/lib/queries/snags'
 import { fetchVisitAttention } from '@/lib/queries/siteVisits'
+import { fetchCloseout } from '@/lib/queries/closeout'
 import { fetchApprovalSummary } from '@/lib/queries/approvals'
 import { fetchHealthFlags } from '@/lib/queries/signals'
 import { fetchProjectContract } from '@/lib/queries/variations'
@@ -54,6 +56,7 @@ import {
   type Project,
   PROJECT_STATUS_LABEL,
   type ProjectContract,
+  type ProjectCloseout,
   type ProjectSpend,
   type ProjectSummary,
   type SafetySummary,
@@ -86,6 +89,9 @@ export default function ProjectDetail() {
   // M18. Null means nothing outstanding — fn_visit_open_actions returns ZERO
   // ROWS in that case, so the strip disappears rather than saying "0 open".
   const [visits, setVisits] = useState<VisitAttention | null>(null)
+  // M28. Null until a pack has been opened — a project mid-build has no
+  // close-out and should not be told it is missing one (073).
+  const [closeout, setCloseout] = useState<ProjectCloseout | null>(null)
   const [safety, setSafety] = useState<SafetySummary | null>(null)
   const [snags, setSnags] = useState<SnagSummary | null>(null)
   const [qa, setQa] = useState<QaSummary | null>(null)
@@ -179,6 +185,16 @@ export default function ProjectDetail() {
       })
       .catch(() => setVisits(null))
 
+    // M28. CLOSEOUT_READ_ROLES is the same three roles as showMoney, so the
+    // existing flag is reused rather than reading `role` into this effect.
+    if (showMoney) {
+      fetchCloseout(id)
+        .then((c) => {
+          if (!cancelled) setCloseout(c)
+        })
+        .catch(() => setCloseout(null))
+    }
+
     fetchRecentActivity(id)
       .then((a) => {
         if (!cancelled) setActivity(a)
@@ -223,6 +239,13 @@ export default function ProjectDetail() {
       )}
 
       {visits && <VisitStrip a={visits} onOpen={() => navigate('/tasks/visits')} />}
+
+      {closeout && (
+        <CloseOutStrip
+          c={closeout}
+          onOpen={() => navigate('/money/closeout')}
+        />
+      )}
 
       {/* Money and Activity span the full width; the three compact summaries
           sit two-up from 640px. One column on a phone — money figures don't
@@ -1201,6 +1224,52 @@ function HeaderSkeleton() {
  * Only OVERDUE makes it urgent. Turning it red because one action is due next
  * week teaches people to ignore red.
  */
+/**
+ * M28. Shown only once a pack exists. Leads with what is still MISSING, because
+ * "4 of 7 received" is a number people read as progress and a missing warranty
+ * is the thing that stops a handover.
+ */
+function CloseOutStrip({
+  c,
+  onOpen,
+}: {
+  c: ProjectCloseout
+  onOpen: () => void
+}) {
+  const closed = Boolean(c.closed_at)
+  const left = c.items.filter((i) => i.is_required && !i.received).length
+  const done = c.items.filter((i) => i.received).length
+
+  const text = closed
+    ? `Closed ${c.closed_at?.slice(0, 10)}` +
+      (c.close_waiver_reason ? ' — with money outstanding' : '')
+    : left > 0
+      ? `Close-out open · ${left} required item${left === 1 ? '' : 's'} still to receive`
+      : `Close-out open · ${done} of ${c.items.length} received, nothing required outstanding`
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'mt-4 flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left',
+        closed
+          ? 'border-[var(--positive)]/30 bg-[color-mix(in_oklab,var(--positive)_8%,transparent)]'
+          : 'border-border bg-secondary/40',
+      )}
+    >
+      <PackageCheck
+        className={cn(
+          'mt-0.5 size-4 shrink-0',
+          closed ? 'text-[var(--positive)]' : 'text-muted-foreground',
+        )}
+        aria-hidden="true"
+      />
+      <span className="text-sm">{text}</span>
+    </button>
+  )
+}
+
 function VisitStrip({
   a,
   onOpen,

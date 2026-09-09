@@ -677,6 +677,28 @@ phone layout below `lg` does not move.
 - [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
       thumb-sized targets.
 
+## Project close-out
+
+- [x] **M28. Project Close-Out — BUILT 2026-09-09 (migration 085).**
+      Per-project handover pack (`closeout_items`, seeded with seven standard items, four of them
+      required — as-builts, warranties, O&M manuals, completion certificate), each tickable with a
+      received date and an optional link to the vault document that proves it; a **final account**
+      computed entirely in Postgres by `fn_project_final_account`; client satisfaction capture
+      (score 1–10 + how it was captured + date + comments); a lessons-learned note; and the close
+      itself. `/money/closeout`, founder/PM manage, accounts read.
+      **The final account is two sides, never one figure** — client side (original contract +
+      approved variations = revised, less invoiced, less received → still to bill / still to
+      collect) and contractor side (certified on RA bills, retention still held). Submitted VOs and
+      cancelled invoices are excluded. Owner-run (010 → 038) because it reads
+      `projects.contract_value`; zero rows to anyone unauthorised (066).
+      **The close can refuse.** `fn_closeout_blockers` returns one row per blocker with a
+      `waivable` flag: missing required documents and open snags **cannot be waived at all** — they
+      are what the pack exists to guarantee — while an unsettled balance can be waived by a
+      **founder only, with a written reason** that is stored on the row and printed on the closed
+      project. `fn_reopen_project` is founder-only. Closing sets `projects.status = 'completed'`.
+      A close-out strip appears on Project Detail once a pack is opened, leading with what is still
+      missing rather than with progress.
+
 ## Site record
 
 - [x] **M18. Site Visits Tracker — BUILT 2026-09-09 (migration 084).**

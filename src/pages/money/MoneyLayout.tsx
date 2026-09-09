@@ -58,6 +58,8 @@ export default function MoneyLayout() {
     { to: '/money/vendors', label: 'Vendors' },
     // Company-wide as well as per-project, so it is not scoped by the picker.
     { to: '/money/compliance', label: 'Compliance' },
+    // M28. Last, because it is the last thing that happens to a project.
+    { to: '/money/closeout', label: 'Close-out' },
   ]
 
   return (

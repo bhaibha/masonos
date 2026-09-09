@@ -46,6 +46,7 @@ import Pnl from '@/pages/money/Pnl'
 import RaBills from '@/pages/money/RaBills'
 import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
+import CloseOut from '@/pages/CloseOut'
 import PettyCash from '@/pages/PettyCash'
 import ClientLog from '@/pages/tasks/ClientLog'
 import SiteVisits from '@/pages/tasks/SiteVisits'
@@ -290,6 +291,12 @@ export default function App() {
                   {/* A13 insurance register. Company-wide or per project, like
                       compliance — project_id is nullable. */}
                   <Route path="insurance" element={<Insurance />} />
+                  {/* M28 close-out. CLOSEOUT_READ_ROLES is founder/pm/accounts,
+                      which IS the parent MONEY_ROLES guard — not restated in
+                      the page. It lives under Money because the final account
+                      is the half nobody can compute anywhere else; writing is
+                      founder/PM, enforced by pcl_write and fn_close_project. */}
+                  <Route path="closeout" element={<CloseOut />} />
                   <Route element={<RequireRole allow={BUDGET_WRITE_ROLES} />}>
                     <Route path="budget/edit" element={<BudgetEditor />} />
                 </Route>

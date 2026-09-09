@@ -319,6 +319,103 @@ export function canEditBudgets(role: UserRole | null): boolean {
   return role !== null && BUDGET_WRITE_ROLES.includes(role)
 }
 
+// ---------- M28 Project Close-Out (migration 085) ----------
+
+export type CloseoutCategory =
+  | 'as_built'
+  | 'warranty'
+  | 'manual'
+  | 'certificate'
+  | 'other'
+
+export const CLOSEOUT_CATEGORIES: { value: CloseoutCategory; label: string }[] = [
+  { value: 'as_built', label: 'As-built' },
+  { value: 'warranty', label: 'Warranty' },
+  { value: 'manual', label: 'Manual' },
+  { value: 'certificate', label: 'Certificate' },
+  { value: 'other', label: 'Other' },
+]
+
+export const CLOSEOUT_CATEGORY_LABEL = Object.fromEntries(
+  CLOSEOUT_CATEGORIES.map((c) => [c.value, c.label]),
+) as Record<CloseoutCategory, string>
+
+export interface CloseoutItem {
+  id: string
+  closeout_id: string
+  category: CloseoutCategory
+  label: string
+  /** required items block the close and cannot be waived */
+  is_required: boolean
+  received: boolean
+  received_on: string | null
+  /** nullable on purpose — a warranty booklet is a physical original */
+  document_id: string | null
+  document_title: string | null
+  note: string | null
+  sort: number
+}
+
+export interface ProjectCloseout {
+  id: string
+  project_id: string
+  survey_score: number | null
+  survey_method: string | null
+  survey_comments: string | null
+  survey_taken_on: string | null
+  lessons: string | null
+  closed_at: string | null
+  closed_by: string | null
+  closed_by_name: string | null
+  /** present only when a founder closed past an unsettled balance */
+  close_waiver_reason: string | null
+  created_at: string
+  items: CloseoutItem[]
+}
+
+/**
+ * `fn_project_final_account` — the two sides kept apart.
+ *
+ * Client side is money coming IN (`invoices`, with `paid_amount` from 065).
+ * Contractor side is money going OUT (`ra_bills.net_certified`, retention from
+ * 033). Subtracting one from the other would produce a figure that describes
+ * nothing, which is why they are separate fields and separate blocks on screen.
+ */
+export interface FinalAccount {
+  contract_value: number
+  variations_value: number
+  revised_contract: number
+  invoiced: number
+  received: number
+  still_to_bill: number
+  still_to_collect: number
+  certified: number
+  retention_held: number
+}
+
+/**
+ * One row per thing standing in the way. An empty array means ready to close —
+ * so the screen lists reasons rather than showing one unhelpful "not ready".
+ */
+export interface CloseoutBlocker {
+  blocker: 'documents' | 'snags' | 'money' | 'retention'
+  detail: string
+  /** money and retention can be waived by a founder WITH a written reason */
+  waivable: boolean
+}
+
+/** Founder and PM close a project; accounts may read the final account. */
+export const CLOSEOUT_WRITE_ROLES: UserRole[] = ['founder', 'pm']
+export const CLOSEOUT_READ_ROLES: UserRole[] = ['founder', 'pm', 'accounts']
+
+export function canManageCloseout(role: UserRole | null): boolean {
+  return role !== null && CLOSEOUT_WRITE_ROLES.includes(role)
+}
+
+export function canViewCloseout(role: UserRole | null): boolean {
+  return role !== null && CLOSEOUT_READ_ROLES.includes(role)
+}
+
 // ---------- M18 Site Visits (migration 084) ----------
 
 export type VisitType =
