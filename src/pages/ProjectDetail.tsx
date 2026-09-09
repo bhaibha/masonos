@@ -2,6 +2,7 @@ import {
   Archive,
   ArrowLeft,
   BadgeCheck,
+  CalendarCheck,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -33,6 +34,7 @@ import {
 import { fetchSafetySummary } from '@/lib/queries/safety'
 import { fetchQaSummary } from '@/lib/queries/qa'
 import { fetchSnagSummary } from '@/lib/queries/snags'
+import { fetchVisitAttention } from '@/lib/queries/siteVisits'
 import { fetchApprovalSummary } from '@/lib/queries/approvals'
 import { fetchHealthFlags } from '@/lib/queries/signals'
 import { fetchProjectContract } from '@/lib/queries/variations'
@@ -63,6 +65,7 @@ import {
   type HealthFlag,
   canSeeSignals,
   SIGNAL_LEVEL_LABEL,
+  type VisitAttention,
 } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/store/auth'
@@ -80,6 +83,9 @@ export default function ProjectDetail() {
   const [contract, setContract] = useState<ProjectContract | null>(null)
   const [spend, setSpend] = useState<ProjectSpend | null>(null)
   const [summary, setSummary] = useState<ProjectSummary | null>(null)
+  // M18. Null means nothing outstanding — fn_visit_open_actions returns ZERO
+  // ROWS in that case, so the strip disappears rather than saying "0 open".
+  const [visits, setVisits] = useState<VisitAttention | null>(null)
   const [safety, setSafety] = useState<SafetySummary | null>(null)
   const [snags, setSnags] = useState<SnagSummary | null>(null)
   const [qa, setQa] = useState<QaSummary | null>(null)
@@ -167,6 +173,12 @@ export default function ProjectDetail() {
       })
       .catch(() => {})
 
+    fetchVisitAttention(id)
+      .then((v) => {
+        if (!cancelled) setVisits(v)
+      })
+      .catch(() => setVisits(null))
+
     fetchRecentActivity(id)
       .then((a) => {
         if (!cancelled) setActivity(a)
@@ -209,6 +221,8 @@ export default function ProjectDetail() {
           />
         </FadeUp>
       )}
+
+      {visits && <VisitStrip a={visits} onOpen={() => navigate('/tasks/visits')} />}
 
       {/* Money and Activity span the full width; the three compact summaries
           sit two-up from 640px. One column on a phone — money figures don't
@@ -1173,5 +1187,61 @@ function HeaderSkeleton() {
       <Skeleton className="mt-3 h-4 w-1/2" />
       <Skeleton className="mt-2 h-4 w-2/3" />
     </div>
+  )
+}
+
+/* ---------------- M18 visit actions ---------------- */
+
+/**
+ * Renders only when `fn_visit_open_actions` returned a row — it returns ZERO
+ * ROWS when nothing is open and no visit happened in 30 days, so this strip
+ * vanishing IS the empty state (the 073 rule). A strip that says "0 open" is
+ * noise, and noise is how a real one gets missed.
+ *
+ * Only OVERDUE makes it urgent. Turning it red because one action is due next
+ * week teaches people to ignore red.
+ */
+function VisitStrip({
+  a,
+  onOpen,
+}: {
+  a: VisitAttention
+  onOpen: () => void
+}) {
+  const urgent = a.overdue_actions > 0
+  const bits: string[] = []
+  if (a.open_actions > 0) {
+    bits.push(
+      `${a.open_actions} visit action${a.open_actions === 1 ? '' : 's'} open` +
+        (a.overdue_actions > 0 ? `, ${a.overdue_actions} overdue` : ''),
+    )
+  }
+  if (a.visits_30d > 0) {
+    bits.push(
+      `${a.visits_30d} visit${a.visits_30d === 1 ? '' : 's'} in 30 days` +
+        (a.last_visit_on ? `, last ${a.last_visit_on}` : ''),
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        'mt-4 flex w-full items-start gap-3 rounded-lg border px-4 py-3 text-left',
+        urgent
+          ? 'border-destructive/30 bg-destructive/5'
+          : 'border-border bg-secondary/40',
+      )}
+    >
+      <CalendarCheck
+        className={cn(
+          'mt-0.5 size-4 shrink-0',
+          urgent ? 'text-destructive' : 'text-muted-foreground',
+        )}
+        aria-hidden="true"
+      />
+      <span className="text-sm">{bits.join(' · ')}</span>
+    </button>
   )
 }

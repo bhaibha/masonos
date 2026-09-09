@@ -319,6 +319,109 @@ export function canEditBudgets(role: UserRole | null): boolean {
   return role !== null && BUDGET_WRITE_ROLES.includes(role)
 }
 
+// ---------- M18 Site Visits (migration 084) ----------
+
+export type VisitType =
+  | 'client'
+  | 'consultant'
+  | 'pm'
+  | 'inspection'
+  | 'authority'
+  | 'vendor'
+
+export const VISIT_TYPES: { value: VisitType; label: string; hint: string }[] = [
+  {
+    value: 'client',
+    label: 'Client',
+    hint: 'Observations are required — this is the visit somebody will ask about later.',
+  },
+  { value: 'consultant', label: 'Consultant', hint: 'Architect, structural, MEP.' },
+  { value: 'pm', label: 'PM / management', hint: "The firm's own walk-round." },
+  { value: 'inspection', label: 'Inspection', hint: 'Third-party or quality inspection.' },
+  { value: 'authority', label: 'Authority', hint: 'BBMP, BESCOM, fire, pollution board.' },
+  { value: 'vendor', label: 'Vendor', hint: 'Supplier or subcontractor site meeting.' },
+]
+
+export const VISIT_TYPE_LABEL = Object.fromEntries(
+  VISIT_TYPES.map((v) => [v.value, v.label]),
+) as Record<VisitType, string>
+
+export interface SiteVisit {
+  id: string
+  visit_no: string
+  project_id: string
+  visit_type: VisitType
+  /** the day they CAME, not the day it was typed up */
+  visit_date: string
+  visit_time: string | null
+  /** plain text — a consultant or a BBMP officer will never have an account */
+  visitor_name: string
+  visitor_org: string | null
+  purpose: string | null
+  observations: string | null
+  photos: string[]
+  /** optional pointer at the M36 conversation, when the visit produced one */
+  comm_entry_id: string | null
+  logged_by: string
+  logged_by_name: string | null
+  created_at: string
+  /**
+   * Action items, read back as the TASKS they are. Not a separate table —
+   * `tasks.visit_id` (084) is the whole link, so a visit action lands on the
+   * daily list, rolls over and reaches the push digest like any other task.
+   */
+  actions: VisitAction[]
+}
+
+/** A task that came out of a visit. Shape mirrors `tasks`, deliberately. */
+export interface VisitAction {
+  id: string
+  title: string
+  planned_date: string
+  status: TaskStatus
+  assigned_to: string | null
+  assigned_to_name: string | null
+}
+
+export interface NewSiteVisit {
+  project_id: string
+  visit_type: VisitType
+  visit_date: string
+  visitor_name: string
+  visitor_org: string
+  purpose: string
+  observations: string
+  photos: string[]
+}
+
+/** Return shape of fn_visit_open_actions. ZERO ROWS when nothing is waiting. */
+export interface VisitAttention {
+  open_actions: number
+  overdue_actions: number
+  visits_30d: number
+  last_visit_on: string | null
+}
+
+/**
+ * Who may log a visit — `svt_write` is founder/pm/supervisor, the same three as
+ * `tasks_write` and for the same reason: the person who walked the site is the
+ * person who writes it down.
+ */
+export const VISIT_WRITE_ROLES: UserRole[] = ['founder', 'pm', 'supervisor']
+
+export function canLogSiteVisit(role: UserRole | null): boolean {
+  return role !== null && VISIT_WRITE_ROLES.includes(role)
+}
+
+/**
+ * The one piece of "special handling" the database enforces
+ * (`svt_client_needs_observations`). Mirrored here so the form can say so
+ * before the insert rather than surfacing a constraint name.
+ */
+export function visitNeedsObservations(t: VisitType): boolean {
+  return t === 'client'
+}
+
 // ---------- M36 Client Communication Log (migration 083) ----------
 
 export type CommChannel =

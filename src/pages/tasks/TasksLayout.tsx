@@ -53,6 +53,7 @@ export default function TasksLayout() {
     { to: '/tasks/bbs', label: 'Bar schedule' },
     { to: '/tasks/labour', label: 'Labour' },
     { to: '/tasks/log', label: 'Site log' },
+    { to: '/tasks/visits', label: 'Site visits' },
     // M21, supervisors only — everyone else reaches the same screen under
     // Money → Petty cash. A supervisor cannot: /money is MONEY_ROLES, and the
     // holder of the tin is usually the person on site. Not a wider permission,

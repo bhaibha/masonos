@@ -48,6 +48,7 @@ import Retention from '@/pages/money/Retention'
 import MoneyLayout from '@/pages/money/MoneyLayout'
 import PettyCash from '@/pages/PettyCash'
 import ClientLog from '@/pages/tasks/ClientLog'
+import SiteVisits from '@/pages/tasks/SiteVisits'
 import Variations from '@/pages/money/Variations'
 import Vendors from '@/pages/money/Vendors'
 import DocsLayout from '@/pages/docs/DocsLayout'
@@ -222,6 +223,9 @@ export default function App() {
                     same relationship — but this one is the firm's record OF
                     the client, not a surface the client can reach. */}
                 <Route path="client-log" element={<ClientLog />} />
+                {/* M18. Action items are ordinary tasks carrying visit_id
+                    (084), so they reach the daily list from here. */}
+                <Route path="visits" element={<SiteVisits />} />
               </Route>
 
               {/* Supervisors are blocked here and by RLS in 002_money.sql. */}

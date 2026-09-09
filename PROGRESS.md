@@ -1,6 +1,68 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M18 SITE VISITS (2026-09-09) — one new table, one new column
+
+Migration 084. `site_visits` plus **one nullable column on `tasks`** — and that
+column is the whole design.
+
+### The action items are tasks
+The brief said "action items (with assignee + due date + status)". `tasks` has
+had exactly that since 001, gained `assigned_to` and `priority` in 048, and has
+the daily list, the rollover chain, the push digest and the EVM tag built around
+it. A `visit_actions` table would have copied four columns and none of the
+machinery: the site would check two lists, rollover and the digest would cover
+one of them, and "what is overdue on this project" would be two queries that
+eventually disagree.
+
+So `tasks.visit_id`, nullable, ON DELETE SET NULL. A consultant's follow-up is
+an ordinary task that knows where it came from. Proven in testing: three tasks
+on the project, two identifiable as visit actions, `fn_visit_open_actions`
+counting **2 not 3**, and deleting the visit leaving all three intact.
+
+`tasks_write` was already founder/pm/supervisor — the exact three M18 wants —
+so **no policy on `tasks` changed at all**.
+
+### The overlap with 083, named rather than ignored
+Migration 083 shipped `comm_channel` with a `site_visit` value ONE DAY earlier.
+A client walking the site was already loggable in the Client log. Pretending
+otherwise would have left the firm typing the same visit into two records that
+drift (the 054 rule).
+
+Resolution: this table is the record of the **visit** — observations,
+photographs, actions — and `comm_entry_id` is an optional pointer at the M36
+entry when the visit also produced a **conversation**. Two different facts, one
+link, neither copied.
+
+### "Special handling" is one constraint and one prompt
+A flag that only changes a colour is not handling. What actually differs:
+
+- `svt_client_needs_observations` — a client visit **cannot be saved with empty
+  observations**. A CHECK constraint, not a form rule, so it holds for anything
+  talking to the API (050). The client visit is the one record certain to be
+  wanted later and certain not to have been written down.
+- After saving, the screen **offers** to log the conversation in M36. A prompt,
+  not a requirement — a visit should not be unloggable until somebody also
+  writes up the small talk.
+
+**Deliberately not hidden from supervisors.** The supervisor usually escorts the
+client round the site and is the person who knows what was pointed at. Hiding it
+would mean they cannot log the visit they personally attended — the opposite of
+what the record is for.
+
+### The visitor is not a user
+`visitor_name` and `visitor_org` are plain text. A structural consultant, a BBMP
+officer and the client's brother-in-law will never have accounts (060). `org` is
+separate from `name` because "Sharma" and "Sharma, of the structural
+consultants" are different facts a year later.
+
+### Verified by query
+Three clean runs on the actual 001–083 chain. The client CHECK firing while a
+non-client visit with no observations is accepted. **A supervisor on the project
+reading 2 visits and logging one; a supervisor on another project reading 0 and
+refused the insert.** Client 0. `DELETE 0` — a visit happened, the record of it
+does not go away.
+
 ## M36 CLIENT COMMUNICATION LOG (2026-09-09) — dispute material
 
 Three tables, one screen under Tasks: the log itself, a commitments tracker and

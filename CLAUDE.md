@@ -391,7 +391,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   `1/1/1/1/0/0/t`, three pre-existing receipts inserted OUT of order and
   numbered chronologically, and — the point of the whole migration — the next
   receipt taking GRN-0004 without colliding with the backfill.
-  **082 WRITTEN, NOT YET APPLIED** — M21 Petty Cash gets its screen, and the
+  **082 APPLIED** (confirmed 2026-09-09) — M21 Petty Cash gets its screen, and the
   module gets the one thing the database could not already answer:
   `petty_cash_counts` (counted_on, counted_amount, **book_balance FROZEN at the
   moment of counting**, a GENERATED `variance`, a mandatory note once the two
@@ -413,7 +413,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   refused, `UPDATE 0` / `DELETE 0` for the founder. The frozen figure was proven
   by voiding an entry: the live balance moved 21750 → 24750 while both stored
   `book_balance` values stayed at 22000.
-  **083 WRITTEN, NOT YET APPLIED** — M36 Client Communication Log.
+  **083 APPLIED** (confirmed 2026-09-09) — M36 Client Communication Log.
   `client_comm_entries` (COM-0001 series, channel, occurred_on vs created_at,
   nullable FKs to approval/VO/document, **`is_commercial` defaulting TRUE**),
   plus `client_commitments` and `client_complaints` as SEPARATE registers with a
@@ -440,9 +440,44 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   INSERT refused, a VO link forcing `is_commercial` true even when sent false,
   an edit inside the window accepted and one at 30 hours refused with the
   readable message, `DELETE 0`, and both closing CHECK constraints firing.
-  **Run migration 083 before opening Client log.**
-  **Run migrations 082 and 083 before testing.**
-  **So: 001-081 ALL APPLIED.** Next migration = 084.
+  **084 WRITTEN, NOT YET APPLIED** — M18 Site Visits Tracker. `site_visits`
+  (SV-0001 series, `visit_type` enum, visit_date vs created_at, visitor as
+  PLAIN TEXT, photos text[], nullable `comm_entry_id` pointing at the M36 entry
+  when the visit also produced a conversation), plus **one nullable column on an
+  existing table: `tasks.visit_id`**, and `fn_visit_open_actions`.
+  **THE ACTION ITEMS ARE TASKS. THERE IS NO SECOND TABLE.** `tasks` already has
+  title, `planned_date` as the due date, `status`, `assigned_to` and `priority`
+  (048), and around it sit the daily list, the rollover chain, the push digest
+  (036) and the EVM tag (042). A `visit_actions` table would have duplicated the
+  columns and none of the machinery — two lists for the site to check, rollover
+  and the digest covering one of them, and "what is overdue" becoming two
+  queries that drift. Same judgement as 040 and 062. `tasks_write` is ALREADY
+  founder/pm/supervisor, so **no policy change to `tasks` at all**, and `tasks`
+  is not column-granted (checked — the 027 trap is `projects`, `po_lines`,
+  `material_inward`, `schedule_activities`).
+  **THE 083 OVERLAP IS RESOLVED BY A LINK, NOT A COPY.** 083 shipped
+  `comm_channel` with a `site_visit` value one day earlier, so a client walking
+  the site was already loggable in the Client log. This table is the record of
+  the VISIT — observations, photographs, actions — and `comm_entry_id` points at
+  the M36 entry when there was also a conversation. Two facts, one link (054:
+  say when you are duplicating an existing fact).
+  **"Special handling" for a client visit is ONE constraint plus one prompt.**
+  `svt_client_needs_observations` refuses a client visit with empty
+  observations — a CHECK, not a form rule (050) — and the screen then OFFERS to
+  log the conversation in M36. Deliberately NOT hidden from supervisors: the
+  supervisor usually escorts the client and is the one who knows what was
+  pointed at.
+  Verified on a real PostgreSQL with the ACTUAL 001-083 chain: three clean runs,
+  verify block `1/1/1/3/0/1/1/1/1/2`, and by query — the client-visit CHECK
+  firing while a non-client visit with no observations is fine, **a supervisor
+  on the project reading 2 and logging one, a supervisor on ANOTHER project
+  reading 0 and refused the insert**, the client 0, `DELETE 0`, visit actions
+  appearing on the plain task list (3 rows: 2 actions + 1 ordinary) and
+  `fn_visit_open_actions` counting **2 not 3** because an ordinary task is not a
+  visit action, zero rows for a project with no visits, and deleting a visit
+  leaving all three tasks intact (SET NULL, not cascade).
+  **Run migration 084 before opening Site visits.**
+  **So: 001-083 ALL APPLIED.** Next migration = 085.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.

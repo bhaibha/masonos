@@ -677,6 +677,20 @@ phone layout below `lg` does not move.
 - [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
       thumb-sized targets.
 
+## Site record
+
+- [x] **M18. Site Visits Tracker — BUILT 2026-09-09 (migration 084).**
+      Per-project log of client / consultant / PM / inspection / authority / vendor visits, with
+      visitor and organisation as plain text, purpose, observations, camera-first photos, and
+      action items. `/tasks/visits`, founder/PM/supervisor log for their own project.
+      **Action items ARE tasks** — one nullable `tasks.visit_id`, not a second table, so a
+      follow-up lands on the daily list, rolls over and reaches the push digest. Open actions
+      surface on Project Detail through `fn_visit_open_actions`, which returns zero rows when
+      there is nothing to say.
+      **A client visit cannot be saved without observations** (a CHECK, not a form rule), and the
+      screen then offers to log the conversation in the M36 Client log via the optional
+      `comm_entry_id` link — the visit and the conversation are two facts, linked, never copied.
+
 ## Client relationship (internal record — not the portal, not client-facing)
 
 - [x] **M36. Client Communication Log — BUILT 2026-09-09 (migration 083).**
