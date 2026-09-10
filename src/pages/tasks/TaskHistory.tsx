@@ -14,11 +14,17 @@ import {
   type DocHistoryRow,
   fetchChecklistHistory,
   fetchIncidentHistory,
+  fetchInspectionHistory,
+  fetchNcrHistory,
   fetchRfiHistory,
+  fetchScheduleEvents,
   fetchSiHistory,
   fetchSiteLogHistory,
   fetchSnagHistory,
+  fetchVisitHistory,
   type IncidentHistoryRow,
+  type InspectionHistoryRow,
+  type ScheduleEventRow,
   type SiteLogHistoryRow,
 } from '@/lib/queries/history'
 import { fetchAttendanceRange, fetchLabourEffort } from '@/lib/queries/labour'
@@ -32,6 +38,8 @@ import {
   type TaskRow,
   type TaskStatus,
   TRADES,
+  VISIT_TYPE_LABEL,
+  type VisitType,
 } from '@/lib/types'
 import { addDays, todayIst } from '@/lib/useSelectedDate'
 import { cn } from '@/lib/utils'
@@ -41,20 +49,38 @@ type Section =
   | 'tasks'
   | 'logs'
   | 'labour'
+  | 'schedule'
   | 'safety'
+  | 'incidents'
+  | 'quality'
   | 'instructions'
   | 'rfis'
   | 'snags'
+  | 'visits'
 
 const SECTION_LABEL: Record<Section, string> = {
   tasks: 'Tasks',
   logs: 'Site logs',
   labour: 'Labour',
+  schedule: 'Schedule',
   safety: 'Safety',
+  incidents: 'Incidents',
+  quality: 'Quality',
   instructions: 'Instructions',
   rfis: 'RFIs',
   snags: 'Snags',
+  visits: 'Site visits',
 }
+
+/**
+ * Bar schedule is deliberately ABSENT. A BBS is a specification a bar bender
+ * cuts to, not something that happened on a date — putting it in a
+ * "what happened between these dates" screen would file a drawing under events.
+ */
+const SECTIONS: Section[] = [
+  'tasks', 'logs', 'labour', 'schedule', 'safety', 'incidents',
+  'quality', 'instructions', 'rfis', 'snags', 'visits',
+]
 
 const STATUS_TONE: Record<TaskStatus, string> = {
   done: 'text-[var(--positive)]',
@@ -86,6 +112,10 @@ export default function TaskHistory() {
   const [sis, setSis] = useState<DocHistoryRow[] | null>(null)
   const [rfis, setRfis] = useState<DocHistoryRow[] | null>(null)
   const [snags, setSnags] = useState<DocHistoryRow[] | null>(null)
+  const [visits, setVisits] = useState<DocHistoryRow[] | null>(null)
+  const [ncrs, setNcrs] = useState<DocHistoryRow[] | null>(null)
+  const [inspections, setInspections] = useState<InspectionHistoryRow[] | null>(null)
+  const [schedule, setSchedule] = useState<ScheduleEventRow[] | null>(null)
   // Two shapes for one question: the roll-up somebody checks against a
   // contractor's invoice, and the day-by-day muster roll behind it.
   const [effort, setEffort] = useState<LabourEffortRow[] | null>(null)
@@ -108,11 +138,15 @@ export default function TaskHistory() {
     setSis(null)
     setRfis(null)
     setSnags(null)
+    setVisits(null)
+    setNcrs(null)
+    setInspections(null)
+    setSchedule(null)
     setEffort(null)
     setMuster(null)
 
     try {
-      const [t, l, c, i, s, r, g, e, m] = await Promise.all([
+      const [t, l, c, i, s, r, g, v, n, q, sch, e, m] = await Promise.all([
         fetchTaskHistory(projectId, from, to),
         fetchSiteLogHistory(projectId, from, to),
         fetchChecklistHistory(projectId, from, to),
@@ -120,6 +154,17 @@ export default function TaskHistory() {
         fetchSiHistory(projectId, from, to),
         fetchRfiHistory(projectId, from, to),
         fetchSnagHistory(projectId, from, to),
+        // Same degrade-to-empty treatment the labour pair already gets: these
+        // arrived in later migrations, and one unrun migration must not take
+        // the whole screen down with it (the 056 rule).
+        fetchVisitHistory(projectId, from, to).catch(() => [] as DocHistoryRow[]),
+        fetchNcrHistory(projectId, from, to).catch(() => [] as DocHistoryRow[]),
+        fetchInspectionHistory(projectId, from, to).catch(
+          () => [] as InspectionHistoryRow[],
+        ),
+        fetchScheduleEvents(projectId, from, to).catch(
+          () => [] as ScheduleEventRow[],
+        ),
         // Labour arrived with migration 054/055. If they have not been run the
         // rest of History must still work, so these two degrade to empty rather
         // than taking the whole screen down with them.
@@ -133,6 +178,10 @@ export default function TaskHistory() {
       setSis(s)
       setRfis(r)
       setSnags(g)
+      setVisits(v)
+      setNcrs(n)
+      setInspections(q)
+      setSchedule(sch)
       setEffort(e)
       setMuster(m.filter((x) => x.voided_at === null))
     } catch (err) {
@@ -144,6 +193,10 @@ export default function TaskHistory() {
       setSis([])
       setRfis([])
       setSnags([])
+      setVisits([])
+      setNcrs([])
+      setInspections([])
+      setSchedule([])
       setEffort([])
       setMuster([])
     }
@@ -298,17 +351,76 @@ export default function TaskHistory() {
         ? rfis
         : section === 'snags'
           ? snags
-          : null
+          : section === 'visits'
+            ? visits
+            : null
+
+  function exportSchedule() {
+    if (!schedule?.length) return toast.error('Nothing to export in this range')
+    downloadCsv(
+      `${base}-schedule-events-${stamp}`,
+      toCsv(
+        ['Date', 'Event', 'Code', 'Activity', 'Phase', 'Planned start',
+         'Planned end', 'Variance (days)', 'Progress now %'],
+        schedule.map((e) => [
+          e.date, e.event === 'started' ? 'Started' : 'Finished', e.code, e.name,
+          e.phase ?? '', e.planned_start, e.planned_end, e.variance_days,
+          e.pct_complete,
+        ]),
+      ),
+    )
+    toast.success(`${schedule.length} rows exported`)
+  }
+
+  function exportQuality() {
+    if (!inspections?.length && !ncrs?.length)
+      return toast.error('Nothing to export in this range')
+
+    if (inspections?.length) {
+      downloadCsv(
+        `${base}-site-observations-${stamp}`,
+        toCsv(
+          ['Date', 'Location', 'Observation', 'Priority', 'Raised for',
+           'Photos', 'Became a task', 'Raised by'],
+          inspections.map((i) => [
+            i.observed_on, i.location, i.comment, i.priority, i.raised_for ?? '',
+            i.photo_count, i.became_task ? 'Yes' : 'No', i.raised_by_name ?? '',
+          ]),
+        ),
+      )
+    }
+
+    if (ncrs?.length) {
+      downloadCsv(
+        `${base}-ncrs-${stamp}`,
+        toCsv(
+          ['NCR no.', 'Raised', 'Area', 'Description', 'Status', 'Assigned to',
+           'Closed', 'Severity / standard'],
+          ncrs.map((n) => [
+            n.number, n.date, n.context ?? '', n.summary, prettyStatus(n.status),
+            n.party ?? '', n.closed ?? '', n.extra ?? '',
+          ]),
+        ),
+      )
+    }
+
+    toast.success('Exported', {
+      description:
+        inspections?.length && ncrs?.length
+          ? 'Two files — site observations and NCRs.'
+          : undefined,
+    })
+  }
 
   function exportDocs() {
     if (!docRows?.length) return toast.error('Nothing to export in this range')
 
-    const cols = DOC_COLUMNS[section as 'instructions' | 'rfis' | 'snags']
+    const cols = DOC_COLUMNS[section as DocSection]
     downloadCsv(
       `${base}-${section}-${stamp}`,
       toCsv(
-        [cols.number, 'Date', cols.party, cols.context, cols.summary, 'Status',
-         cols.due, cols.closed, cols.extra],
+        [cols.number, 'Date', cols.party, cols.context, cols.summary,
+         cols.status, cols.due, cols.closed, cols.extra],
         docRows.map((d) => [
           d.number, d.date, d.party ?? '', d.context ?? '', d.summary,
           prettyStatus(d.status), d.due ?? '', d.closed ?? '', d.extra ?? '',
@@ -327,7 +439,11 @@ export default function TaskHistory() {
     incidents === null ||
     sis === null ||
     rfis === null ||
-    snags === null
+    snags === null ||
+    visits === null ||
+    ncrs === null ||
+    inspections === null ||
+    schedule === null
 
   const count =
     section === 'tasks'
@@ -336,9 +452,15 @@ export default function TaskHistory() {
         ? (logs?.length ?? 0)
         : section === 'labour'
           ? (muster?.length ?? 0)
-          : section === 'safety'
-          ? (checks?.length ?? 0) + (incidents?.length ?? 0)
-          : (docRows?.length ?? 0)
+          : section === 'schedule'
+            ? (schedule?.length ?? 0)
+            : section === 'safety'
+              ? (checks?.length ?? 0)
+              : section === 'incidents'
+                ? (incidents?.length ?? 0)
+                : section === 'quality'
+                  ? (inspections?.length ?? 0) + (ncrs?.length ?? 0)
+                  : (docRows?.length ?? 0)
 
   return (
     <div className="space-y-4 pb-6">
@@ -386,17 +508,7 @@ export default function TaskHistory() {
 
       {/* ---------- section ---------- */}
       <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
-        {(
-          [
-            'tasks',
-            'logs',
-            'labour',
-            'safety',
-            'instructions',
-            'rfis',
-            'snags',
-          ] as Section[]
-        ).map((s) => (
+        {SECTIONS.map((s) => (
           <button
             key={s}
             type="button"
@@ -456,9 +568,11 @@ export default function TaskHistory() {
                   ? `day${count === 1 ? '' : 's'} logged`
                   : section === 'labour'
                     ? `gang entr${count === 1 ? 'y' : 'ies'}`
-                    : section === 'safety'
-                    ? 'checks and incidents'
-                    : SECTION_LABEL[section].toLowerCase()}
+                    : section === 'schedule'
+                      ? `activity event${count === 1 ? '' : 's'}`
+                      : section === 'quality'
+                        ? 'observations and NCRs'
+                        : SECTION_LABEL[section].toLowerCase()}
             </span>
           </p>
           <Button
@@ -471,9 +585,13 @@ export default function TaskHistory() {
                   ? exportLogs
                   : section === 'labour'
                     ? exportLabour
-                    : section === 'safety'
-                      ? exportSafety
-                      : exportDocs
+                    : section === 'schedule'
+                      ? exportSchedule
+                      : section === 'safety' || section === 'incidents'
+                        ? exportSafety
+                        : section === 'quality'
+                          ? exportQuality
+                          : exportDocs
             }
           >
             <Download className="size-4" aria-hidden="true" />
@@ -491,7 +609,12 @@ export default function TaskHistory() {
           body={
             section === 'tasks'
               ? 'Widen the dates, or clear the status and trade filters.'
-              : 'Widen the dates — nothing was recorded in this period.'
+              : section === 'schedule'
+                ? // "Nothing was recorded" would be wrong here: the programme
+                  // may be full of activities that simply have not started or
+                  // finished yet. Say which it is.
+                  'No activity started or finished in this range. Activities are listed here once the programme carries an actual start or end date for them.'
+                : 'Widen the dates — nothing was recorded in this period.'
           }
         />
       )}
@@ -594,16 +717,175 @@ export default function TaskHistory() {
 
       {/* ---------- instructions / RFIs / snags ---------- */}
       {!loading && docRows && docRows.length > 0 && (
-        <DocTable
-          kind={section as 'instructions' | 'rfis' | 'snags'}
-          rows={docRows}
-        />
+        <DocTable kind={section as DocSection} rows={docRows} />
+      )}
+
+      {/* ---------- schedule ---------- */}
+      {!loading && section === 'schedule' && schedule && schedule.length > 0 && (
+        <section className="space-y-2">
+          <div className="paper overflow-x-auto">
+            <table className="w-full min-w-[780px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <Th>Date</Th>
+                  <Th>Event</Th>
+                  <Th>Activity</Th>
+                  <Th>Phase</Th>
+                  <Th>Planned</Th>
+                  <Th>Variance</Th>
+                  <Th>Progress now</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {schedule.map((e) => {
+                  const planned =
+                    e.event === 'started' ? e.planned_start : e.planned_end
+                  return (
+                    <tr
+                      key={e.key}
+                      className="border-b border-border last:border-0"
+                    >
+                      <Td>
+                        <span className="font-medium tabular-nums">{e.date}</span>
+                      </Td>
+                      <Td>
+                        <span
+                          className={cn(
+                            'font-medium',
+                            e.event === 'finished'
+                              ? 'text-[var(--positive)]'
+                              : 'text-muted-foreground',
+                          )}
+                        >
+                          {e.event === 'started' ? 'Started' : 'Finished'}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span className="font-medium">{e.code}</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {e.name}
+                        </span>
+                      </Td>
+                      <Td muted>{e.phase ?? '—'}</Td>
+                      <Td muted>
+                        <span className="tabular-nums">{planned}</span>
+                      </Td>
+                      <Td>
+                        <span
+                          className={cn(
+                            'font-medium tabular-nums',
+                            e.variance_days > 0
+                              ? 'text-destructive'
+                              : e.variance_days < 0
+                                ? 'text-[var(--positive)]'
+                                : 'text-muted-foreground',
+                          )}
+                        >
+                          {e.variance_days === 0
+                            ? 'on time'
+                            : `${e.variance_days > 0 ? '+' : ''}${e.variance_days} d`}
+                        </span>
+                      </Td>
+                      <Td muted>
+                        <span className="tabular-nums">{e.pct_complete}%</span>
+                      </Td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* Said plainly, because the column would otherwise be read as the
+              figure on the event date. */}
+          <p className="text-[11px] text-muted-foreground">
+            Activities that STARTED or FINISHED in this range, from the
+            programme's actual dates. Variance is against the planned date for
+            that event — positive is late. <strong>Progress now</strong> is the
+            activity's current percentage, not what it was on the date shown:
+            this app keeps one current value per activity and no dated history
+            of progress changes.
+          </p>
+        </section>
+      )}
+
+      {/* ---------- quality ---------- */}
+      {!loading && section === 'quality' && (
+        <>
+          {inspections && inspections.length > 0 && (
+            <section className="space-y-2">
+              <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Site observations
+              </p>
+              <div className="paper overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left">
+                      <Th>Date</Th>
+                      <Th>Location</Th>
+                      <Th>Observation</Th>
+                      <Th>Priority</Th>
+                      <Th>Raised for</Th>
+                      <Th>Became a task</Th>
+                      <Th>Raised by</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inspections.map((i) => (
+                      <tr
+                        key={i.id}
+                        className="border-b border-border last:border-0"
+                      >
+                        <Td>
+                          <span className="font-medium tabular-nums">
+                            {i.observed_on}
+                          </span>
+                          {i.photo_count > 0 && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {i.photo_count} photo
+                              {i.photo_count === 1 ? '' : 's'}
+                            </span>
+                          )}
+                        </Td>
+                        <Td muted>{i.location}</Td>
+                        <Td>{i.comment}</Td>
+                        <Td>
+                          <span
+                            className={cn(
+                              'font-medium',
+                              i.priority === 'high'
+                                ? 'text-destructive'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {prettyStatus(i.priority)}
+                          </span>
+                        </Td>
+                        <Td muted>{i.raised_for ?? '—'}</Td>
+                        <Td muted>{i.became_task ? 'Yes' : '—'}</Td>
+                        <Td muted>{i.raised_by_name ?? '—'}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {ncrs && ncrs.length > 0 && (
+            <section className="space-y-2">
+              <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
+                Non-conformance reports
+              </p>
+              <DocTable kind="snags" rows={ncrs} />
+            </section>
+          )}
+        </>
       )}
 
       {/* ---------- safety ---------- */}
-      {!loading && section === 'safety' && (
+      {!loading && (section === 'safety' || section === 'incidents') && (
         <>
-          {checks && checks.length > 0 && (
+          {section === 'safety' && checks && checks.length > 0 && (
             <section className="space-y-2">
               <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
                 Daily checks
@@ -666,10 +948,10 @@ export default function TaskHistory() {
             </section>
           )}
 
-          {incidents && incidents.length > 0 && (
+          {section === 'incidents' && incidents && incidents.length > 0 && (
             <section className="space-y-2">
               <p className="pt-2 text-[11px] tracking-[0.14em] text-muted-foreground uppercase">
-                Incidents & near-misses
+                Incidents &amp; near-misses
               </p>
               <div className="paper overflow-x-auto">
                 <table className="w-full min-w-[700px] text-sm">
@@ -854,13 +1136,17 @@ function LabourSection({
  * numbered document with a date, a party, a status and something that closes
  * it. One table renders all three; only the headings change.
  */
+type DocSection = 'instructions' | 'rfis' | 'snags' | 'visits'
+
 const DOC_COLUMNS: Record<
-  'instructions' | 'rfis' | 'snags',
+  DocSection,
   {
     number: string
     party: string
     context: string
     summary: string
+    /** a visit has no workflow status, so this slot carries its TYPE */
+    status: string
     due: string
     closed: string
     extra: string
@@ -871,6 +1157,7 @@ const DOC_COLUMNS: Record<
     party: 'Issued to',
     context: 'Work area',
     summary: 'Instruction',
+    status: 'Status',
     due: 'Required by',
     closed: 'Completed',
     extra: 'Cost',
@@ -880,6 +1167,7 @@ const DOC_COLUMNS: Record<
     party: 'Asked of',
     context: 'Category',
     summary: 'Question',
+    status: 'Status',
     due: 'Required by',
     closed: 'Answered',
     extra: 'Response',
@@ -889,9 +1177,22 @@ const DOC_COLUMNS: Record<
     party: 'Assigned to',
     context: 'Area / trade',
     summary: 'Defect',
+    status: 'Status',
     due: '—',
     closed: 'Closed',
     extra: 'Severity',
+  },
+  visits: {
+    number: 'Visit no.',
+    party: 'Visitor',
+    context: 'Time',
+    summary: 'Observations',
+    // A visit is not a workflow — nothing opens or closes. The slot carries the
+    // visit TYPE rather than printing one under a heading that says Status.
+    status: 'Type',
+    due: '—',
+    closed: '—',
+    extra: 'Attached',
   },
 }
 
@@ -899,11 +1200,13 @@ function DocTable({
   kind,
   rows,
 }: {
-  kind: 'instructions' | 'rfis' | 'snags'
+  kind: DocSection
   rows: DocHistoryRow[]
 }) {
   const c = DOC_COLUMNS[kind]
-  const showDue = kind !== 'snags'
+  const showDue = kind !== 'snags' && kind !== 'visits'
+  // Nothing closes a visit, so the column would be a row of dashes.
+  const showClosed = kind !== 'visits'
 
   return (
     <div className="paper overflow-x-auto">
@@ -915,9 +1218,9 @@ function DocTable({
             <Th>{c.party}</Th>
             <Th>{c.context}</Th>
             <Th>{c.summary}</Th>
-            <Th>Status</Th>
+            <Th>{c.status}</Th>
             {showDue && <Th>{c.due}</Th>}
-            <Th>{c.closed}</Th>
+            {showClosed && <Th>{c.closed}</Th>}
             <Th>{c.extra}</Th>
           </tr>
         </thead>
@@ -937,8 +1240,16 @@ function DocTable({
                 <Td muted>{d.context ?? '—'}</Td>
                 <Td>{d.summary}</Td>
                 <Td>
-                  <span className={cn('font-medium', docStatusTone(d.status))}>
-                    {prettyStatus(d.status)}
+                  <span
+                    className={cn(
+                      'font-medium',
+                      kind === 'visits' ? undefined : docStatusTone(d.status),
+                    )}
+                  >
+                    {kind === 'visits'
+                      ? (VISIT_TYPE_LABEL[d.status as VisitType] ??
+                        prettyStatus(d.status))
+                      : prettyStatus(d.status)}
                   </span>
                 </Td>
                 {showDue && (
@@ -948,7 +1259,7 @@ function DocTable({
                     </span>
                   </Td>
                 )}
-                <Td muted>{d.closed ?? '—'}</Td>
+                {showClosed && <Td muted>{d.closed ?? '—'}</Td>}
                 <Td muted>{d.extra ?? '—'}</Td>
               </tr>
             )

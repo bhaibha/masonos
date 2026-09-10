@@ -307,6 +307,257 @@ function vendorName(v: unknown): string | null {
   return (v as { name?: string }).name ?? null
 }
 
+/* ---------------- Site visits (084) ---------------- */
+
+/**
+ * A visit is a numbered, dated document addressed to somebody, so it reuses
+ * `DocHistoryRow` rather than getting a fourth near-identical shape. There is
+ * no workflow status on a visit — the `status` slot carries the VISIT TYPE,
+ * and `DOC_COLUMNS` renames the column to match rather than printing "Type"
+ * under a heading that says "Status".
+ */
+export async function fetchVisitHistory(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<DocHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('site_visits')
+    .select(
+      'id, visit_no, visit_date, visit_time, visit_type, visitor_name, visitor_org, purpose, observations, photos, comm_entry_id',
+    )
+    .eq('project_id', projectId)
+    .gte('visit_date', from)
+    .lte('visit_date', to)
+    .order('visit_date', { ascending: false })
+    .limit(500)
+
+  if (error) throw error
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+
+  return rows.map((r) => {
+    const photos = (r.photos as string[] | null) ?? []
+    return {
+      id: r.id as string,
+      number: r.visit_no as string,
+      date: r.visit_date as string,
+      party: [r.visitor_name, r.visitor_org].filter(Boolean).join(' · ') || null,
+      context: (r.visit_time as string | null)?.slice(0, 5) ?? null,
+      // Observations are the point of a client visit (the 084 CHECK); purpose
+      // is the fallback for the ones that carry none.
+      summary:
+        (r.observations as string | null) ||
+        (r.purpose as string | null) ||
+        '—',
+      status: r.visit_type as string,
+      due: null,
+      closed: null,
+      extra:
+        [
+          photos.length ? `${photos.length} photo${photos.length === 1 ? '' : 's'}` : null,
+          r.comm_entry_id ? 'Logged in client log' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ') || null,
+    }
+  })
+}
+
+/* ---------------- NCRs (043, surviving 048) ---------------- */
+
+/**
+ * `created_at` is the raised date — 043 gave NCRs no separate date column, and
+ * 048 dropped `itp_item_id` / `inspection_id` when the structured ITP went, so
+ * neither is selected here.
+ */
+export async function fetchNcrHistory(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<DocHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('ncrs')
+    .select(
+      'id, ncr_no, area, description, severity, standard_ref, status, corrective_action, corrected_at, closed_at, cancelled_at, created_at, assigned_to',
+    )
+    .eq('project_id', projectId)
+    .gte('created_at', `${from}T00:00:00`)
+    .lte('created_at', `${to}T23:59:59`)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  if (error) throw error
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+  const names = await namesFor(rows.map((r) => (r.assigned_to as string) ?? null))
+
+  return rows.map((r) => {
+    const closed = (r.closed_at as string | null) ?? null
+    const corrected = (r.corrected_at as string | null) ?? null
+    return {
+      id: r.id as string,
+      number: r.ncr_no as string,
+      date: (r.created_at as string).slice(0, 10),
+      party: names.get((r.assigned_to as string) ?? '') ?? null,
+      context: (r.area as string | null) ?? null,
+      summary: r.description as string,
+      status: r.status as string,
+      due: null,
+      // Closed beats corrected: the later of the two, and the one that counts.
+      closed: (closed ?? corrected)?.slice(0, 10) ?? null,
+      extra:
+        [r.severity as string | null, r.standard_ref as string | null]
+          .filter(Boolean)
+          .join(' · ') || null,
+    }
+  })
+}
+
+/* ---------------- Inspection comments (048) ---------------- */
+
+export interface InspectionHistoryRow {
+  id: string
+  observed_on: string
+  location: string
+  comment: string
+  priority: string
+  raised_for: string | null
+  photo_count: number
+  /** the comment became a task — 048's whole point */
+  became_task: boolean
+  raised_by_name: string | null
+}
+
+export async function fetchInspectionHistory(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<InspectionHistoryRow[]> {
+  const { data, error } = await supabase
+    .from('inspection_comments')
+    .select(
+      'id, observed_on, location, comment, priority, photos, raised_for, task_id, raised_by',
+    )
+    .eq('project_id', projectId)
+    .gte('observed_on', from)
+    .lte('observed_on', to)
+    .order('observed_on', { ascending: false })
+    .limit(500)
+
+  if (error) throw error
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+  const names = await namesFor(rows.map((r) => r.raised_by as string))
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    observed_on: r.observed_on as string,
+    location: r.location as string,
+    comment: r.comment as string,
+    priority: r.priority as string,
+    raised_for: (r.raised_for as string | null) ?? null,
+    photo_count: ((r.photos as string[] | null) ?? []).length,
+    became_task: Boolean(r.task_id),
+    raised_by_name: names.get(r.raised_by as string) ?? null,
+  }))
+}
+
+/* ---------------- Schedule events (042) ---------------- */
+
+/**
+ * WHAT THIS IS, AND WHAT IT IS NOT.
+ *
+ * There is NO dated history of progress updates in this database.
+ * `schedule_activities.pct_complete` holds ONE CURRENT VALUE, and the only
+ * record that it ever changed lives in `audit_log` — which has been
+ * **founder-only** since 001 (`audit_read ... using (is_founder())`). Building
+ * a History tab on it would show a PM, an accountant and a supervisor an empty
+ * table that reads as "nothing happened" rather than "you may not see this",
+ * which is exactly the 056/078 failure.
+ *
+ * So this returns the dated events the schedule DOES carry: an activity
+ * STARTING and an activity FINISHING, from `actual_start` / `actual_end`. One
+ * activity can produce two rows, because they are two events on two dates.
+ *
+ * `pct_complete` travels alongside as CURRENT progress and is labelled that way
+ * on screen — it is not what the figure was on the event date, and printing it
+ * as though it were would be inventing the history this function refuses to
+ * invent (the 063 rule).
+ *
+ * `budget_amount` is REVOKED from `authenticated` (042) and is not selected.
+ * Nothing here carries money.
+ */
+export interface ScheduleEventRow {
+  id: string
+  /** unique per event, since one activity can appear twice */
+  key: string
+  date: string
+  event: 'started' | 'finished'
+  code: string
+  name: string
+  phase: string | null
+  planned_start: string
+  planned_end: string
+  /** + late, − early, against the planned date for that event */
+  variance_days: number
+  pct_complete: number
+}
+
+export async function fetchScheduleEvents(
+  projectId: string,
+  from: string,
+  to: string,
+): Promise<ScheduleEventRow[]> {
+  const { data, error } = await supabase
+    .from('schedule_activities')
+    .select(
+      'id, code, name, phase, planned_start, planned_end, pct_complete, actual_start, actual_end',
+    )
+    .eq('project_id', projectId)
+    .or(`and(actual_start.gte.${from},actual_start.lte.${to}),and(actual_end.gte.${from},actual_end.lte.${to})`)
+    .limit(500)
+
+  if (error) throw error
+  const rows = (data ?? []) as unknown as Record<string, unknown>[]
+
+  const days = (a: string, b: string) =>
+    Math.round((Date.parse(a) - Date.parse(b)) / 86_400_000)
+
+  const out: ScheduleEventRow[] = []
+  for (const r of rows) {
+    const base = {
+      id: r.id as string,
+      code: r.code as string,
+      name: r.name as string,
+      phase: (r.phase as string | null) ?? null,
+      planned_start: r.planned_start as string,
+      planned_end: r.planned_end as string,
+      pct_complete: Number(r.pct_complete ?? 0),
+    }
+    const start = (r.actual_start as string | null) ?? null
+    const end = (r.actual_end as string | null) ?? null
+
+    if (start && start >= from && start <= to) {
+      out.push({
+        ...base,
+        key: `${base.id}-s`,
+        date: start,
+        event: 'started',
+        variance_days: days(start, base.planned_start),
+      })
+    }
+    if (end && end >= from && end <= to) {
+      out.push({
+        ...base,
+        key: `${base.id}-e`,
+        date: end,
+        event: 'finished',
+        variance_days: days(end, base.planned_end),
+      })
+    }
+  }
+
+  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
 /* ---------------- Incidents ---------------- */
 
 export interface IncidentHistoryRow {

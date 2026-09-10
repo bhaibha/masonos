@@ -41,6 +41,72 @@ re-decided**; the short version is that three of the six are already covered by 
 
 ---
 
+## HISTORY — FOUR NEW CATEGORIES (2026-09-10) — no migration needed
+
+History went from 7 sub-tabs to 11: **Schedule, Incidents, Quality, Site visits**
+added; Bar schedule deliberately left out.
+
+**No SQL.** Every new source is already gated `is_member(project_id)` — the same
+predicate the existing seven use — so the date range, the filters and the RLS
+came for free. Confirmed by query rather than by reading the policies: all four
+internal roles on the project see the rows, **the client 0, a supervisor on
+another project 0.**
+
+**Incidents already existed and were hidden inside Safety.** `fetchIncidentHistory`
+had been in `history.ts` all along, rendered as a second table under the Safety
+tab. Splitting it out is why the count under Safety changed from "checks and
+incidents" to just checks.
+
+**Quality is two tables, like Safety** — `inspection_comments` (048's site
+observations) and `ncrs` (043, which survived 048). Two files on export.
+
+**Site visits reuses `DocHistoryRow`** rather than getting a fourth
+near-identical shape. A visit has no workflow status, so the status slot carries
+the visit TYPE and `DOC_COLUMNS` renames the heading to "Type" — printing a type
+under a heading that says "Status" is the kind of small lie that makes a screen
+untrustworthy. The Closed column is dropped for visits too, since nothing closes
+a visit and the column would be a row of dashes.
+
+### Schedule: the asked-for thing does not exist, so it was not invented
+The brief said "add Schedule activity-progress updates **if they carry dates**."
+They do not.
+
+`schedule_activities.pct_complete` holds **one current value**. The only record
+that it ever changed is `audit_log` — which has been **founder-only since 001**
+(`audit_read ... using (is_founder())`). A History tab built on it would show a
+PM, an accountant and a supervisor an empty table reading "nothing happened"
+rather than "you may not see this": the 056/078 failure exactly.
+
+So Schedule shows the dated events the programme genuinely carries: an activity
+**starting** and an activity **finishing**, from `actual_start` / `actual_end`.
+One activity can produce two rows, because they are two events on two dates.
+Variance is computed against the planned date for that event.
+
+`pct_complete` rides along as *current* progress and the footnote says so in
+words — it is not what the figure was on the event date, and printing it as
+though it were would be inventing exactly the history this refuses to invent
+(the 063 rule). The empty state says "no activity started or finished in this
+range" rather than "nothing was recorded", because a programme full of
+un-started activities has recorded plenty.
+
+**If a real progress history is wanted**, it is one migration: a
+`schedule_progress_snapshots` table plus a trigger on `pct_complete`, the same
+shape 063 used for health snapshots. It would start recording from the day it
+runs and would show nothing for the past — which is the honest version.
+
+**Money stays out.** `budget_amount` is revoked from `authenticated` (042) and
+is not selected; proven by query — a supervisor asking for it gets
+`permission denied for table schedule_activities`, while every column History
+does read comes back fine for the same caller.
+
+**Bar schedule stays out of History**, as instructed and for the right reason: a
+BBS is a specification a bar bender cuts to, not something that happened on a
+date.
+
+**Verified:** all four `.select()` column lists checked against the real schema —
+`tsc` cannot catch a mistyped column in a PostgREST string, which is the 056
+failure mode, so every name was confirmed to exist before shipping.
+
 ## M14 MANPOWER CALCULATOR (2026-09-10) — a table of numbers nobody has confirmed, and it says so
 
 Migration 087. Two reference tables, two record tables, five functions. It is a
