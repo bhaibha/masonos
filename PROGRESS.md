@@ -1,6 +1,46 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+---
+
+## CURRENT STATE — 2026-09-10
+
+Reconciled against the database. **Migrations 001–087 are all applied**; next is 088.
+
+**Built and working, latest six:**
+
+| Module | Migration | Where it lives |
+|---|---|---|
+| M21 Petty Cash | 082 | `/money/petty-cash` and `/tasks/petty-cash` — one screen, two doorways |
+| M36 Client Communication Log | 083 | `/tasks/client-log` |
+| M18 Site Visits Tracker | 084 | `/tasks/visits` — action items are ordinary tasks |
+| M28 Project Close-Out | 085 | `/money/closeout` |
+| M13-A Material Quantity Calculator | 086 | `/calculator` |
+| M14 Manpower Calculator | 087 | `/calculator` → Manpower |
+
+Groups A, B, C and D are complete, as is the client data layer (CP1 + CP2a).
+
+**The five things actually outstanding**, in the order they matter:
+
+1. **MFA is still off on Supabase.** `/security` is deployed and does nothing until the toggle is
+   flipped. Oldest open item in the file.
+2. **Auth hardening + custom SMTP** — dashboard settings, plus a domain. Until SMTP exists no
+   invitation email can leave the project.
+3. **CP2b–CP4, the portal screens.** The data layer is built and proven and there is nothing to
+   look at. Half a portal is the worst state to sit in.
+4. **DL3–DL6 desktop re-flow.**
+5. Smaller: `learn-draft` quota, the VAPID key in the Worker, the eagerly-loaded PDF layer,
+   dependabot, and `admin-create-user` never having run end to end.
+
+**Not being built:** M10 team messaging, M27 equipment, M35 monsoon, M46 price intelligence,
+M48 market intelligence, M13-B AI drawing→BOQ — plus the standing cut list. Reasons and reopen
+triggers are in ROADMAP.md under CONSCIOUSLY DEFERRED. **They are recorded so they stop being
+re-decided**; the short version is that three of the six are already covered by something built
+(M35 by M14's efficiency %, M46 by B3's quote history, M10 by the records that exist), one is the
+052 refusal restated (M13-B), and two do not fit a firm with four sites and one office.
+
+---
+
 ## M14 MANPOWER CALCULATOR (2026-09-10) — a table of numbers nobody has confirmed, and it says so
 
 Migration 087. Two reference tables, two record tables, five functions. It is a

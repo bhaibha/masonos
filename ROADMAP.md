@@ -12,6 +12,50 @@ what's unverified. Audited honestly on 2026-07-28.
 
 ---
 
+## WHERE THIS ACTUALLY STANDS — 2026-09-10
+
+One block, so nobody has to read 800 lines to answer "what is left". Reconciled against the
+database on 2026-09-10.
+
+**Migrations 001–087 are ALL APPLIED.** Next migration = 088.
+
+**Groups A, B, C and D are complete.** So is the client data layer (CP1/CP2a) and the six modules
+built in the last two sessions:
+
+| Module | Migration | Screen |
+|---|---|---|
+| M21 Petty Cash | 082 | `/money/petty-cash` + `/tasks/petty-cash` |
+| M36 Client Communication Log | 083 | `/tasks/client-log` |
+| M18 Site Visits Tracker | 084 | `/tasks/visits` |
+| M28 Project Close-Out | 085 | `/money/closeout` |
+| M13-A Material Quantity Calculator | 086 | `/calculator` |
+| M14 Manpower Calculator | 087 | `/calculator` → Manpower |
+
+**What is genuinely left, in priority order:**
+
+1. **MFA/TOTP enrolment is still switched OFF on Supabase.** `/security` is deployed and dead
+   until it is flipped. This is one toggle in the dashboard and it is the oldest open item here.
+2. **Supabase auth hardening** — leaked-password protection, OTP expiry ≤ 1 hour, the Postgres
+   patch upgrade, four auth rate limits. All dashboard settings, no code.
+3. **Custom SMTP**, which needs a domain. A domain also unblocks the Cloudflare WAF. Until then
+   no invitation email can leave the project, which is why user creation still defaults to
+   founder-set passwords (077).
+4. **CP2b–CP4 — the client portal screens.** CP1 (the data layer) and CP2a (the guard) are built
+   and proven; a client can sign in and is correctly walled off. What they cannot yet do is see
+   anything, because the screens do not exist. **A half-built portal is the worst state** — the
+   database is ready to share and nothing shares it.
+5. **DL3–DL6 desktop re-flow.** Real tables instead of card lists on the ledgers, and tab strips
+   that wrap instead of scrolling (Tasks has 15, Money 18, the calculator 11).
+6. **Smaller, known:** `learn-draft` has no per-user quota; `VITE_VAPID_PUBLIC_KEY` is not in the
+   Worker; the PDF layer is eagerly loaded (~370KB inside the 596KB-gzipped entry chunk);
+   `.github/dependabot.yml` was offered and never built; `admin-create-user` has still never been
+   run end to end.
+
+**Not being built** — see "CONSCIOUSLY DEFERRED" near the bottom. That section exists so these
+decisions stop being re-made every session.
+
+---
+
 ## PHASE 0 — Protect the work — CLOSED
 - [x] Deployed live as installable PWA — masonos.muhamdwaseem.workers.dev (Cloudflare **Workers**, not Pages)
 - [x] GitHub Actions: daily Supabase keep-alive ping (green)
@@ -315,7 +359,7 @@ Order within group:
        **Not yet exercised in the app:** raising a comment end to end and seeing it land in Tasks
        with its priority, filing an NCR to Docs and confirming it stays out of the QA plan list, and
        the supervisor pass (no delete, no NCR close, no plan upload).
-- [x] **B3. M05 Rate comparison / comparative statement — migration 050. Run it before testing.**
+- [x] **B3. M05 Rate comparison / comparative statement — migration 050 APPLIED.**
        The piece A3 left out: the step between the requisition and the order. Items as rows,
        vendors as columns, the cheapest quote per line flagged, a decision recorded with a reason,
        and a PO raised from it without retyping a single rate.
@@ -364,7 +408,7 @@ Order within group:
        refusal when a whole-comparison award is aimed at a vendor with a missing line, the
        reason-required refusal, conversion producing two POs on a split award, the frozen state
        afterwards, and the supervisor pass (no Rate compare tab, zero rows if the URL is typed).
-- [x] **B4. M13-C Bar Bending Schedule per IS 2502 — migration 051. Run it before testing.**
+- [x] **B4. M13-C Bar Bending Schedule per IS 2502 — migration 051 APPLIED.**
        Cutting lengths and steel weights from what the structural drawing says. Arranged around
        being CHECKABLE rather than merely correct, because a short bar is a defect nobody sees
        again once the concrete is poured.
@@ -424,7 +468,7 @@ Order within group:
        **Open question for next session:** whether the firm's drawings carry beam/column SCHEDULE
        TABLES. If they do, importing that table from a CAD PDF is deterministic and is the next
        reliable step — no vision model needed.
-- [x] **B4b. M13-A Material Quantity Calculator — migration 086. Run it before testing.**
+- [x] **B4b. M13-A Material Quantity Calculator — migration 086 APPLIED.**
        A field tool with a metres/feet toggle: eight estimators — concrete, blockwork/brickwork,
        plaster, tiling, steel, paint, waterproofing, excavation. `/calculator`, reached from the
        Materials tab row, available to EVERY internal role including supervisors.
@@ -464,7 +508,7 @@ Order within group:
        each of the eight tabs, the material auto-match on save, estimate-vs-actual after a real
        issue, a founder editing a constant and watching the self-test go red, and the supervisor
        pass (calculator usable, constants read-only).
-- [x] **B5. M24 Contract Labour — migration 054. Run it before testing.**
+- [x] **B5. M24 Contract Labour — migration 054 APPLIED.**
        Contractor register, daily gang attendance, the statutory registers as data, and a labour
        cost figure that reaches the P&L exactly once.
        **THE THING THAT WOULD HAVE BROKEN THE P&L.** Attendance × rate is an ACCRUAL — what the
@@ -551,7 +595,7 @@ Order within group:
        **Tested:** overheads entered, headings added and managed, the net position reading through
        on the P&L. Still unexercised: copy-last-month's double-copy refusal and the PM/supervisor
        gates on the new screens.
-- [x] **B7. M37 MIS Reports & KPI Dashboard — migration 056. Run it before testing.**
+- [x] **B7. M37 MIS Reports & KPI Dashboard — migration 056 APPLIED.**
        The cross-project command view at `/money/mis`, first tab after the ledger. Read-only: one
        view and four functions, no tables, no columns, no triggers.
        **THE ACCESS MODEL IS INHERITED, NOT RESTATED.** `v_project_pnl` already carries
@@ -653,18 +697,92 @@ Order within group:
        invisible, no Write button, no editor).
         → mostly structured content as markdown/seed data in Document Vault; light UI to browse/search
 - [x] **C2. M07 Client Approvals (INTERNAL record version — log client verbal/WhatsApp
-      approvals with evidence; no portal) — migration 060. Run it before testing.**
+      approvals with evidence; no portal) — migration 060 APPLIED.**
 
 ## GROUP D — AI / hard / needs data (build LAST; basic versions only) — reconsider each
 - [x] **D1. M39 AI Photo Helper — v1 = opt-in Gemini-vision description + things-to-check on a
       site photo, NOT a trained defect model. Migration 061 + the `photo-analyse` Edge
       Function. Run 061 before testing.**
 - [x] **D2. M38 Clash Detection — manual coordination register with an opacity-slider drawing
-      overlay, ties into RFIs. NOT automated BIM geometry. Migration 062. Run it before testing.**
+      overlay, ties into RFIs. NOT automated BIM geometry. Migration 062 APPLIED.**
 - [x] **D3. M47 Predictive Intelligence — trend flags from existing data (burn vs progress,
       CPI/SPI, rollover rate, defect accumulation, deadlines). NOT ML. Migration 063.
-      Run it before testing.**
+      Migration 063 APPLIED.**
         NOTE: true ML versions need historical project data you don't have yet + specialist work. Defer real AI.
+
+---
+
+## CONSCIOUSLY DEFERRED — decided 2026-09-10, not being built
+
+These are **decisions, not a backlog.** They were considered against how this firm actually works —
+four active projects, about fifteen internal users, one office — and declined. Each carries the
+reason and, where one exists, the fact that would have to change before it is worth reopening.
+
+The reason each entry has a "why" is that a deferral without one gets re-litigated every few
+sessions, and the third time somebody re-argues it they usually just build it.
+
+*(The decision on each is the founder's. The reasoning written under it is the roadmap's own —
+grounded in rules this repo has already adopted — and is there to be argued with, not to put words
+in anybody's mouth.)*
+
+- **M10 Team Messaging / internal chat — NO.**
+  The app already holds the places where things get said and have to be found again: tasks with an
+  assignee and a due date, the daily site log, RFIs, site instructions, the client communication
+  log (M36), and the client message thread. **A chat channel competes with all of them and wins**,
+  because typing is easier than filing — and then the decision that mattered is thirty messages
+  back in a scroll nobody can search in two years. WhatsApp API is already on the CUT list (44) for
+  the same reason; the firm's actual WhatsApp keeps working and stays outside the record.
+  *Reopen if:* the firm grows past the point where one office can talk to itself — not before.
+
+- **M27 Equipment / Plant Register — NO.**
+  An asset register earns its keep when you OWN plant: service intervals to hit, utilisation to
+  chase, idle-hire to catch. This firm hires. A table of four hired mixers with no maintenance
+  schedule behind it is a form somebody fills in for a month and then stops.
+  *Reopen if:* the firm buys plant it has to maintain, or hire charges become a line big enough to
+  want utilisation against.
+
+- **M35 Monsoon / Weather Planning — NO, because it is already there.**
+  The useful half of "monsoon planning" is admitting that work slows down, and that is a number the
+  app already takes: **M14's efficiency %** (087). Type 70% and the gang, the man-days and the
+  duration all move together, with the working printed underneath. A separate weather module would
+  either duplicate that field or fetch a forecast — and a forecast is not a plan.
+  *Reopen if:* somebody wants monsoon-adjusted durations applied automatically across a whole
+  programme, which is a scheduling feature, not a weather one.
+
+- **M46 Material Price Intelligence — NO.**
+  It needs a price feed the firm does not have, and a public index for cement in Karnataka is not
+  the price this firm pays. What the firm DOES have is better: **B3 rate comparison (050)** already
+  stores what named vendors actually quoted, on real enquiries, with the award and the reason.
+  That is a genuine price history and it is theirs.
+  *Reopen if:* there is enough quote history in `rc_quotes` to trend — at which point the feature
+  is a chart over data that already exists, not an integration.
+
+- **M48 Market Intelligence — NO.**
+  Same family as M46 and further from the work. Competitor pricing, demand signals and market rates
+  are not construction management, and nothing in this app would consume them.
+  *Reopen if:* never, on current evidence.
+
+- **M13-B AI Drawing → BOQ — NO. This is the 052 decision, restated.**
+  052 already faced exactly this ask ("upload a drawing and it reads it") for the bar bending
+  schedule and refused it, because **a vision model is confidently wrong some of the time and a
+  plausible schedule nobody checks is invisible from the moment the concrete is poured.** What
+  shipped instead was callout expansion: the machine does the counting and the geometry, a person
+  supplies what the drawing says. That judgement does not weaken for a BOQ — it strengthens, because
+  a BOQ becomes a purchase order and then a payment.
+  **The honest version, if it is ever wanted:** B4's closing note already names it — if the firm's
+  drawings carry beam/column SCHEDULE TABLES, importing that table from a CAD PDF is
+  *deterministic*, needs no vision model, and either parses or refuses by name. That is the next
+  reliable step, and it is a parser, not an AI feature.
+  *Reopen if:* somebody confirms the drawings carry structured schedule tables.
+
+### Still CUT (from CLAUDE.md — not software, or out of scope)
+360°/Matterport (20) · Payroll (23) · CRM & public website (25) · Drone (40) · IoT (41) ·
+Time-lapse (42) · Digital Twin (43) · WhatsApp API (44) · AR (45) · Aadhaar OTP (49) ·
+Health Check (53) · Carbon (54) · Memory Book (55).
+
+**M25 is worth a word**, because it looks like it was reversed and was not. It was cut as a *public
+marketing website*. The client PORTAL (CP1–CP4) is a different thing: an authenticated client role
+inside the internal app, reading a curated view of one project. No public site was ever built.
 
 ---
 
@@ -718,7 +836,7 @@ phone layout below `lg` does not move.
 
 ## Manpower
 
-- [x] **M14. Manpower Calculator — migration 087. Run it before testing.**
+- [x] **M14. Manpower Calculator — migration 087 APPLIED.**
       Pick an activity, type a quantity, get the gang, the man-days and how long it takes.
       A tab on `/calculator`, not a screen of its own, because the INPUT IS THE SAME —
       somebody who has just worked out the blocks for 37.5 sqm should not retype 37.5

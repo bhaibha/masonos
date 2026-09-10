@@ -585,7 +585,7 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   constant edit `UPDATE 0` and a founder's `UPDATE 1`. Editing the dry factor
   1.54 → 1.62 turned 3 self-test cases red and putting it back returned 12/12,
   with both edits landing in `audit_log`.
-  **087 WRITTEN, NOT YET APPLIED** — M14 Manpower Calculator. `labour_activities`
+  **087 APPLIED** (confirmed 2026-09-10) — M14 Manpower Calculator. `labour_activities`
   (26 rows), `labour_gang_lines` (52), `manpower_estimates` +
   `manpower_estimate_lines`, `fn_manpower`, `fn_manpower_vs_schedule`,
   `fn_manpower_vs_actual`, `fn_labour_constant_status`, `fn_manpower_selftest`
@@ -653,8 +653,16 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   with actual = 0). It looked like a working comparison and had never touched
   the attendance half. The 083 lesson exactly: **read what the test PROVED, not
   what it printed.**
-  **Run migration 087 before opening the Manpower tab.**
-  **So: 001-086 ALL APPLIED. 087 pending.** Next migration = 088.
+  **So: 001-087 ALL APPLIED.** Next migration = 088.
+- **THE DEFERRAL LIST IS A DECISION RECORD, NOT A BACKLOG (2026-09-10).**
+  ROADMAP.md now carries a CONSCIOUSLY DEFERRED section: M10 team messaging, M27 equipment,
+  M35 monsoon, M46 price intelligence, M48 market intelligence, M13-B AI drawing→BOQ. Each has a
+  REASON and a reopen trigger, because a deferral recorded without one gets re-argued every few
+  sessions and eventually somebody just builds it. Three of the six turned out to be **already
+  covered by something built** — M35 by M14's efficiency %, M46 by B3's stored quote history,
+  M10 by the task / site log / RFI / comm-log records that exist — which is worth checking before
+  agreeing to build anything else on that list. M13-B is the 052 refusal restated, with the honest
+  deterministic alternative (parse a CAD schedule TABLE) named in its place.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.
