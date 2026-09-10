@@ -716,6 +716,49 @@ phone layout below `lg` does not move.
 - [ ] DL6. Form field widths and 48px touch targets scaled down at `lg` only. Site keeps its
       thumb-sized targets.
 
+## Manpower
+
+- [x] **M14. Manpower Calculator — migration 087. Run it before testing.**
+      Pick an activity, type a quantity, get the gang, the man-days and how long it takes.
+      A tab on `/calculator`, not a screen of its own, because the INPUT IS THE SAME —
+      somebody who has just worked out the blocks for 37.5 sqm should not retype 37.5
+      elsewhere to find out how long the wall takes. Every internal role, supervisors
+      included: man-days are not wages and `labour_rates` is never read here.
+      **NOTHING SEEDED IS AN IS 7272 FIGURE.** The brief asked for "per IS 7272"; that is a
+      document BIS sells, and beyond the copyright (the 044 rule) an output constant
+      recalled rather than read is a guess wearing a standard's authority. So the 26 seeded
+      rows are `source = 'site_practice'`, `verified = false`, and **every result computed
+      from an unconfirmed figure carries a warning on the result itself** — not once in a
+      banner people learn to skip. A founder enters their own figure, cites the clause,
+      ticks confirmed, and the warning goes. `la_is_ref_needed` refuses a row claiming a
+      code without naming one; the trigger stamps who confirmed it and when.
+      **Also worth knowing: IS 7272 Part 1 is the NORTH zone.** Part 2 is South. The copy
+      that circulates freely is Part 1 — the wrong half of the country for Bengaluru. The
+      Reference tab says so.
+      **The gang is the unit, not the trade** — `output_per_gang_day` on the activity,
+      `labour_gang_lines` for who is in it, per-trade man-days derived. A mason without a
+      helper does not lay brick, and a site sends gangs.
+      **The trades are 054's trades**, and that reuse is the whole reason
+      `fn_manpower_vs_actual` needed **no new column**: `labour_attendance` has carried
+      `trade`, `workers_present` and `activity_id` since 054, so planned man-days against
+      worked man-days is a join. Voided days excluded.
+      **It reports the programme, never writes it.** "14 days allowed, 21 needed, 3 gangs
+      would hold the date" — `planned_end` is untouched, because 042 owns the dates and a
+      calculator restating them makes a programme that claims one date and is drawn to
+      another. Also answers the question backwards: how many gangs to finish by Friday.
+      **VERIFIED AGAINST A REAL POSTGRES** — three clean runs, 12/12 self-test, RLS proven
+      by query for all five roles, and every calculation cross-checked against a separate
+      Python implementation. Two process failures caught and recorded: a verify-block
+      comment that said 54 gang lines when 26 × 2 is 52, and a fixture that silently did
+      not insert, leaving `fn_manpower_vs_actual` looking tested when only half of it was.
+      **Deliberately not done:** no wage cost, no productivity history, no automatic
+      re-planning. Man-days × a rate is a commercial figure and belongs with B5's posting
+      run, not in a field calculator.
+      **Not yet exercised in the app:** entering a real quantity against a real programme
+      activity, the backwards "gangs for a date" question on site, a founder confirming a
+      constant and watching the warning disappear, planned-vs-worked after a week of real
+      attendance, and the supervisor pass (calculator usable, constants read-only).
+
 ## Project close-out
 
 - [x] **M28. Project Close-Out — BUILT 2026-09-09 (migration 085).**

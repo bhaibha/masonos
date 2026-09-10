@@ -1,6 +1,121 @@
 # PROGRESS — Mason OS
 > Cowork: read CLAUDE.md + ROADMAP.md + this at session start; update at session end.
 
+## M14 MANPOWER CALCULATOR (2026-09-10) — a table of numbers nobody has confirmed, and it says so
+
+Migration 087. Two reference tables, two record tables, five functions. It is a
+tab on `/calculator`, not a screen of its own.
+
+### The IS 7272 problem, and what was done about it
+The brief said "per IS 7272". Two things stopped that being taken literally.
+
+The first is the one this repo already has a rule for (044): **IS codes are
+documents BIS sells, and you cite them rather than transcribe them.**
+
+The second matters more. I have not read the firm's copy of IS 7272 — any
+figure I typed would come from recall, and **a recalled constant wearing a
+standard's label is worse than an obviously rough guess**, because the label is
+what stops anybody checking it. That is 058's failure ("confidently wrong about
+the number that reaches a bar bender") pointed at a gang instead.
+
+So the 26 seeded rows say what they are: `source = 'site_practice'`,
+`verified = false`, `is_ref` empty. And the honesty is not left to a banner —
+**`fn_manpower` attaches a warning to EVERY result computed from an unconfirmed
+figure**, naming the number and saying where it came from. A banner at the top
+of a screen is read twice and then never again; a line under the answer is read
+every time somebody reads the answer.
+
+The remedy is one screen away. A founder types their own measured output, cites
+the clause, ticks confirmed — the trigger stamps their name and the date from
+`auth.uid()` rather than trusting the client — and the warning stops. Over a few
+months the table stops being mine and starts being theirs, which is the 053 rule
+(their sheet is the authority on their constants).
+
+`la_is_ref_needed` refuses a row that claims `source = 'is_code'` without naming
+a clause, so "from a standard" can never become a label somebody applies to a
+figure they liked the look of.
+
+**And one fact worth more than any of the seeded numbers: IS 7272 Part 1 is the
+NORTH zone.** Part 2 is South. The copy that circulates freely online is Part 1 —
+the wrong half of the country for a Bengaluru contractor. That is on the
+Reference tab, because it is the kind of thing somebody discovers three years in.
+
+### The gang is the unit, not the trade
+A constant can be stored per trade ("a mason lays 0.9 cum a day") or per gang
+("1 mason and 2 helpers lay 1.1 cum a day"). Arithmetically identical; the gang
+is the honest one, because a mason without a helper does not lay brick and a
+site sends gangs rather than individuals.
+
+So `output_per_gang_day` sits on the activity, `labour_gang_lines` says who is
+in the gang, and the per-trade man-days everybody actually wants are DERIVED and
+returned alongside. Both readings exist, one stored number.
+
+    gang_days   = qty / (output × efficiency)
+    man_days[t] = gang_days × persons[t]
+    duration    = ceil(gang_days / gangs)
+
+`p_target_days` runs it backwards — "how many gangs to finish in ten days" —
+because that is the question a PM actually asks. It is one division and it was
+free.
+
+### The reuse that made the best feature possible
+`labour_gang_lines.trade` is a FK to `labour_trades(name)`, the same list the
+attendance register has used since 054. A second list of "Mason / Helper" would
+drift the first time somebody added to either, and then planned man-days and
+recorded man-days would be about different people.
+
+That reuse is the whole reason `fn_manpower_vs_actual` needed **no new column**.
+`labour_attendance` has carried `trade`, `workers_present` and `activity_id`
+since 054, so planned against worked is a join. Voided days are excluded the way
+every total in this app excludes them. A trade that was worked but never planned
+appears with planned = 0 — which is a finding, not a gap in the query.
+
+### It reports the programme and never writes it
+Linking a plan to a `schedule_activities` row produces "14 days allowed, 21
+needed, short by 7, three gangs would hold the date". It does not touch
+`planned_end`. 042 gave `fn_generate_schedule` ownership of the dates and made it
+stretch the final activity to land on the handover; a calculator quietly
+restating that produces a programme claiming one date and drawn to another.
+Same shape as `fn_labour_headcount_check` (054): show both numbers, let a person
+decide.
+
+A saved plan also stores `from_unverified`, so correcting a constant next year
+cannot silently upgrade the confidence of a plan made this year.
+
+### Two process failures worth writing down
+**The verify-block comment was wrong, for the third time.** I wrote 54 gang
+lines; 26 activities × 2 trades is 52. 083 said 8 policies for 7, 085 said 6 for
+5, this said 54 for 52. The migration was right every time and the comment
+wrong every time. **Count it from the seed list rather than estimating it** —
+and the reason it keeps getting caught is that the verify block is run, which is
+the argument for having one.
+
+**A fixture that silently did not insert nearly gave a false pass.**
+`labour_contractors.created_by` is NOT NULL and the fixture omitted it, so the
+attendance rows never landed — and `fn_manpower_vs_actual` still returned 2 rows,
+because the planned side existed with actual = 0. It looked like a working
+comparison and had exercised none of the attendance half. Caught only by asking
+why a table with no attendance in it had rows. **Read what a test PROVED, not
+what it printed** — the 083 lesson, arriving in a different disguise.
+
+### Verified
+Three clean runs of the actual 001–087 chain on PostgreSQL 16, verify block
+`26|52|0|8|4`, 12/12 self-test, and every calculation cross-checked against a
+**separate implementation written in Python** across four activities and four
+different gang shapes.
+
+The self-test deliberately checks the ARITHMETIC and not the constants: it reads
+the seeded output back out and asserts ratios against it. A test that asserted
+the constants would be asserting a guess, and would go red the moment the firm
+corrected a figure — which is exactly when it should stay green.
+
+RLS by query: founder/pm/supervisor/accounts read everything on their project,
+**the client 0 across all four tables**, a supervisor on another project sees the
+constants (they are not project-scoped) but no estimates and is refused the
+insert, a PM editing a constant gets `UPDATE 0` and a founder `UPDATE 1`.
+
+**Run migration 087 before opening the Manpower tab.**
+
 ## M13-A MATERIAL QUANTITY CALCULATOR (2026-09-09) — the module that most wanted to be a .ts file
 
 Migration 086. Three reference tables, two record tables, eight estimators, a

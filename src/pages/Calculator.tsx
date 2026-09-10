@@ -2,6 +2,11 @@ import { AlertTriangle, Calculator as CalcIcon, ChevronDown } from 'lucide-react
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
+import {
+  LabourConstantsBlock,
+  ManpowerSavedTab,
+  ManpowerTab,
+} from '@/components/ManpowerTab'
 import { FieldRow, Select } from '@/components/Field'
 import { PageHeader } from '@/components/PageHeader'
 import { ProjectPicker } from '@/components/ProjectPicker'
@@ -73,7 +78,7 @@ import { useProjects } from '@/store/project'
  * standing in front of the wall who has to know how many blocks to order.
  */
 
-type Tab = EstimateKind | 'saved' | 'reference'
+type Tab = EstimateKind | 'manpower' | 'saved' | 'reference'
 
 const DEBOUNCE_MS = 300
 
@@ -107,6 +112,10 @@ export default function Calculator() {
 
   const tabs: { to: Tab; label: string }[] = [
     ...ESTIMATE_KINDS.map((k) => ({ to: k.value as Tab, label: k.label })),
+    // M14. Same screen as the material calculators because the INPUT is the
+    // same — somebody who has just worked out the blocks for 37.5 sqm should
+    // not retype 37.5 elsewhere to find out how long it takes.
+    { to: 'manpower', label: 'Manpower' },
     { to: 'saved', label: 'Saved' },
     { to: 'reference', label: 'Reference' },
   ]
@@ -156,7 +165,13 @@ export default function Calculator() {
             {tab === 'paint' && <PaintCalc unit={unit} projectId={projectId} />}
             {tab === 'waterproofing' && <WaterproofCalc unit={unit} projectId={projectId} />}
             {tab === 'excavation' && <ExcavationCalc unit={unit} projectId={projectId} />}
-            {tab === 'saved' && <SavedTab projectId={projectId} />}
+            {tab === 'manpower' && <ManpowerTab projectId={projectId} />}
+            {tab === 'saved' && (
+              <div className="space-y-4">
+                <SavedTab projectId={projectId} />
+                <ManpowerSavedTab projectId={projectId} />
+              </div>
+            )}
             {tab === 'reference' && <ReferenceTab mixes={mixes} units={units} />}
           </>
         )}
@@ -1286,6 +1301,8 @@ function ReferenceTab({ mixes, units }: { mixes: CalcMix[]; units: MasonryUnit[]
           </p>
         </div>
       </RevealItem>
+      {/* M14 constants live here too — one Reference tab, not two. */}
+      <LabourConstantsBlock />
     </Stagger>
   )
 }

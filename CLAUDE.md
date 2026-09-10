@@ -585,7 +585,76 @@ Source spec: `YourMasons_MasterSpec_v1.docx`. ROADMAP.md is the authoritative bu
   constant edit `UPDATE 0` and a founder's `UPDATE 1`. Editing the dry factor
   1.54 → 1.62 turned 3 self-test cases red and putting it back returned 12/12,
   with both edits landing in `audit_log`.
-  **So: 001-086 ALL APPLIED.** Next migration = 087.
+  **087 WRITTEN, NOT YET APPLIED** — M14 Manpower Calculator. `labour_activities`
+  (26 rows), `labour_gang_lines` (52), `manpower_estimates` +
+  `manpower_estimate_lines`, `fn_manpower`, `fn_manpower_vs_schedule`,
+  `fn_manpower_vs_actual`, `fn_labour_constant_status`, `fn_manpower_selftest`
+  (12 cases).
+  **NOTHING SEEDED IS AN IS 7272 FIGURE, AND NOTHING CLAIMS TO BE.** The brief
+  said "per IS 7272". That standard is a document BIS sells, and the 044 rule
+  here is cite a standard, never transcribe it — but the stronger objection is
+  correctness: an output constant RECALLED rather than READ is a guess wearing a
+  standard's authority, which is 058's failure in a new costume. So every seeded
+  row is `source = 'site_practice'`, `verified = false`, `is_ref` NULL, and
+  **`fn_manpower` returns a warning on EVERY result computed from an unconfirmed
+  constant** — on the result itself, not once in a banner people stop seeing.
+  A founder types their own figure, sets `is_ref`, ticks verified, and the
+  warning goes away. `la_is_ref_needed` refuses `source = 'is_code'` with no
+  clause named, and the touch trigger stamps `verified_by`/`verified_on` from
+  `auth.uid()` rather than trusting the client.
+  **WORTH KNOWING: IS 7272 PART 1 IS THE NORTH ZONE** (1974, reaffirmed 2010);
+  Part 2 is South. The copy that circulates freely online is Part 1, which is
+  the wrong half of the country for Bengaluru. Said on screen and in the file.
+  **THE GANG IS THE UNIT, NOT THE TRADE.** `output_per_gang_day` sits on the
+  activity and `labour_gang_lines` says who is in the gang, because a mason
+  without a helper does not lay brick and a site sends gangs. Per-trade man-days
+  are DERIVED and returned alongside, so both readings exist without two stored
+  numbers that can drift.
+  `gang_days = qty / (output × efficiency)`, `man_days[t] = gang_days ×
+  persons[t]`, `duration = ceil(gang_days / gangs)`. `p_target_days` answers it
+  backwards — "how many gangs to finish in ten days" — because that is the
+  question a PM actually asks.
+  **THE TRADES ARE 054's TRADES**, a FK to `labour_trades(name)`. That reuse is
+  what makes `fn_manpower_vs_actual` possible with **NO NEW COLUMN**:
+  `labour_attendance` has carried `trade`, `workers_present` and `activity_id`
+  since 054, so planned man-days against worked man-days is a join. Voided
+  attendance excluded. A trade worked but never planned shows with planned = 0,
+  which is a finding rather than a gap.
+  **IT NEVER WRITES THE PROGRAMME.** `fn_manpower_vs_schedule` REPORTS "14 days
+  allowed, 21 needed, 3 gangs would hold the date" and does not touch
+  `planned_end` — 042 gave `fn_generate_schedule` ownership of the dates, and a
+  calculator restating them produces a programme claiming one date and drawn to
+  another. Same shape as `fn_labour_headcount_check` (054).
+  No money anywhere: `labour_rates` (054) is never read, man-days are not wages,
+  so every internal role INCLUDING SUPERVISORS may use it. Constants are
+  founder-write. Reads use `is_internal()`, not `using (true)` (065).
+  A saved plan stores `from_unverified`, so correcting a constant next year
+  cannot silently upgrade the confidence of a plan made this year (032/045).
+  Verified on a real PostgreSQL 16 with the ACTUAL 001-086 chain as fixtures:
+  three clean runs, verify block `26|52|0|8|4`, 12/12 self-test, and every
+  calculation cross-checked against a **separate implementation written in
+  Python** (12 figures across four activities and four gang shapes, all
+  matching). RLS by query: founder/pm/supervisor/accounts read 26 activities /
+  52 gang lines / 1 estimate / 2 lines, **the client 0 on all four**, a
+  supervisor on ANOTHER project sees the constants but 0 estimates, their INSERT
+  refused, a client INSERT refused, a PM constant edit `UPDATE 0` and a
+  founder's `UPDATE 1`. Confirmed by query: planned-vs-worked correct per trade,
+  a VOIDED attendance day dropping out, the schedule comparison reporting a
+  7-day shortfall while `planned_end` stayed 2026-09-14, verifying a constant
+  stamping the founder's name and clearing the warning, and
+  `la_is_ref_needed` firing.
+  **MY VERIFY-BLOCK COMMENT WAS WRONG AGAIN** — I wrote 54 gang lines; 26
+  activities × 2 trades is 52. Corrected the comment, not the migration. Third
+  time (083 said 8 policies for 7, 085 said 6 for 5): **count it from the seed
+  list, do not estimate it.**
+  **A FIXTURE THAT SILENTLY DID NOT INSERT NEARLY GAVE A FALSE PASS** —
+  `labour_contractors.created_by` is NOT NULL, so the attendance rows never
+  landed, and `fn_manpower_vs_actual` still returned 2 rows (the planned side
+  with actual = 0). It looked like a working comparison and had never touched
+  the attendance half. The 083 lesson exactly: **read what the test PROVED, not
+  what it printed.**
+  **Run migration 087 before opening the Manpower tab.**
+  **So: 001-086 ALL APPLIED. 087 pending.** Next migration = 088.
 - **A PASSWORD SIGN-IN SUCCEEDS EVEN WITH MFA ON — THE APP IS WHAT REFUSES
   (MFA, 2026-09-07).** `signInWithPassword` returns a real session for a user
   with a verified TOTP factor; it is simply at assurance level **aal1**.

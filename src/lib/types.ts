@@ -585,6 +585,157 @@ export function canEditCalcConstants(role: UserRole | null): boolean {
   return role === 'founder'
 }
 
+// ---------- M14 Manpower Calculator (migration 087) ----------
+
+/**
+ * Where an output figure came from. `site_practice` is the seeded default and
+ * means NOBODY HAS CONFIRMED IT — it is not an IS 7272 value and does not claim
+ * to be. `firm` means the firm measured it. `is_code` requires `is_ref` naming
+ * the clause, enforced by `la_is_ref_needed`.
+ */
+export type LabourSource = 'site_practice' | 'firm' | 'is_code'
+
+export const LABOUR_SOURCE_LABEL: Record<LabourSource, string> = {
+  site_practice: 'Starting figure',
+  firm: "Firm's own",
+  is_code: 'From a standard',
+}
+
+export interface LabourGangLine {
+  trade: string
+  persons: number
+  sort: number
+}
+
+export interface LabourActivity {
+  code: string
+  label: string
+  category: string
+  unit: string
+  /** Null means nobody has filled it in — fn_manpower refuses by name. */
+  output_per_gang_day: number | null
+  source: LabourSource
+  is_ref: string | null
+  verified: boolean
+  verified_by: string | null
+  verified_by_name: string | null
+  verified_on: string | null
+  note: string | null
+  is_active: boolean
+  sort: number
+  gang: LabourGangLine[]
+}
+
+/** One trade's share of the work. */
+export interface ManpowerLine {
+  trade: string
+  persons_per_gang: number
+  persons_total: number
+  man_days: number
+}
+
+export interface ManpowerResult {
+  ok: boolean
+  error?: string
+  /** Present on every result computed from an unconfirmed constant. */
+  warning?: string | null
+  activity: {
+    code: string
+    label: string
+    unit: string
+    category: string
+    output_per_gang_day: number
+    source: LabourSource
+    is_ref: string | null
+    verified: boolean
+    note: string | null
+  } | null
+  lines: ManpowerLine[]
+  detail: {
+    gang_days: number
+    duration_days: number
+    gang_size: number
+    people_on_site: number
+    total_man_days: number
+    effective_output: number
+    /** Only when a target duration was asked for — the backwards question. */
+    gangs_for_target: number | null
+    target_days: number | null
+  }
+  working: string
+}
+
+export interface SavedManpowerEstimate {
+  id: string
+  project_id: string
+  activity_code: string
+  activity_label: string
+  title: string
+  work_area: string | null
+  qty: number
+  gangs: number
+  efficiency_pct: number
+  gang_days: number
+  duration_days: number
+  total_man_days: number
+  /** What the figure was worth AT THE TIME, not what it is worth today. */
+  from_unverified: boolean
+  activity_id: string | null
+  working: string | null
+  notes: string | null
+  created_by_name: string | null
+  created_at: string
+  lines: { id: string; trade: string; persons_per_gang: number; man_days: number }[]
+}
+
+/**
+ * The programme against the gang. `shortfall_days` is zero when there is enough
+ * time. Nothing here writes to `schedule_activities` — 042 owns the dates.
+ */
+export interface ManpowerVsSchedule {
+  activity_code: string
+  activity_name: string
+  planned_start: string
+  planned_end: string
+  days_allowed: number
+  days_needed: number
+  shortfall_days: number
+  gangs_planned: number
+  gangs_needed: number
+}
+
+/**
+ * Planned man-days against attendance man-days, per trade. A trade that was
+ * worked but never planned shows with planned = 0 — that is a real finding, not
+ * a gap in the query.
+ */
+export interface ManpowerVsActual {
+  trade: string
+  planned_days: number
+  actual_days: number
+  variance_days: number
+  estimates_n: number
+}
+
+export interface LabourConstantStatus {
+  total: number
+  verified: number
+  unfilled: number
+  from_code: number
+}
+
+/**
+ * Every internal role, supervisors included — man-days are not wages, and this
+ * module never reads `labour_rates`. Constants are founder-write.
+ */
+export function canUseManpower(role: UserRole | null): boolean {
+  return role !== null && INTERNAL_ROLES.includes(role)
+}
+
+export function canEditLabourConstants(role: UserRole | null): boolean {
+  return role === 'founder'
+}
+
 // ---------- M18 Site Visits (migration 084) ----------
 
 export type VisitType =
